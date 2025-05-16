@@ -78,16 +78,17 @@ int64_t RDMAContext::init(const std::string& dev_name, uint8_t ib_port, const st
         }
     }
 
-    if (!ib_ctx_) {
+    if (!ib_ctx_ && num_devices > 0) {
         SLIME_LOG_WARN("Can't find or failed to open the specified device",
                        dev_name,
                        ", try to open "
                        "the default device ",
                        (char*)ibv_get_device_name(dev_list[0]));
         ib_ctx_ = ibv_open_device(dev_list[0]);
-        if (!ib_ctx_) {
-            throw std::runtime_error("Failed to open the default device");
-        }
+    }
+
+    if (!ib_ctx_) {
+        SLIME_ABORT("Failed to open the default device");
     }
 
     struct ibv_device_attr device_attr;
@@ -101,18 +102,27 @@ int64_t RDMAContext::init(const std::string& dev_name, uint8_t ib_port, const st
     struct ibv_port_attr port_attr;
     ib_port_ = ib_port;
     if (ibv_query_port(ib_ctx_, ib_port, &port_attr)) {
-        throw std::runtime_error("Unable to query port " + std::to_string(ib_port_) + " attributes\n");
+        ibv_close_device(ib_ctx_);
+        SLIME_ABORT("Unable to query port " + std::to_string(ib_port_) + "\n");
     }
     if ((port_attr.link_layer == IBV_LINK_LAYER_INFINIBAND && link_type == "RoCE")
         || (port_attr.link_layer == IBV_LINK_LAYER_ETHERNET && link_type == "IB")) {
-        SLIME_LOG_ERROR("port link layer and config link type don't match");
+        SLIME_ABORT("port link layer and config link type don't match");
+        return -1;
+    }
+    if (port_attr.state == IBV_PORT_DOWN) {
+        SLIME_ABORT("Device " << dev_name << " ,Port " << ib_port_ << "is DISABLED.");
+        ibv_close_device(ib_ctx_);
         return -1;
     }
     if (port_attr.link_layer == IBV_LINK_LAYER_INFINIBAND) {
         gidx = -1;
     }
     else {
-        gidx = ibv_find_sgid_type(ib_ctx_, ib_port_, ibv_gid_type_custom::IBV_GID_TYPE_ROCE_V2, AF_INET);
+        if (GIDX > 0)
+            gidx = GIDX;
+        else
+            gidx = ibv_find_sgid_type(ib_ctx_, ib_port_, ibv_gid_type_custom::IBV_GID_TYPE_ROCE_V2, AF_INET);
         if (gidx < 0) {
             SLIME_LOG_ERROR("Failed to find GID");
             return -1;
@@ -144,8 +154,8 @@ int64_t RDMAContext::init(const std::string& dev_name, uint8_t ib_port, const st
         qp_init_attr.qp_type                 = IBV_QPT_RC;  // Reliable Connection
         qp_init_attr.cap.max_send_wr         = MAX_SEND_WR;
         qp_init_attr.cap.max_recv_wr         = MAX_RECV_WR;
-        qp_init_attr.cap.max_send_sge        = 4;
-        qp_init_attr.cap.max_recv_sge        = 4;
+        qp_init_attr.cap.max_send_sge        = 1;
+        qp_init_attr.cap.max_recv_sge        = 1;
         qp_init_attr.sq_sig_all              = false;
         qp_management_t* qp_man              = qp_management_[qpi];
         rdma_info_t&     local_rdma_info     = qp_man->local_rdma_info_;
@@ -160,8 +170,7 @@ int64_t RDMAContext::init(const std::string& dev_name, uint8_t ib_port, const st
         attr.qp_state           = IBV_QPS_INIT;
         attr.port_num           = ib_port_;
         attr.pkey_index         = 0;
-        attr.qp_access_flags =
-            IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_ATOMIC;
+        attr.qp_access_flags    = IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_LOCAL_WRITE;
 
         int flags = IBV_QP_STATE | IBV_QP_PKEY_INDEX | IBV_QP_PORT | IBV_QP_ACCESS_FLAGS;
 
@@ -171,7 +180,6 @@ int64_t RDMAContext::init(const std::string& dev_name, uint8_t ib_port, const st
         }
 
         /* Set Packet Sequence Number (PSN) */
-        srand48(time(NULL));
         psn = lrand48() & 0xffffff;
 
         /* Get GID */
@@ -218,24 +226,28 @@ int64_t RDMAContext::connect(const json& endpoint_info_json)
         attr.path_mtu           = (enum ibv_mtu)std::min((uint32_t)remote_rdma_info.mtu, (uint32_t)local_rdma_info.mtu);
         attr.dest_qp_num        = remote_rdma_info.qpn;
         attr.rq_psn             = remote_rdma_info.psn;
-        attr.max_dest_rd_atomic = 16;
-        attr.min_rnr_timer      = 12;
-        attr.ah_attr.dlid       = 0;
-        attr.ah_attr.sl         = 0;
+        attr.max_dest_rd_atomic = MAX_DEST_RD_ATOMIC;
+        attr.min_rnr_timer      = 0x12;
+        attr.ah_attr.dlid       = remote_rdma_info.lid;
+        attr.ah_attr.sl         = SERVICE_LEVEL;
         attr.ah_attr.src_path_bits = 0;
-        attr.ah_attr.port_num      = 1;
+        attr.ah_attr.port_num      = ib_port_;
+
+        attr.ah_attr.is_global = 0;
+        attr.ah_attr.dlid      = 0;
 
         if (local_rdma_info.gidx == -1) {
             // IB
-            attr.ah_attr.dlid      = local_rdma_info.lid;
-            attr.ah_attr.is_global = 0;
+            attr.ah_attr.dlid = local_rdma_info.lid;
         }
         else {
             // RoCE v2
-            attr.ah_attr.is_global      = 1;
-            attr.ah_attr.grh.dgid       = remote_rdma_info.gid;
-            attr.ah_attr.grh.sgid_index = local_rdma_info.gidx;
-            attr.ah_attr.grh.hop_limit  = 1;
+            attr.ah_attr.is_global         = 1;
+            attr.ah_attr.grh.dgid          = remote_rdma_info.gid;
+            attr.ah_attr.grh.sgid_index    = local_rdma_info.gidx;
+            attr.ah_attr.grh.hop_limit     = 1;
+            attr.ah_attr.grh.flow_label    = 0;
+            attr.ah_attr.grh.traffic_class = 0;
         }
 
         flags = IBV_QP_STATE | IBV_QP_AV | IBV_QP_PATH_MTU | IBV_QP_DEST_QPN | IBV_QP_RQ_PSN | IBV_QP_MAX_DEST_RD_ATOMIC

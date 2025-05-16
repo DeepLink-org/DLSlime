@@ -29,6 +29,7 @@ int RDMAMemoryPool::register_memory_region(const std::string& mr_key, uintptr_t 
 
 int RDMAMemoryPool::unregister_memory_region(const std::string& mr_key)
 {
+    ibv_dereg_mr(mrs_[mr_key]);
     mrs_.erase(mr_key);
     return 0;
 }

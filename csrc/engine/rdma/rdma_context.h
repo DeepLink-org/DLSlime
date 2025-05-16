@@ -35,6 +35,7 @@ public:
         for (int qpi = 0; qpi < qp_list_len_; qpi++) {
             qp_management_[qpi] = new qp_management_t();
         }
+        srand48(time(NULL));
     }
 
     ~RDMAContext()

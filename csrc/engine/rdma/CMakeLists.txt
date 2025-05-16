@@ -7,7 +7,7 @@ add_library(
     rdma_scheduler.cpp
 )
 
-target_link_libraries(_slime_rdma PUBLIC _slime_engine _slime_utils ibverbs)
+target_link_libraries(_slime_rdma PUBLIC _slime_engine _slime_utils)
 
 set_target_properties(
     _slime_rdma
