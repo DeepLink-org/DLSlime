@@ -2,8 +2,8 @@
 #include "engine/assignment.h"
 #include "engine/rdma/memory_pool.h"
 #include "engine/rdma/rdma_assignment.h"
-#include "engine/rdma/rdma_env.h"
 #include "engine/rdma/rdma_config.h"
+#include "engine/rdma/rdma_env.h"
 
 #include "utils/ibv_helper.h"
 #include "utils/logging.h"
@@ -51,7 +51,7 @@ int64_t RDMAContext::init(const std::string& dev_name, uint8_t ib_port, const st
 
     SLIME_LOG_INFO("Initializing RDMA Context ...");
     SLIME_LOG_DEBUG("device name: " << dev_name);
-    SLIME_LOG_DEBUG("ib port: " << ib_port);
+    SLIME_LOG_DEBUG("ib port: " << (int)ib_port);
     SLIME_LOG_DEBUG("link type: " << link_type);
 
     if (initialized_) {
@@ -108,7 +108,7 @@ int64_t RDMAContext::init(const std::string& dev_name, uint8_t ib_port, const st
     SLIME_LOG_DEBUG("Max CQ:" << (int)device_attr.max_cq);
     SLIME_LOG_DEBUG("Max CQ Element:" << (int)device_attr.max_cqe);
     SLIME_LOG_DEBUG("total ib ports:" << (int)device_attr.phys_port_cnt);
-    
+
     struct ibv_port_attr port_attr;
     ib_port_ = ib_port;
 
@@ -540,7 +540,8 @@ int64_t RDMAContext::cq_poll_handle()
                 callback_info_with_qpi_t::CALLBACK_STATUS status_code = callback_info_with_qpi_t::SUCCESS;
                 if (wc[i].status != IBV_WC_SUCCESS) {
                     status_code = callback_info_with_qpi_t::FAILED;
-                    SLIME_LOG_ERROR("WR failed with status: ", ibv_wc_status_str(wc[i].status), std::endl);
+                    SLIME_LOG_ERROR(
+                        "WR failed with status: ", ibv_wc_status_str(wc[i].status), "vendor err: ", wc[i].vendor_err);
                 }
                 if (wc[i].wr_id != 0) {
                     callback_info_with_qpi_t* callback_with_qpi =
