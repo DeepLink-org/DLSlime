@@ -107,9 +107,14 @@ int64_t RDMAContext::init(const std::string& dev_name, uint8_t ib_port, const st
     SLIME_LOG_DEBUG("Max QP Working Request:" << device_attr.max_qp_wr);
     SLIME_LOG_DEBUG("Max CQ:" << (int)device_attr.max_cq);
     SLIME_LOG_DEBUG("Max CQ Element:" << (int)device_attr.max_cqe);
-    SLIME_LOG_DEBUG("MAX QP RD ATOM" << (int)device_attr.max_qp_init_rd_atom);
-    SLIME_LOG_DEBUG("MAX RES RD ATOM" << (int)device_attr.max_res_rd_atom);
-    SLIME_LOG_DEBUG("Total ib ports:" << (int)device_attr.phys_port_cnt);
+    SLIME_LOG_DEBUG("MAX QP RD ATOM: " << (int)device_attr.max_qp_init_rd_atom);
+    SLIME_LOG_DEBUG("MAX RES RD ATOM: " << (int)device_attr.max_res_rd_atom);
+    SLIME_LOG_DEBUG("Total ib ports: " << (int)device_attr.phys_port_cnt);
+
+    if (SLIME_MAX_RD_ATOMIC > (int)device_attr.max_qp_init_rd_atom)
+        SLIME_ABORT("MAX_RD_ATOMIC (" << SLIME_MAX_RD_ATOMIC << ") > device max RD ATOMIC ("
+                                      << device_attr.max_qp_init_rd_atom << "), please set SLIME_MAX_RD_ATOMIC env "
+                                      << "less than device max RD ATOMIC");
 
     struct ibv_port_attr port_attr;
     ib_port_ = ib_port;
@@ -542,8 +547,10 @@ int64_t RDMAContext::cq_poll_handle()
                 callback_info_with_qpi_t::CALLBACK_STATUS status_code = callback_info_with_qpi_t::SUCCESS;
                 if (wc[i].status != IBV_WC_SUCCESS) {
                     status_code = callback_info_with_qpi_t::FAILED;
-                    SLIME_LOG_ERROR(
-                        "WR failed with status: ", ibv_wc_status_str(wc[i].status), ", vi vendor err: ", wc[i].vendor_err);
+                    SLIME_LOG_ERROR("WR failed with status: ",
+                                    ibv_wc_status_str(wc[i].status),
+                                    ", vi vendor err: ",
+                                    wc[i].vendor_err);
                 }
                 if (wc[i].wr_id != 0) {
                     callback_info_with_qpi_t* callback_with_qpi =
