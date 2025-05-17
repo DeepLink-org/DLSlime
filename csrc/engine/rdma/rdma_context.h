@@ -32,9 +32,9 @@ public:
     */
     RDMAContext()
     {
-        SLIME_LOG_DEBUG("Initializing qp management, num qp: " << QP_NUM);
+        SLIME_LOG_DEBUG("Initializing qp management, num qp: " << SLIME_QP_NUM);
 
-        qp_list_len_ = QP_NUM;
+        qp_list_len_ = SLIME_QP_NUM;
         qp_management_ = new qp_management_t*[qp_list_len_];
         for (int qpi = 0; qpi < qp_list_len_; qpi++) {
             qp_management_[qpi] = new qp_management_t();
