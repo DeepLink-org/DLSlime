@@ -3,6 +3,7 @@
 #include "engine/assignment.h"
 #include "engine/rdma/memory_pool.h"
 #include "engine/rdma/rdma_assignment.h"
+#include "engine/rdma/rdma_env.h"
 #include "engine/rdma/rdma_config.h"
 
 #include "utils/json.hpp"
@@ -27,14 +28,19 @@ using json = nlohmann::json;
 class RDMAContext {
 public:
     /*
-      A link of rdma QP.
+      A context of rdma QP.
     */
     RDMAContext()
     {
+        SLIME_LOG_DEBUG("Initializing qp management, num qp: " << QP_NUM);
+
+        qp_list_len_ = QP_NUM;
         qp_management_ = new qp_management_t*[qp_list_len_];
         for (int qpi = 0; qpi < qp_list_len_; qpi++) {
             qp_management_[qpi] = new qp_management_t();
         }
+
+        /* random initialization for psn configuration */
         srand48(time(NULL));
     }
 
@@ -141,7 +147,7 @@ private:
         std::atomic<bool> stop_wq_future_{false};
     } qp_management_t;
 
-    size_t            qp_list_len_{4};
+    size_t            qp_list_len_{1};
     qp_management_t** qp_management_;
 
     int last_qp_selection_ = -1;

@@ -2,6 +2,7 @@
 #include "engine/assignment.h"
 #include "engine/rdma/memory_pool.h"
 #include "engine/rdma/rdma_assignment.h"
+#include "engine/rdma/rdma_env.h"
 #include "engine/rdma/rdma_config.h"
 
 #include "utils/ibv_helper.h"
@@ -47,6 +48,11 @@ int64_t RDMAContext::init(const std::string& dev_name, uint8_t ib_port, const st
     union ibv_gid gid;
     int64_t       gidx;
     uint32_t      psn;
+
+    SLIME_LOG_INFO("Initializing RDMA Context ...");
+    SLIME_LOG_DEBUG("device name: " << dev_name);
+    SLIME_LOG_DEBUG("ib port: " << ib_port);
+    SLIME_LOG_DEBUG("link type: " << link_type);
 
     if (initialized_) {
         SLIME_LOG_ERROR("Already initialized.");
@@ -94,40 +100,47 @@ int64_t RDMAContext::init(const std::string& dev_name, uint8_t ib_port, const st
     struct ibv_device_attr device_attr;
     if (ibv_query_device(ib_ctx_, &device_attr) != 0)
         SLIME_LOG_ERROR("Failed to query device");
+
     SLIME_LOG_DEBUG("Max Memory Region:" << device_attr.max_mr);
     SLIME_LOG_DEBUG("Max Memory Region Size:" << device_attr.max_mr_size);
-    SLIME_LOG_DEBUG("Max Memory QP WR:" << device_attr.max_qp_wr);
+    SLIME_LOG_DEBUG("Max QP:" << device_attr.max_qp);
+    SLIME_LOG_DEBUG("Max QP Woring Request:" << device_attr.max_qp_wr);
+    SLIME_LOG_DEBUG("Max CQ:" << (int)device_attr.max_cq);
+    SLIME_LOG_DEBUG("Max CQ Element:" << (int)device_attr.max_cqe);
     SLIME_LOG_DEBUG("total ib ports:" << (int)device_attr.phys_port_cnt);
-
+    
     struct ibv_port_attr port_attr;
     ib_port_ = ib_port;
+
     if (ibv_query_port(ib_ctx_, ib_port, &port_attr)) {
         ibv_close_device(ib_ctx_);
         SLIME_ABORT("Unable to query port " + std::to_string(ib_port_) + "\n");
     }
+
     if ((port_attr.link_layer == IBV_LINK_LAYER_INFINIBAND && link_type == "RoCE")
         || (port_attr.link_layer == IBV_LINK_LAYER_ETHERNET && link_type == "IB")) {
         SLIME_ABORT("port link layer and config link type don't match");
-        return -1;
     }
+
     if (port_attr.state == IBV_PORT_DOWN) {
-        SLIME_ABORT("Device " << dev_name << " ,Port " << ib_port_ << "is DISABLED.");
         ibv_close_device(ib_ctx_);
-        return -1;
+        SLIME_ABORT("Device " << dev_name << " ,Port " << ib_port_ << "is DISABLED.");
     }
+
     if (port_attr.link_layer == IBV_LINK_LAYER_INFINIBAND) {
         gidx = -1;
     }
     else {
-        if (GIDX > 0)
-            gidx = GIDX;
+        if (GID_INDEX > 0)
+            gidx = GID_INDEX;
         else
             gidx = ibv_find_sgid_type(ib_ctx_, ib_port_, ibv_gid_type_custom::IBV_GID_TYPE_ROCE_V2, AF_INET);
         if (gidx < 0) {
-            SLIME_LOG_ERROR("Failed to find GID");
-            return -1;
+            SLIME_ABORT("Failed to find GID");
         }
     }
+
+    SLIME_LOG_DEBUG("Set GID INDEX to " << gidx);
 
     lid        = port_attr.lid;
     active_mtu = port_attr.active_mtu;
@@ -195,6 +208,8 @@ int64_t RDMAContext::init(const std::string& dev_name, uint8_t ib_port, const st
         local_rdma_info.lid  = lid;
         local_rdma_info.mtu  = (uint32_t)active_mtu;
     }
+    SLIME_LOG_INFO("RDMA context initialized")
+    SLIME_LOG_DEBUG("RDMA context local configuration: ", endpoint_info());
 
     initialized_ = true;
 
@@ -203,6 +218,8 @@ int64_t RDMAContext::init(const std::string& dev_name, uint8_t ib_port, const st
 
 int64_t RDMAContext::connect(const json& endpoint_info_json)
 {
+    SLIME_LOG_INFO("RDMA context remote connecting");
+    SLIME_LOG_DEBUG("RDMA context remote configuration: ", endpoint_info_json);
     // Register Remote Memory Region
     for (auto& item : endpoint_info_json["mr_info"].items()) {
         register_remote_memory_region(item.key(), item.value());

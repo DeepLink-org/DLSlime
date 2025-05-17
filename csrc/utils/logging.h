@@ -66,29 +66,28 @@ inline int get_log_level()
 
 #define SLIME_ABORT(Msg, ...)                                                                                          \
     {                                                                                                                  \
-        std::cerr << ": \033[1;91m"                                                                                    \
+        std::cerr << "\033[1;91m"                                                                                      \
                   << "[Fatal]"                                                                                         \
                   << "\033[m " << __FILE__ << ": " << __FUNCTION__ << ": Line" << __LINE__ << ": "                     \
                   << Msg __VA_OPT__(STREAM_VAR_ARGS(__VA_ARGS__)) << std::endl;                                        \
         abort();                                                                                                       \
     }
 
-#define SLIME_LOG_LEVEL(MsgType, Level, ...)                                                                           \
+#define SLIME_LOG_LEVEL(MsgType, FlagFormat, Level, ...)                                                               \
     {                                                                                                                  \
         if (get_log_level() >= Level) {                                                                                \
-            std::cerr << ": \033[1;91m"                                                                                \
-                      << "[" << MsgType << "]"                                                                         \
+            std::cerr << FlagFormat << "[" << MsgType << "]"                                                           \
                       << "\033[m " << __FILE__ << ": " << __FUNCTION__ << ": Line" << __LINE__                         \
                       << ": " __VA_OPT__(STREAM_VAR_ARGS(__VA_ARGS__)) << std::endl;                                   \
         }                                                                                                              \
     }
 
 // Error and Warn
-#define SLIME_LOG_ERROR(...) SLIME_LOG_LEVEL("Error", 0, __VA_ARGS__)
-#define SLIME_LOG_WARN(...) SLIME_LOG_LEVEL("Warn", 0, __VA_ARGS__)
+#define SLIME_LOG_ERROR(...) SLIME_LOG_LEVEL("Error", "\033[1;91m", 0, __VA_ARGS__)
+#define SLIME_LOG_WARN(...) SLIME_LOG_LEVEL("Warn", "\033[1;91m", 0, __VA_ARGS__)
 
 // Info
-#define SLIME_LOG_INFO(...) SLIME_LOG_LEVEL("Info", 1, __VA_ARGS__)
+#define SLIME_LOG_INFO(...) SLIME_LOG_LEVEL("Info", "\033[1;92m", 1, __VA_ARGS__)
 
 // Debug
-#define SLIME_LOG_DEBUG(...) SLIME_LOG_LEVEL("Debug", 2, __VA_ARGS__)
+#define SLIME_LOG_DEBUG(...) SLIME_LOG_LEVEL("Debug", "\033[1;92m", 2, __VA_ARGS__)

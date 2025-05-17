@@ -13,13 +13,6 @@
 
 namespace slime {
 
-const static int MAX_SEND_WR = 8192;
-const static int MAX_RECV_WR = 8192;
-const static int POLL_COUNT = 256;
-const static int MAX_DEST_RD_ATOMIC = 16;
-const static int SERVICE_LEVEL = 0;
-const static int GIDX = -1;
-
 using json = nlohmann::json;
 typedef struct rdma_info {
     uint32_t      qpn;
