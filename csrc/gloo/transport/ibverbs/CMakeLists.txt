@@ -10,7 +10,7 @@ add_library(
     unbound_buffer.cc
 )
 
-target_link_libraries(_slime_gloo_transport_ibverbs ibverbs)
+target_link_libraries(_slime_gloo_transport_ibverbs _slime_gloo_transport _slime_gloo_common ibverbs)
 
 set_target_properties(
     _slime_gloo_transport_ibverbs
