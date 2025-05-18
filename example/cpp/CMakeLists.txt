@@ -1,0 +1,2 @@
+add_executable(demo_store demo_store.cpp)
+target_link_libraries(demo_store _slime_gloo _slime_gloo_common _slime_gloo_rendezvous _slime_gloo_transport)
