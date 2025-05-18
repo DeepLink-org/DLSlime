@@ -101,8 +101,8 @@ PYBIND11_MODULE(_slime_c, m)
     m.def("create_device", [](const std::string& device_name, const int port, const int index) {
         gloo::transport::ibverbs::attr attr{
             .name  = "mlx5_bond_0",
-            .port  = 1,
-            .index = 3,
+            .port  = port,
+            .index = index,
         };
         return gloo::transport::ibverbs::CreateDevice(attr);
     });
