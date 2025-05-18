@@ -3,6 +3,14 @@
 #include "engine/rdma/rdma_config.h"
 #include "engine/rdma/rdma_context.h"
 #include "engine/rdma/rdma_scheduler.h"
+
+#include "gloo/rendezvous/context.h"
+#include "gloo/rendezvous/file_store.h"
+#include "gloo/rendezvous/prefix_store.h"
+#include "gloo/rendezvous/store.h"
+#include "gloo/transport/device.h"
+#include "gloo/transport/ibverbs/device.h"
+
 #include <functional>
 #include <pybind11/cast.h>
 #include <pybind11/pytypes.h>
@@ -72,4 +80,30 @@ PYBIND11_MODULE(_slime_c, m)
         .def("connect", &slime::NVLinkContext::connect)
         .def("read_batch", &slime::NVLinkContext::read_batch);
 #endif
+
+    py::class_<gloo::transport::Device, std::shared_ptr<gloo::transport::Device>>(m, "gloo_device");
+
+    py::class_<gloo::rendezvous::Store, std::shared_ptr<gloo::rendezvous::Store>>(m, "gloo_store");
+
+    py::class_<gloo::rendezvous::FileStore, std::shared_ptr<gloo::rendezvous::FileStore>>(m, "gloo_file_store")
+        .def(py::init<std::string>());
+
+    py::class_<gloo::rendezvous::PrefixStore, std::shared_ptr<gloo::rendezvous::PrefixStore>>(m, "gloo_prefix_store")
+        .def(py::init<std::string, std::shared_ptr<gloo::rendezvous::FileStore>>());
+
+    py::class_<gloo::rendezvous::Context, std::shared_ptr<gloo::rendezvous::Context>>(m, "gloo_context")
+        .def(py::init<int, int>())
+        .def("connect_full_mesh",
+             [](gloo::rendezvous::Context&                     self,
+                std::shared_ptr<gloo::rendezvous::PrefixStore> store,
+                std::shared_ptr<gloo::transport::Device>       dev) { self.connectFullMesh(store, dev); });
+
+    m.def("create_device", [](const std::string& device_name, const int port, const int index) {
+        gloo::transport::ibverbs::attr attr{
+            .name  = "mlx5_bond_0",
+            .port  = 1,
+            .index = 3,
+        };
+        return gloo::transport::ibverbs::CreateDevice(attr);
+    });
 }

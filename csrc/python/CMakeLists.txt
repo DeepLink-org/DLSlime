@@ -9,12 +9,21 @@ pybind11_add_module(
     bind.cpp
 )
 
+set(_slime_c_link_libraries
+    _slime_rdma
+    _slime_gloo
+    _slime_gloo_common
+    _slime_gloo_rendezvous
+    _slime_gloo_transport
+    _slime_gloo_transport_ibverbs
+)
+
 if (BUILD_NVLINK)
-target_compile_definitions(_slime_c PRIVATE -DBUILD_NVLINK)
-target_link_libraries(_slime_c PRIVATE _slime_rdma _slime_nvlink CUDA::cudart)
-else ()
-target_link_libraries(_slime_c PRIVATE _slime_rdma _slime_meta)
+    target_compile_definitions(_slime_c PRIVATE -DBUILD_NVLINK)
+    list(APPEND _slime_c_link_libraries _slime_nvlink CUDA::cudart)
 endif()
+
+target_link_libraries(_slime_c PRIVATE ${_slime_c_link_libraries})
 
 set_target_properties(
     _slime_c
