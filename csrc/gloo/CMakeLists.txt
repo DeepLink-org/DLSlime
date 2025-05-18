@@ -1,7 +1,11 @@
 add_library(
     _slime_gloo
     SHARED
+    algorithm.cc
     context.cc
+    allreduce.cc
+    math.cc
+    types.cc
 )
 
 set_target_properties(

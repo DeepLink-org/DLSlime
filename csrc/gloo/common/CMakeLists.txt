@@ -1,6 +1,7 @@
 add_library(
     _slime_gloo_common
     SHARED
+    linux.cc
     logging.cc
     utils.cc
 )
