@@ -10,6 +10,7 @@ inline int get_env_int(const char* name, int default_value)
     return val ? std::stoi(val) : default_value;
 }
 
+inline const int SLIME_VISIBLE_DEVICES    = get_env_int("SLIME_VISIBLE_DEVICES", 0);
 inline const int SLIME_MAX_SEND_WR        = get_env_int("SLIME_MAX_SEND_WR", 8192);
 inline const int SLIME_MAX_RECV_WR        = get_env_int("SLIME_MAX_RECV_WR", 8192);
 inline const int SLIME_POLL_COUNT         = get_env_int("SLIME_POLL_COUNT", 256);

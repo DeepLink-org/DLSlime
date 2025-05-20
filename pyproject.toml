@@ -29,6 +29,7 @@ Repository = "https://github.com/JimyMa/dlslime.git"
 cmake.args = [
   "-DDLSLIME_INSTALL_PATH=dlslime",
   "-DBUILD_PYTHON=ON",
-  "-DBUILD_NVLINK=ON",
+  "-DBUILD_NVLINK=OFF",
+  "-DBUILD_TORCH_PLUGIN=ON",
 ]
 cmake.build-type = "Release"

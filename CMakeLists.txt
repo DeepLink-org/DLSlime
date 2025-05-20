@@ -5,12 +5,13 @@ project(_slime C CXX)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # TODO: Add multi transport mode option
-# option(BUILD_RDMA    "Build RDMA"                        ON)
-option(BUILD_NVLINK  "Build NVLINK"                     OFF)
-option(BUILD_BENCH   "Build transfer engine benchmark"  OFF)
-option(BUILD_EXAMPLE "Build example"                    OFF)
-option(BUILD_PYTHON  "Build python wrapper"             OFF)
-option(BUILD_TEST    "Build test"                       OFF)
+# option(BUILD_RDMA         "Build RDMA"                        ON)
+option(BUILD_NVLINK       "Build NVLINK"                     OFF)
+option(BUILD_BENCH        "Build transfer engine benchmark"  OFF)
+option(BUILD_EXAMPLE      "Build example"                    OFF)
+option(BUILD_PYTHON       "Build python wrapper"             OFF)
+option(BUILD_TEST         "Build test"                       OFF)
+option(BUILD_TORCH_PLUGIN "Build torch plugin"               OFF)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -26,6 +27,11 @@ find_package(CUDAToolkit REQUIRED)
 
 # Supported NVIDIA architectures.
 set(CUDA_SUPPORTED_ARCHS "7.0;7.2;7.5;8.0;8.6;8.7;8.9;9.0;10.0;10.1;12.0")
+endif()
+
+if (BUILD_TORCH)
+# TODO: keep same as libtorch
+add_compile_definitions("-D_GLIBCXX_USE_CXX11_ABI=0")
 endif()
 
 include_directories(csrc)
