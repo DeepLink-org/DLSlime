@@ -225,16 +225,17 @@ void RecvWork::abort()
     buffer_->abortWaitRecv();
 }
 
-void logAndThrow(
-    const std::string& logMessage,
-    const std::string& errorMessage) {
-  LOG(ERROR) << logMessage;
-  TORCH_CHECK(false, errorMessage);
+void logAndThrow(const std::string& logMessage, const std::string& errorMessage)
+{
+    LOG(ERROR) << logMessage;
+    TORCH_CHECK(false, errorMessage);
 }
 
 // If necessary, pass store/rank/size to the ctor and exchange connection
 // information here
-slimeBackend::slimeBackend(const c10::intrusive_ptr<::c10d::Store>& store, int rank, int size):
+slimeBackend::slimeBackend(const c10::intrusive_ptr<::c10d::Store>& store,
+                           int                                      rank,
+                           int                                      size):
     Backend(rank, size), store_(new GlooStore(store)), stop_(false), collectiveCounter_(0)
 {
     // auto& devices = "cuda";
@@ -301,8 +302,6 @@ slimeBackend::slimeBackend(const c10::intrusive_ptr<::c10d::Store>& store, int r
     for (const auto i : c10::irange(threads_.size())) {
         threads_[i] = std::thread(&slimeBackend::runLoop, this, i);
     }
-
-    init();
 }
 
 slimeBackend::~slimeBackend()
@@ -382,28 +381,29 @@ c10::intrusive_ptr<::c10d::Work> slimeBackend::recv(std::vector<at::Tensor>& ten
     return c10::make_intrusive<RecvWork>(tensor, std::move(buf), ::c10d::OpType::RECV, seq_, "gloo:recv");
 }
 
-void slimeBackend::runLoop(int workerIndex) {
-  std::unique_lock<std::mutex> lock(workMutex_);
+void slimeBackend::runLoop(int workerIndex)
+{
+    std::unique_lock<std::mutex> lock(workMutex_);
 
-  while (!stop_) {
-    if (workQueue_.empty()) {
-      workProduceCV_.wait(lock);
-      continue;
+    while (!stop_) {
+        if (workQueue_.empty()) {
+            workProduceCV_.wait(lock);
+            continue;
+        }
+
+        auto work = std::move(workQueue_.front());
+        workQueue_.pop_front();
+        workInProgress_[workerIndex] = work;
+        lock.unlock();
+
+        // Notify after releasing the lock so that the waiter
+        // does not immediately block.
+        workConsumeCV_.notify_one();
+
+        AsyncWork::execute(work);
+        lock.lock();
+        workInProgress_[workerIndex].reset();
     }
-
-    auto work = std::move(workQueue_.front());
-    workQueue_.pop_front();
-    workInProgress_[workerIndex] = work;
-    lock.unlock();
-
-    // Notify after releasing the lock so that the waiter
-    // does not immediately block.
-    workConsumeCV_.notify_one();
-
-    AsyncWork::execute(work);
-    lock.lock();
-    workInProgress_[workerIndex].reset();
-  }
 }
 
 c10::intrusive_ptr<::c10d::Backend> slimeBackend::createDLSlimeBackend(c10::intrusive_ptr<::c10d::Store> store,

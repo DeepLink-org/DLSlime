@@ -329,16 +329,18 @@ public:
     };
 
     static c10::intrusive_ptr<Backend> createDLSlimeBackend(c10::intrusive_ptr<::c10d::Store>   store,
-                                                           int64_t                             rank,
-                                                           int64_t                             size,
-                                                           const std::chrono::duration<float>& timeout);
+                                                            int64_t                             rank,
+                                                            int64_t                             size,
+                                                            const std::chrono::duration<float>& timeout);
 
     static void dlslimeBackendConstructor() __attribute__((constructor))
     {
-        std::string devName = "cuda";
         py::object module          = py::module::import("torch.distributed");
         py::object registerBackend = module.attr("Backend").attr("register_backend");
-        registerBackend("dlslime", py::cpp_function(createDLSlimeBackend), py::arg("devices") = py::make_tuple(devName));
+        registerBackend("dlslime",
+                        py::cpp_function(createDLSlimeBackend),
+                        false,
+                        py::arg("devices") = py::make_tuple("cuda", "cpu"));
     }
 
 protected:
