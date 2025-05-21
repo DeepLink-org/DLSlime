@@ -32,7 +32,7 @@ endif()
 
 if (BUILD_TORCH_PLUGIN)
 run_python(TORCH_ENABLE_ABI
-    "import torch; print(torch._C._GLIBCXX_USE_CXX11_ABI)"
+    "import torch; print(int(torch._C._GLIBCXX_USE_CXX11_ABI))"
     "Failed to find torch ABI info"
 )
 add_compile_definitions("_GLIBCXX_USE_CXX11_ABI=${TORCH_ENABLE_ABI}")
