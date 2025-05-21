@@ -31,8 +31,11 @@ set(CUDA_SUPPORTED_ARCHS "7.0;7.2;7.5;8.0;8.6;8.7;8.9;9.0;10.0;10.1;12.0")
 endif()
 
 if (BUILD_TORCH_PLUGIN)
-# TODO: keep same as libtorch
-add_compile_definitions("-D_GLIBCXX_USE_CXX11_ABI=0")
+run_python(TORCH_ENABLE_ABI
+    "import torch; print(torch._C._GLIBCXX_USE_CXX11_ABI)"
+    "Failed to find torch ABI info"
+)
+add_compile_definitions("-D_GLIBCXX_USE_CXX11_ABI=${TORCH_ENABLE_ABI}")
 endif()
 
 include_directories(csrc)

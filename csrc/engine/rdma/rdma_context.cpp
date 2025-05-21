@@ -131,7 +131,7 @@ int64_t RDMAContext::init(const std::string& dev_name, uint8_t ib_port, const st
 
     if (port_attr.state == IBV_PORT_DOWN) {
         ibv_close_device(ib_ctx_);
-        SLIME_ABORT("Device " << dev_name << " ,Port " << ib_port_ << "is DISABLED.");
+        SLIME_ABORT("Device " << dev_name << ", Port " << (int)ib_port_ << "is DISABLED.");
     }
 
     if (port_attr.link_layer == IBV_LINK_LAYER_INFINIBAND) {

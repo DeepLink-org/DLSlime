@@ -102,21 +102,19 @@ inline void AsyncWork::recordAsyncWorkProfilingInfo(const char*                 
 
 AsyncWork::AsyncWork(std::vector<std::vector<at::Tensor>>          outputTensors,
                      ::c10d::OpType                                opType,
-                     uint64_t                                      seq,
-                     const char*                                   profilingTitle,
-                     const std::optional<std::vector<at::Tensor>>& inputTensors)
+                     uint64_t                                      seq)
     // Profiler: Pass nullptr as profilingTitle to parent constructor to
     // replace default profiler implementation with async version that reports
     // correct timestamps for work that is asynchronously executed.
     :
-    Work(-1, opType, nullptr, inputTensors),
+    Work(-1, opType),
     outputTensors_(std::move(outputTensors)),
     future_(createFutureAsOutput(outputTensors_)),
     seq_(seq)
 {
-    if (profilingTitle != nullptr) {
-        recordAsyncWorkProfilingInfo(profilingTitle, inputTensors);
-    }
+    // if (profilingTitle != nullptr) {
+    //     recordAsyncWorkProfilingInfo(profilingTitle, inputTensors);
+    // }
 }
 
 uint64_t AsyncWork::getSequencenumber() const
@@ -137,7 +135,7 @@ void AsyncWork::finishWorkGloo()
 }
 
 SendWork::SendWork(at::Tensor& tensor, std::unique_ptr<::gloo::transport::UnboundBuffer> buffer, uint64_t seq):
-    Work(-1, ::c10d::OpType::SEND, "gloo:send", std::optional<std::vector<at::Tensor>>({tensor})),
+    Work(-1, ::c10d::OpType::SEND),
     tensor_(tensor),
     buffer_(std::move(buffer)),
     seq_(seq)
@@ -178,9 +176,8 @@ void SendWork::abort()
 RecvWork::RecvWork(at::Tensor&                                       tensor,
                    std::unique_ptr<::gloo::transport::UnboundBuffer> buffer,
                    ::c10d::OpType                                    opType,
-                   uint64_t                                          seq,
-                   const char*                                       profilingTitle):
-    Work(-1, opType, profilingTitle, std::optional<std::vector<at::Tensor>>({tensor})),
+                   uint64_t                                          seq):
+    Work(-1, opType),
     tensor_(tensor),
     buffer_(std::move(buffer)),
     srcRank_(-1),
@@ -378,7 +375,7 @@ c10::intrusive_ptr<::c10d::Work> slimeBackend::recv(std::vector<at::Tensor>& ten
 
     // The work captures the tensor to prevent it being deallocated and
     // the unbound buffer to synchronize on completion of the recv.
-    return c10::make_intrusive<RecvWork>(tensor, std::move(buf), ::c10d::OpType::RECV, seq_, "gloo:recv");
+    return c10::make_intrusive<RecvWork>(tensor, std::move(buf), ::c10d::OpType::RECV, seq_);
 }
 
 void slimeBackend::runLoop(int workerIndex)

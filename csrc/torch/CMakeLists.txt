@@ -9,10 +9,14 @@ pybind11_add_module(
     backend.cpp
 )
 
-find_package(Torch REQUIRED)
-find_library(TORCH_PYTHON_LIBRARY torch_python PATHS "${TORCH_INSTALL_PREFIX}/lib")
+run_python("Torch_DIR" "import torch; print(torch.__file__.rsplit(\"/\", 1)[0])" "Cannot find torch DIR")
+set(LIB_NAMES torch torch_cuda torch_python c10 c10_cuda)
+find_libraries(TORCH_LIBRARIES "${Torch_DIR}/lib" "${LIB_NAMES}")
 
-target_include_directories(_slime_torch PRIVATE ${TORCH_INCLUDE_DIRS})
+target_include_directories(_slime_torch PRIVATE ${Torch_DIR}/include)
+target_include_directories(_slime_torch PRIVATE ${Torch_DIR}/include/torch/csrc/api/include/)
+
+message(${TORCH_DIR}/include)
 
 target_compile_definitions(_slime_torch PRIVATE
     "-DTORCH_API_INCLUDE_EXTENSION_H"
@@ -27,7 +31,6 @@ target_compile_definitions(_slime_torch PRIVATE
 target_link_libraries(
     _slime_torch
     PRIVATE
-    ${TORCH_PYTHON_LIBRARY}
     ${TORCH_LIBRARIES}
     _slime_gloo
     _slime_gloo_common

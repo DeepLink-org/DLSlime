@@ -33,9 +33,7 @@ class TORCH_API AsyncWork: public ::c10d::Work {
 public:
     explicit AsyncWork(std::vector<std::vector<at::Tensor>>          outputTensors,
                        ::c10d::OpType                                opType,
-                       uint64_t                                      seq,
-                       const char*                                   profilingTitle = nullptr,
-                       const std::optional<std::vector<at::Tensor>>& inputTensors   = std::nullopt);
+                       uint64_t                                      seq);
 
     ~AsyncWork() override = default;
 
@@ -105,8 +103,7 @@ public:
     explicit RecvWork(at::Tensor&                                       tensor,
                       std::unique_ptr<::gloo::transport::UnboundBuffer> buffer,
                       ::c10d::OpType                                    opType,
-                      uint64_t                                          seq,
-                      const char*                                       profilingTitle = nullptr);
+                      uint64_t                                          seq);
 
     int sourceRank() const override;
 
