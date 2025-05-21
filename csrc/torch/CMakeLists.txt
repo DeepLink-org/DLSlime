@@ -1,4 +1,6 @@
 # Python Wrapper
+slime_option(USE_MACA "USE in MACA Platform" OFF)
+
 set(PYBIND11_FINDPYTHON ON)
 find_package(pybind11 REQUIRED)
 
@@ -27,6 +29,12 @@ target_compile_definitions(_slime_torch PRIVATE
 target_compile_definitions(_slime_torch PRIVATE
     "-DPYBIND11_BUILD_ABI=\"_cxxabi1011\""
 )
+
+if (USE_MACA)
+target_compile_definitions(_slime_torch PRIVATE
+    "-DUSE_MACA=1"
+)
+endif()
 
 target_link_libraries(
     _slime_torch
