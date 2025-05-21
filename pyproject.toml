@@ -26,10 +26,12 @@ Homepage = "https://github.com/JimyMa/dlslime.git"
 Repository = "https://github.com/JimyMa/dlslime.git"
 
 [tool.scikit-build]
+# optional env variable:
+# BUILD_TORCH_PLUGIN: OFF
+# BUILD_NVLINK: OFF
+# USE_MACA: OFF
 cmake.args = [
   "-DDLSLIME_INSTALL_PATH=dlslime",
-  "-DBUILD_PYTHON=ON",
-  "-DBUILD_NVLINK=OFF",
-  "-DBUILD_TORCH_PLUGIN=ON",
+  "-DBUILD_PYTHON=ON"
 ]
 cmake.build-type = "Release"

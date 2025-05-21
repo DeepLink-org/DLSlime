@@ -1,6 +1,7 @@
 # Python Wrapper
 set(PYBIND11_FINDPYTHON ON)
-find_package(pybind11 REQUIRED)
+run_python("pybind11_DIR" "import pybind11; print(pybind11.__file__.rsplit(\"/\", 1)[0])" "Cannot find pybind11 DIR")
+find_package(pybind11 REQUIRED PATHS ${pybind11_DIR})
 
 set(PYTHON_SUPPORTED_VERSIONS "3.8" "3.9" "3.10" "3.11" "3.12")
 

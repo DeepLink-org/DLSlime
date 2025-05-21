@@ -42,6 +42,7 @@ target_link_libraries(
     _slime_gloo_rendezvous
     _slime_gloo_transport
     _slime_gloo_transport_ibverbs
+    _slime_utils
 )
 
 set_target_properties(

@@ -31,9 +31,7 @@ constexpr const char* GLOO_BACKEND_NAME = "gloo";
 
 class TORCH_API AsyncWork: public ::c10d::Work {
 public:
-    explicit AsyncWork(std::vector<std::vector<at::Tensor>>          outputTensors,
-                       ::c10d::OpType                                opType,
-                       uint64_t                                      seq);
+    explicit AsyncWork(std::vector<std::vector<at::Tensor>> outputTensors, ::c10d::OpType opType, uint64_t seq);
 
     ~AsyncWork() override = default;
 
@@ -54,10 +52,8 @@ protected:
     friend class ProcessGroupGloo;
 
 private:
-    void        finishWorkGloo();
-    void        finishWorkGlooError(const std::exception_ptr& eptr);
-    inline void recordAsyncWorkProfilingInfo(const char*                                   profilingTitle,
-                                             const std::optional<std::vector<at::Tensor>>& inputTensors);
+    void finishWorkGloo();
+    void finishWorkGlooError(const std::exception_ptr& eptr);
 
     const std::vector<std::vector<at::Tensor>> outputTensors_;
     c10::intrusive_ptr<at::ivalue::Future>     future_;
@@ -201,6 +197,10 @@ public:
 
     ~slimeBackend() override;
 
+    c10::intrusive_ptr<::c10d::Work> send(std::vector<at::Tensor>& tensors, int dstRank, int tag) override;
+
+    c10::intrusive_ptr<::c10d::Work> recv(std::vector<at::Tensor>& tensors, int srcRank, int tag) override;
+
     c10::intrusive_ptr<::c10d::Work>
     broadcast(std::vector<at::Tensor>& data, const ::c10d::BroadcastOptions& opts = ::c10d::BroadcastOptions()) override
     {
@@ -310,10 +310,6 @@ public:
     {
         throw std::runtime_error("not supported");
     };
-
-    c10::intrusive_ptr<::c10d::Work> send(std::vector<at::Tensor>& tensors, int dstRank, int tag) override;
-
-    c10::intrusive_ptr<::c10d::Work> recv(std::vector<at::Tensor>& tensors, int srcRank, int tag) override;
 
     c10::intrusive_ptr<::c10d::Work> recvAnysource(std::vector<at::Tensor>& tensors, int tag) override
     {

@@ -30,7 +30,7 @@ function (run_python OUT EXPR ERR_MSG)
 endfunction()
 
 function(find_libraries FOUND_LIBS LIB_DIR LIB_NAMES)
-  set(found_libs_temp)  # 临时变量存储结果
+  set(found_libs_temp)
   foreach(LIB_NAME IN LISTS LIB_NAMES)
     find_library(${LIB_NAME}_LIBRARY
       NAMES ${LIB_NAME} "lib${LIB_NAME}"
@@ -42,6 +42,5 @@ function(find_libraries FOUND_LIBS LIB_DIR LIB_NAMES)
       list(APPEND found_libs_temp ${${LIB_NAME}_LIBRARY})
     endif()
   endforeach()
-  # 将结果传递到父作用域
   set(${FOUND_LIBS} ${found_libs_temp} PARENT_SCOPE)
 endfunction()

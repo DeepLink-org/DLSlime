@@ -14,6 +14,9 @@
 #include "gloo/rendezvous/prefix_store.h"
 #include "gloo/transport/ibverbs/device.h"
 
+#include "utils/logging.h"
+#include "utils/utils.h"
+
 namespace slime {
 namespace c10d {
 
@@ -77,40 +80,12 @@ void returnFutureWithOutput(c10::intrusive_ptr<c10::ivalue::Future>&    future,
 }
 }  // namespace
 
-inline void AsyncWork::recordAsyncWorkProfilingInfo(const char*                                   profilingTitle,
-                                                    const std::optional<std::vector<at::Tensor>>& inputTensors)
-{
-    auto recordingFunction = std::make_shared<at::RecordFunction>(at::RecordScope::USER_SCOPE);
-    if (recordingFunction->isActive()) {
-        std::function<void()> before_handler = [inputTensors, profilingTitle, recordingFunction]() {
-            // The work will be started and completed by different threads.
-            recordingFunction->_setAsync();
-            std::vector<c10::IValue> inputs;
-            if (inputTensors) {
-                inputs.reserve(inputTensors->size());
-                for (const auto& tensor : *inputTensors) {
-                    inputs.emplace_back(tensor);
-                }
-            }
-            recordingFunction->before(profilingTitle, c10::ArrayRef<const c10::IValue>(inputs.data(), inputs.size()));
-        };
-        recordFunctionBeforeCallback_     = at::wrapPropagateTLSState(std::move(before_handler));
-        std::function<void()> end_handler = [recordingFunction]() { recordingFunction->end(); };
-        recordFunctionEndCallback_        = at::wrapPropagateTLSState(end_handler);
-    }
-}
-
-AsyncWork::AsyncWork(std::vector<std::vector<at::Tensor>>          outputTensors,
-                     ::c10d::OpType                                opType,
-                     uint64_t                                      seq)
+AsyncWork::AsyncWork(std::vector<std::vector<at::Tensor>> outputTensors, ::c10d::OpType opType, uint64_t seq)
     // Profiler: Pass nullptr as profilingTitle to parent constructor to
     // replace default profiler implementation with async version that reports
     // correct timestamps for work that is asynchronously executed.
     :
-    Work(-1, opType),
-    outputTensors_(std::move(outputTensors)),
-    future_(createFutureAsOutput(outputTensors_)),
-    seq_(seq)
+    Work(-1, opType), outputTensors_(std::move(outputTensors)), future_(createFutureAsOutput(outputTensors_)), seq_(seq)
 {
     // if (profilingTitle != nullptr) {
     //     recordAsyncWorkProfilingInfo(profilingTitle, inputTensors);
@@ -130,10 +105,7 @@ void AsyncWork::finishWorkGloo()
 }
 
 SendWork::SendWork(at::Tensor& tensor, std::unique_ptr<::gloo::transport::UnboundBuffer> buffer, uint64_t seq):
-    Work(-1, ::c10d::OpType::SEND),
-    tensor_(tensor),
-    buffer_(std::move(buffer)),
-    seq_(seq)
+    Work(-1, ::c10d::OpType::SEND), tensor_(tensor), buffer_(std::move(buffer)), seq_(seq)
 {
 }
 
@@ -167,11 +139,7 @@ RecvWork::RecvWork(at::Tensor&                                       tensor,
                    std::unique_ptr<::gloo::transport::UnboundBuffer> buffer,
                    ::c10d::OpType                                    opType,
                    uint64_t                                          seq):
-    Work(-1, opType),
-    tensor_(tensor),
-    buffer_(std::move(buffer)),
-    srcRank_(-1),
-    seq_(seq)
+    Work(-1, opType), tensor_(tensor), buffer_(std::move(buffer)), srcRank_(-1), seq_(seq)
 {
 }
 
@@ -215,9 +183,7 @@ void logAndThrow(const std::string& logMessage, const std::string& errorMessage)
 
 // If necessary, pass store/rank/size to the ctor and exchange connection
 // information here
-slimeBackend::slimeBackend(const c10::intrusive_ptr<::c10d::Store>& store,
-                           int                                      rank,
-                           int                                      size):
+slimeBackend::slimeBackend(const c10::intrusive_ptr<::c10d::Store>& store, int rank, int size):
     Backend(rank, size), store_(new GlooStore(store)), stop_(false), collectiveCounter_(0)
 {
     // auto& devices = "cuda";
@@ -258,9 +224,12 @@ slimeBackend::slimeBackend(const c10::intrusive_ptr<::c10d::Store>& store,
     // context->setTimeout(options_->timeout);
     try {
         ::gloo::transport::ibverbs::attr attr;
-        attr.name  = "mlx5_bond_0";
-        attr.port  = 1;
-        attr.index = 3;
+        std::vector<std::string>         available_devices = available_nic();
+        size_t                           idx               = rank_ % available_devices.size();
+        attr.name                                          = available_devices[idx];
+        attr.port                                          = 1;
+        // TODO: find out index definition
+        attr.index                                         = 3;
 
         auto dev = gloo::transport::ibverbs::CreateDevice(attr);
         context->connectFullMesh(connectStore, dev);
