@@ -117,11 +117,6 @@ AsyncWork::AsyncWork(std::vector<std::vector<at::Tensor>>          outputTensors
     // }
 }
 
-uint64_t AsyncWork::getSequencenumber() const
-{
-    return seq_;
-}
-
 void AsyncWork::finishWorkGlooError(const std::exception_ptr& eptr)
 {
     future_->setError(eptr);
@@ -140,11 +135,6 @@ SendWork::SendWork(at::Tensor& tensor, std::unique_ptr<::gloo::transport::Unboun
     buffer_(std::move(buffer)),
     seq_(seq)
 {
-}
-
-uint64_t SendWork::getSequencenumber() const
-{
-    return seq_;
 }
 
 bool SendWork::wait(std::chrono::milliseconds timeout)
@@ -183,11 +173,6 @@ RecvWork::RecvWork(at::Tensor&                                       tensor,
     srcRank_(-1),
     seq_(seq)
 {
-}
-
-uint64_t RecvWork::getSequencenumber() const
-{
-    return seq_;
 }
 
 int RecvWork::sourceRank() const

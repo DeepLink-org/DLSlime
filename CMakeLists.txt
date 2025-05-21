@@ -35,7 +35,7 @@ run_python(TORCH_ENABLE_ABI
     "import torch; print(torch._C._GLIBCXX_USE_CXX11_ABI)"
     "Failed to find torch ABI info"
 )
-add_compile_definitions("-D_GLIBCXX_USE_CXX11_ABI=${TORCH_ENABLE_ABI}")
+add_compile_definitions("_GLIBCXX_USE_CXX11_ABI=${TORCH_ENABLE_ABI}")
 endif()
 
 include_directories(csrc)

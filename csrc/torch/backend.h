@@ -44,7 +44,6 @@ public:
     std::vector<at::Tensor> result() override;
 
     c10::intrusive_ptr<c10::ivalue::Future> getFuture() override;
-    uint64_t                                getSequencenumber() const override;
 
     inline at::ThreadLocalState getTLS() const
     {
@@ -77,8 +76,6 @@ public:
 
     void abort() override;
 
-    uint64_t getSequencenumber() const override;
-
 protected:
     at::Tensor                                        tensor_;
     std::unique_ptr<::gloo::transport::UnboundBuffer> buffer_;
@@ -110,8 +107,6 @@ public:
     bool wait(std::chrono::milliseconds timeout = kNoTimeout) override;
 
     void abort() override;
-
-    uint64_t getSequencenumber() const override;
 
 protected:
     at::Tensor                                        tensor_;
