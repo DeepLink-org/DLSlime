@@ -9,8 +9,8 @@ from dlslime import _slime_torch  # noqa: F401
 parser = argparse.ArgumentParser()
 parser.add_argument('--mode', type=str)
 
-parser.add_argument('--mater-addr', type=str, default="localhost")
-parser.add_argument('--mater-port', type=str, default="6006")
+parser.add_argument('--master-addr', type=str, default="localhost")
+parser.add_argument('--master-port', type=str, default="6006")
 
 args = parser.parse_args()
 
