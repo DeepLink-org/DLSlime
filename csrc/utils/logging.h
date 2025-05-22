@@ -63,6 +63,10 @@ inline int get_log_level()
 
 #define SLIME_ASSERT_EQ(A, B, Msg, ...) SLIME_ASSERT((A) == (B), Msg, __VA_ARGS__)
 #define SLIME_ASSERT_NE(A, B, Msg, ...) SLIME_ASSERT((A) != (B), Msg, __VA_ARGS__)
+#define SLIME_ASSERT_GT(A, B, Msg, ...) SLIME_ASSERT((A) > (B), Msg, __VA_ARGS__)
+#define SLIME_ASSERT_GE(A, B, Msg, ...) SLIME_ASSERT((A) >= (B), Msg, __VA_ARGS__)
+#define SLIME_ASSERT_LT(A, B, Msg, ...) SLIME_ASSERT((A) < (B), Msg, __VA_ARGS__)
+#define SLIME_ASSERT_LE(A, B, Msg, ...) SLIME_ASSERT((A) <= (B), Msg, __VA_ARGS__)
 
 #define SLIME_ABORT(Msg, ...)                                                                                          \
     {                                                                                                                  \

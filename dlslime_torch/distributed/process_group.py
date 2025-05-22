@@ -1,3 +1,9 @@
+class Context:
+
+    def __init__(self):
+        raise NotImplementedError
+
+
 class DLSlimeProcessGroup:
 
     def __init__(self):

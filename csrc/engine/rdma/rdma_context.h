@@ -176,8 +176,8 @@ private:
     int64_t wq_dispatch_handle(int qpi);
 
     /* Async RDMA SendRecv */
-    int64_t post_send(int qpi, RDMAAssignmentSharedPtr assign);
-    int64_t post_recv(int qpi, RDMAAssignmentSharedPtr assign);
+    int64_t post_send_batch(int qpi, RDMAAssignmentSharedPtr assign);
+    int64_t post_recv_batch(int qpi, RDMAAssignmentSharedPtr assign);
 
     /* Async RDMA Read */
     int64_t post_read_batch(int qpi, RDMAAssignmentSharedPtr assign);
