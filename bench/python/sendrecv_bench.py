@@ -35,7 +35,7 @@ parser.add_argument('--mode', type=str, choices=['send', 'recv'])
 parser.add_argument('--master-addr', type=str, default='localhost')
 parser.add_argument('--master-port', type=str, default='6006')
 
-parser.add_argument('--size', nargs='+', type=int, default=[256])
+parser.add_argument('--size', nargs='+', type=int, default=default_sizes)
 
 args = parser.parse_args()
 
