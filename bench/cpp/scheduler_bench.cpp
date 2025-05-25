@@ -155,7 +155,7 @@ bool checkInitiatorCopied(void* data)
     for (int64_t i = 0; i < (FLAGS_batch_size * FLAGS_block_size); ++i) {
         if (byte_data[i] != i % 128) {
             SLIME_ASSERT(false,
-                         "Transferred data at i = " << i << " not same. " << (int)byte_data[i] << " vs " << i % 8);
+                         "Transferred data at i = " << i << " not same. " << int{byte_data[i]} << " vs " << i % 8);
             return false;
         }
     }

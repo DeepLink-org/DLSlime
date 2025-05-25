@@ -4,7 +4,6 @@ project(_slime C CXX)
 
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/utils.cmake)
 
-# TODO: Add multi transport mode option
 # slime_option(BUILD_RDMA         "Build RDMA"                        ON)
 slime_option(BUILD_NVLINK       "Build NVLINK"                     OFF)
 slime_option(BUILD_BENCH        "Build transfer engine benchmark"  OFF)
@@ -23,32 +22,31 @@ set(DLSLIME_INSTALL_PATH "lib" CACHE STRING "Library installation directory")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if (BUILD_NVLINK)
-enable_language(CUDA)
-find_package(CUDAToolkit REQUIRED)
-
-# Supported NVIDIA architectures.
-set(CUDA_SUPPORTED_ARCHS "7.0;7.2;7.5;8.0;8.6;8.7;8.9;9.0;10.0;10.1;12.0")
+    enable_language(CUDA)
+    find_package(CUDAToolkit REQUIRED)
+    # Supported NVIDIA architectures.
+    set(CUDA_SUPPORTED_ARCHS "7.0;7.2;7.5;8.0;8.6;8.7;8.9;9.0;10.0;10.1;12.0")
 endif()
 
 if (BUILD_TORCH_PLUGIN)
-run_python(TORCH_ENABLE_ABI
-    "import torch; print(int(torch._C._GLIBCXX_USE_CXX11_ABI))"
-    "Failed to find torch ABI info"
-)
-add_compile_definitions("_GLIBCXX_USE_CXX11_ABI=${TORCH_ENABLE_ABI}")
+    run_python(TORCH_ENABLE_ABI
+        "import torch; print(int(torch._C._GLIBCXX_USE_CXX11_ABI))"
+        "Failed to find torch ABI info"
+    )
+    add_compile_definitions("_GLIBCXX_USE_CXX11_ABI=${TORCH_ENABLE_ABI}")
 endif()
 
 include_directories(csrc)
 add_subdirectory(csrc)
 
 if (BUILD_EXAMPLE)
-add_subdirectory(example/cpp)
+    add_subdirectory(example/cpp)
 endif (BUILD_EXAMPLE)
 
 if (BUILD_BENCH)
-add_subdirectory(bench/cpp)
+    add_subdirectory(bench/cpp)
 endif (BUILD_BENCH)
 
 if (BUILD_TEST)
-add_subdirectory(tests/cpp)
+    add_subdirectory(tests/cpp)
 endif (BUILD_TEST)

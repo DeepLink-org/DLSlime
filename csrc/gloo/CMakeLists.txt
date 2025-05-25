@@ -1,12 +1,24 @@
+# 查找所有需要的源文件
+file(GLOB COMMON_SRCS "common/*.cc")
+file(GLOB RENDEZVOUS_SRCS "rendezvous/*.cc")
+file(GLOB TRANSPORT_SRCS "transport/*.cc")
+file(GLOB IBVERBS_SRCS "transport/ibverbs/*.cc")
+
 add_library(
     _slime_gloo
     SHARED
+    ${COMMON_SRCS}
+    ${RENDEZVOUS_SRCS}
+    ${TRANSPORT_SRCS}
+    ${IBVERBS_SRCS}
     algorithm.cc
     context.cc
     allreduce.cc
     math.cc
     types.cc
 )
+
+target_link_libraries(_slime_gloo ibverbs)
 
 set_target_properties(
     _slime_gloo
@@ -20,7 +32,3 @@ install(
     _slime_gloo
     LIBRARY DESTINATION ${DLSLIME_INSTALL_PATH}
 )
-
-add_subdirectory(common)
-add_subdirectory(rendezvous)
-add_subdirectory(transport)

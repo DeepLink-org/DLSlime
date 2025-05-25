@@ -38,10 +38,6 @@ target_link_libraries(
     PRIVATE
     ${TORCH_LIBRARIES}
     _slime_gloo
-    _slime_gloo_common
-    _slime_gloo_rendezvous
-    _slime_gloo_transport
-    _slime_gloo_transport_ibverbs
     _slime_utils
 )
 

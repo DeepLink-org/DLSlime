@@ -10,14 +10,7 @@ pybind11_add_module(
     bind.cpp
 )
 
-set(_slime_c_link_libraries
-    _slime_rdma
-    _slime_gloo
-    _slime_gloo_common
-    _slime_gloo_rendezvous
-    _slime_gloo_transport
-    _slime_gloo_transport_ibverbs
-)
+set(_slime_c_link_libraries _slime_rdma)
 
 if (BUILD_NVLINK)
     target_compile_definitions(_slime_c PRIVATE -DBUILD_NVLINK)

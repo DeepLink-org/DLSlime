@@ -51,7 +51,7 @@ int64_t RDMAContext::init(const std::string& dev_name, uint8_t ib_port, const st
 
     SLIME_LOG_INFO("Initializing RDMA Context ...");
     SLIME_LOG_DEBUG("device name: " << dev_name);
-    SLIME_LOG_DEBUG("ib port: " << (int)ib_port);
+    SLIME_LOG_DEBUG("ib port: " << int{ib_port});
     SLIME_LOG_DEBUG("link type: " << link_type);
 
     if (initialized_) {
@@ -105,13 +105,13 @@ int64_t RDMAContext::init(const std::string& dev_name, uint8_t ib_port, const st
     SLIME_LOG_DEBUG("Max Memory Region Size:" << device_attr.max_mr_size);
     SLIME_LOG_DEBUG("Max QP:" << device_attr.max_qp);
     SLIME_LOG_DEBUG("Max QP Working Request: " << device_attr.max_qp_wr);
-    SLIME_LOG_DEBUG("Max CQ: " << (int)device_attr.max_cq);
-    SLIME_LOG_DEBUG("Max CQ Element: " << (int)device_attr.max_cqe);
-    SLIME_LOG_DEBUG("MAX QP RD ATOM: " << (int)device_attr.max_qp_init_rd_atom);
-    SLIME_LOG_DEBUG("MAX RES RD ATOM: " << (int)device_attr.max_res_rd_atom);
-    SLIME_LOG_DEBUG("Total ib ports: " << (int)device_attr.phys_port_cnt);
+    SLIME_LOG_DEBUG("Max CQ: " << int{device_attr.max_cq});
+    SLIME_LOG_DEBUG("Max CQ Element: " << int{device_attr.max_cqe});
+    SLIME_LOG_DEBUG("MAX QP RD ATOM: " << int{device_attr.max_qp_init_rd_atom});
+    SLIME_LOG_DEBUG("MAX RES RD ATOM: " << int{device_attr.max_res_rd_atom});
+    SLIME_LOG_DEBUG("Total ib ports: " << int{device_attr.phys_port_cnt});
 
-    if (SLIME_MAX_RD_ATOMIC > (int)device_attr.max_qp_init_rd_atom)
+    if (SLIME_MAX_RD_ATOMIC > int{device_attr.max_qp_init_rd_atom})
         SLIME_ABORT("MAX_RD_ATOMIC (" << SLIME_MAX_RD_ATOMIC << ") > device max RD ATOMIC ("
                                       << device_attr.max_qp_init_rd_atom << "), please set SLIME_MAX_RD_ATOMIC env "
                                       << "less than device max RD ATOMIC");
@@ -131,7 +131,7 @@ int64_t RDMAContext::init(const std::string& dev_name, uint8_t ib_port, const st
 
     if (port_attr.state == IBV_PORT_DOWN) {
         ibv_close_device(ib_ctx_);
-        SLIME_ABORT("Device " << dev_name << ", Port " << (int)ib_port_ << "is DISABLED.");
+        SLIME_ABORT("Device " << dev_name << ", Port " << int{ib_port_} << "is DISABLED.");
     }
 
     if (port_attr.link_layer == IBV_LINK_LAYER_INFINIBAND) {
