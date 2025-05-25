@@ -49,18 +49,15 @@ if args.mode == 'recv':
     dist.init_process_group('cuda:dlslime', rank=1, world_size=2)
 print('initializing process group done')
 
-# 创建CUDA事件对象
 start_event = torch.cuda.Event(enable_timing=True)
 end_event = torch.cuda.Event(enable_timing=True)
 
-# 正式测试循环
 n_runs = 100
 total_time = 0.0
 
 for size in args.size:
     ttensor = torch.ones([size]).cuda()
     for _ in range(n_runs):
-        # 记录CUDA事件
         start_event.record()
         if args.mode == 'send':
             dist.send(ttensor, dst=1)
@@ -68,7 +65,6 @@ for size in args.size:
             dist.recv(ttensor, src=0)
         end_event.record()
 
-        # 等待事件完成并计算时间
         torch.cuda.synchronize()
         elapsed_time = start_event.elapsed_time(end_event)  # 毫秒
 
