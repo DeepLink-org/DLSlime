@@ -23,6 +23,8 @@ master_port = os.environ['MASTER_PORT']
 
 assert world_size == 2
 
+torch.cuda.set_device(rank % world_size)
+
 print('initializing process group')
 dist.init_process_group('cuda:dlslime', rank=rank, world_size=2)
 print('initializing process group done')

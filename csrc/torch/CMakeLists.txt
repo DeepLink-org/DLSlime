@@ -18,8 +18,6 @@ find_libraries(TORCH_LIBRARIES "${Torch_DIR}/lib" "${LIB_NAMES}")
 target_include_directories(_slime_torch PRIVATE ${Torch_DIR}/include)
 target_include_directories(_slime_torch PRIVATE ${Torch_DIR}/include/torch/csrc/api/include/)
 
-message(${TORCH_DIR}/include)
-
 target_compile_definitions(_slime_torch PRIVATE
     "-DTORCH_API_INCLUDE_EXTENSION_H"
 )
