@@ -3,6 +3,14 @@
 #include "engine/rdma/rdma_config.h"
 #include "engine/rdma/rdma_context.h"
 #include "engine/rdma/rdma_scheduler.h"
+
+#include "gloo/rendezvous/context.h"
+#include "gloo/rendezvous/file_store.h"
+#include "gloo/rendezvous/prefix_store.h"
+#include "gloo/rendezvous/store.h"
+#include "gloo/transport/device.h"
+#include "gloo/transport/ibverbs/device.h"
+
 #include <functional>
 #include <pybind11/cast.h>
 #include <pybind11/pytypes.h>

@@ -51,7 +51,7 @@ int64_t RDMAContext::init(const std::string& dev_name, uint8_t ib_port, const st
 
     SLIME_LOG_INFO("Initializing RDMA Context ...");
     SLIME_LOG_DEBUG("device name: " << dev_name);
-    SLIME_LOG_DEBUG("ib port: " << (int)ib_port);
+    SLIME_LOG_DEBUG("ib port: " << int{ib_port});
     SLIME_LOG_DEBUG("link type: " << link_type);
 
     if (initialized_) {
@@ -104,14 +104,14 @@ int64_t RDMAContext::init(const std::string& dev_name, uint8_t ib_port, const st
     SLIME_LOG_DEBUG("Max Memory Region:" << device_attr.max_mr);
     SLIME_LOG_DEBUG("Max Memory Region Size:" << device_attr.max_mr_size);
     SLIME_LOG_DEBUG("Max QP:" << device_attr.max_qp);
-    SLIME_LOG_DEBUG("Max QP Working Request:" << device_attr.max_qp_wr);
-    SLIME_LOG_DEBUG("Max CQ:" << (int)device_attr.max_cq);
-    SLIME_LOG_DEBUG("Max CQ Element:" << (int)device_attr.max_cqe);
-    SLIME_LOG_DEBUG("MAX QP RD ATOM: " << (int)device_attr.max_qp_init_rd_atom);
-    SLIME_LOG_DEBUG("MAX RES RD ATOM: " << (int)device_attr.max_res_rd_atom);
-    SLIME_LOG_DEBUG("Total ib ports: " << (int)device_attr.phys_port_cnt);
+    SLIME_LOG_DEBUG("Max QP Working Request: " << device_attr.max_qp_wr);
+    SLIME_LOG_DEBUG("Max CQ: " << int{device_attr.max_cq});
+    SLIME_LOG_DEBUG("Max CQ Element: " << int{device_attr.max_cqe});
+    SLIME_LOG_DEBUG("MAX QP RD ATOM: " << int{device_attr.max_qp_init_rd_atom});
+    SLIME_LOG_DEBUG("MAX RES RD ATOM: " << int{device_attr.max_res_rd_atom});
+    SLIME_LOG_DEBUG("Total ib ports: " << int{device_attr.phys_port_cnt});
 
-    if (SLIME_MAX_RD_ATOMIC > (int)device_attr.max_qp_init_rd_atom)
+    if (SLIME_MAX_RD_ATOMIC > int{device_attr.max_qp_init_rd_atom})
         SLIME_ABORT("MAX_RD_ATOMIC (" << SLIME_MAX_RD_ATOMIC << ") > device max RD ATOMIC ("
                                       << device_attr.max_qp_init_rd_atom << "), please set SLIME_MAX_RD_ATOMIC env "
                                       << "less than device max RD ATOMIC");
@@ -131,7 +131,7 @@ int64_t RDMAContext::init(const std::string& dev_name, uint8_t ib_port, const st
 
     if (port_attr.state == IBV_PORT_DOWN) {
         ibv_close_device(ib_ctx_);
-        SLIME_ABORT("Device " << dev_name << " ,Port " << ib_port_ << "is DISABLED.");
+        SLIME_ABORT("Device " << dev_name << ", Port " << int{ib_port_} << "is DISABLED.");
     }
 
     if (port_attr.link_layer == IBV_LINK_LAYER_INFINIBAND) {
@@ -181,7 +181,7 @@ int64_t RDMAContext::init(const std::string& dev_name, uint8_t ib_port, const st
         rdma_info_t&     local_rdma_info     = qp_man->local_rdma_info_;
         qp_man->qp_                          = ibv_create_qp(pd_, &qp_init_attr);
         if (!qp_man->qp_) {
-            SLIME_LOG_ERROR("Failed to create QP");
+            SLIME_LOG_ERROR("Failed to create QP " << qp_man->qp_->qp_num);
             return -1;
         }
 
@@ -279,8 +279,7 @@ int64_t RDMAContext::connect(const json& endpoint_info_json)
 
         ret = ibv_modify_qp(qp, &attr, flags);
         if (ret) {
-            SLIME_LOG_ERROR("Failed to modify QP to RTR: reason: " << strerror(ret));
-            return -1;
+            SLIME_ABORT("Failed to modify QP to RTR: reason: " << strerror(ret));
         }
 
         // Modify QP to RTS state
@@ -297,15 +296,13 @@ int64_t RDMAContext::connect(const json& endpoint_info_json)
 
         ret = ibv_modify_qp(qp, &attr, flags);
         if (ret) {
-            SLIME_LOG_ERROR("Failed to modify QP to RTS");
-            return -1;
+            SLIME_ABORT("Failed to modify QP to RTS");
         }
         SLIME_LOG_INFO("RDMA exchange done");
         connected_ = true;
 
         if (ibv_req_notify_cq(cq_, 0)) {
-            SLIME_LOG_ERROR("Failed to request notify for CQ");
-            return -1;
+            SLIME_ABORT("Failed to request notify for CQ");
         }
     }
     return 0;
@@ -390,7 +387,7 @@ RDMAAssignmentSharedPtr RDMAContext::submit(OpCode opcode, AssignmentBatch& batc
     }
 }
 
-int64_t RDMAContext::post_send(int qpi, RDMAAssignmentSharedPtr assign)
+int64_t RDMAContext::post_send_batch(int qpi, RDMAAssignmentSharedPtr assign)
 {
     int ret;
 
@@ -426,7 +423,7 @@ int64_t RDMAContext::post_send(int qpi, RDMAAssignmentSharedPtr assign)
     return 0;
 }
 
-int64_t RDMAContext::post_recv(int qpi, RDMAAssignmentSharedPtr assign)
+int64_t RDMAContext::post_recv_batch(int qpi, RDMAAssignmentSharedPtr assign)
 {
 
     int ret;
@@ -606,10 +603,10 @@ int64_t RDMAContext::wq_dispatch_handle(int qpi)
             else if (batch_size + qp_management_[qpi]->outstanding_rdma_reads_ < SLIME_MAX_SEND_WR) {
                 switch (front_assign->opcode_) {
                     case OpCode::SEND:
-                        post_send(qpi, front_assign);
+                        post_send_batch(qpi, front_assign);
                         break;
                     case OpCode::RECV:
-                        post_recv(qpi, front_assign);
+                        post_recv_batch(qpi, front_assign);
                         break;
                     case OpCode::READ:
                         post_read_batch(qpi, front_assign);
