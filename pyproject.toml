@@ -7,13 +7,21 @@ authors = [
   {name = "JimyMa", email = "hit16s105116@gmail.com"},
 ]
 classifiers = [
-  "Programming Language :: Python :: 3",
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
+  "Intended Audience :: System Administrators",
   "License :: OSI Approved :: BSD License",
   "Operating System :: POSIX :: Linux",
   "Operating System :: Unix",
+  "Programming Language :: C++",
+  "Programming Language :: Python :: 3",
+  "Topic :: System :: Networking",
+  "Topic :: System :: Systems Administration",
+  "Topic :: Scientific/Engineering :: High Performance Computing",
 ]
 description = "DLSlime Transfer Engine"
-name = "dlslime"
+name = "DLSlime"
 readme = "README.md"
 requires-python = ">=3.8"
 version = "0.0.1.post8"
@@ -22,8 +30,8 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/JimyMa/dlslime.git"
-Repository = "https://github.com/JimyMa/dlslime.git"
+Homepage = "https://github.com/DeepLink-org/DLSlime.git"
+Repository = "https://github.com/DeepLink-org/DLSlime.git"
 
 [tool.scikit-build]
 # optional env variable:
