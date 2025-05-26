@@ -8,7 +8,8 @@ import torch.distributed as dist
 try:
     from dlslime import _slime_torch  # noqa: F401
 except ImportError as e:
-    print(e.with_traceback(), 'please install dlslime backend first')
+    print(e, 'please install dlslime backend first')
+    exit()
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--size', nargs='+', type=int, default=[2 << n for n in range(8, 27)])
