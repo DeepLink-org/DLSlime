@@ -5,7 +5,7 @@ namespace slime {
 
 RDMAAssignment::RDMAAssignment(OpCode opcode, AssignmentBatch& batch, callback_fn_t callback)
 {
-    opcode_     = opcode;
+    opcode_ = opcode;
 
     batch_size_ = batch.size();
     batch_      = new Assignment[batch_size_];
@@ -31,18 +31,19 @@ bool RDMAAssignment::query()
     return callback_info_->query();
 }
 
-std::string RDMAAssignment::dump()
+json RDMAAssignment::dump() const
 {
-    std::string rdma_assignment_dump = "";
+    json j;
     for (int i = 0; i < batch_size_; ++i) {
-        rdma_assignment_dump += batch_[i].dump() + "\n";
+        j["batch"].push_back(batch_[i].dump());
     }
-    return rdma_assignment_dump;
+    return j;
 }
 
-void RDMAAssignment::print()
+std::ostream& operator<<(std::ostream& os, const RDMAAssignment& assignment)
 {
-    std::cout << dump() << std::endl;
+    os << assignment.dump().dump(2);
+    return os;
 }
 
 RDMASchedulerAssignment::~RDMASchedulerAssignment() {}
@@ -60,22 +61,19 @@ void RDMASchedulerAssignment::query()
     throw std::runtime_error("Not Implemented.");
 }
 
-std::string RDMASchedulerAssignment::dump()
+json RDMASchedulerAssignment::dump() const
 {
-    size_t      cnt                            = 0;
-    std::string rdma_scheduler_assignment_dump = "Scheduler Assignment: {\n";
-    for (size_t i = 0; i < rdma_assignment_batch_.size(); ++i) {
-        rdma_scheduler_assignment_dump += "RDMAAssignment_" + std::to_string(i) + " (\n";
-        rdma_scheduler_assignment_dump += rdma_assignment_batch_[i]->dump();
-        rdma_scheduler_assignment_dump += ")\n";
+    json j;
+    for (int i = 0; i < rdma_assignment_batch_.size(); ++i) {
+        j["assignment_sch"].push_back(rdma_assignment_batch_[i]->dump());
     }
-    rdma_scheduler_assignment_dump += "}";
-    return rdma_scheduler_assignment_dump;
+    return j;
 }
 
-void RDMASchedulerAssignment::print()
+std::ostream& operator<<(std::ostream& os, const RDMASchedulerAssignment& assignment)
 {
-    std::cout << dump() << std::endl;
+    os << assignment.dump().dump(2);
+    return os;
 }
 
 }  // namespace slime

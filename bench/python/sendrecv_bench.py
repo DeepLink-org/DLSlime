@@ -46,7 +46,7 @@ for size in args.size:
         end_event.record()
 
         torch.cuda.synchronize()
-        elapsed_time = start_event.elapsed_time(end_event)  # 毫秒
+        elapsed_time = start_event.elapsed_time(end_event)
 
         total_time += elapsed_time
 

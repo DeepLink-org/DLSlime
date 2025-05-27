@@ -1,5 +1,7 @@
 #pragma once
 
+#include "engine/assignment.h"
+
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -12,9 +14,11 @@
 #include <thread>
 #include <unordered_map>
 
-#include "engine/assignment.h"
+#include "utils/json.hpp"
 
 namespace slime {
+
+using json = nlohmann::json;
 
 class RDMAAssignment;
 class RDMASchedulerAssignment;
@@ -81,8 +85,8 @@ public:
     void wait();
     bool query();
 
-    std::string dump();
-    void        print();
+    json                 dump() const;
+    friend std::ostream& operator<<(std::ostream& os, const RDMAAssignment& assignment);
 
 private:
     OpCode opcode_;
@@ -106,8 +110,8 @@ public:
     void query();
     void wait();
 
-    std::string dump();
-    void        print();
+    json                 dump() const;
+    friend std::ostream& operator<<(std::ostream& os, const RDMASchedulerAssignment& assignment);
 
 private:
     RDMAAssignmentSharedPtrBatch rdma_assignment_batch_{};
