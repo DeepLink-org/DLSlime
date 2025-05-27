@@ -35,9 +35,8 @@ bool RDMAAssignment::query()
 json RDMAAssignment::dump() const
 {
     json j;
-    for (int i = 0; i < batch_size_; ++i) {
-        j["rdma_assign"].push_back(batch_[i].dump());
-    }
+    for (int i = 0; i < batch_size_; ++i)
+        j["rdma_assign"].push_back(batch_[i].dump().dump());
     return j;
 }
 
