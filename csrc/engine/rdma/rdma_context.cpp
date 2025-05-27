@@ -232,8 +232,10 @@ int64_t RDMAContext::connect(const json& endpoint_info_json)
         register_remote_memory_region(item.key(), item.value());
     }
 
-    // construct RDMAEndpoint connection
     SLIME_ASSERT(!connected_, "Already connected!");
+    SLIME_ASSERT_EQ(qp_list_len_, endpoint_info_json["rdma_info"].size(), "Peer must have same QP Size.");
+
+    // construct RDMAEndpoint connection
     for (int qpi = 0; qpi < qp_list_len_; qpi++) {
         int                ret;
         struct ibv_qp_attr attr = {};

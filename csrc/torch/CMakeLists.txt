@@ -28,7 +28,7 @@ target_compile_definitions(_slime_torch PRIVATE
     "-DPYBIND11_BUILD_ABI=\"_cxxabi1011\""
 )
 if (USE_MACA)
-target_compile_definitions(_slime_torch PRIVATE -DUSE_MACA)
+    target_compile_definitions(_slime_torch PRIVATE "-DUSE_MACA")
 endif()
 
 target_link_libraries(

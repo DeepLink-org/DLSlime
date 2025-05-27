@@ -1,5 +1,6 @@
-macro(slime_option var default_value description)
+macro(slime_option var description default_value)
     if(DEFINED ENV{${var}})
+        message(STATUS "Environment value for ${var}: $ENV{${var}}")
         if("$ENV{${var}}" MATCHES "^(ON|OFF|TRUE|FALSE)$")
             set(_default "$ENV{${var}}")
         else()
@@ -10,11 +11,11 @@ macro(slime_option var default_value description)
         set(_default ${default_value})
     endif()
     option(${var} "${description}" ${_default})
+    message(STATUS "slime option: ${var}=${${var}} (default: ${_default})")
 endmacro()
 
 function (run_python OUT EXPR ERR_MSG)
   find_package(Python3 COMPONENTS Interpreter REQUIRED)
-  message("-- Run python: ${Python3_EXECUTABLE} -c \"${EXPR}\"")
   execute_process(
     COMMAND
     "${Python3_EXECUTABLE}" "-c" "${EXPR}"

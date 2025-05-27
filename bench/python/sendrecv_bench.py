@@ -33,9 +33,9 @@ start_event = torch.cuda.Event(enable_timing=True)
 end_event = torch.cuda.Event(enable_timing=True)
 
 n_runs = 100
-total_time = 0.0
 
 for size in args.size:
+    total_time = 0.0
     ttensor = torch.ones([size]).cuda()
     for _ in range(n_runs):
         start_event.record()
