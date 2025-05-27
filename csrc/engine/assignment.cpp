@@ -7,13 +7,16 @@
 #include "assignment.h"
 
 namespace slime {
-std::string Assignment::dump()
+json Assignment::dump() const
 {
-    return "Assignment (mr_key: " + mr_key + ", target_offset: " + std::to_string(target_offset) + ", source_offset: "
-            + std::to_string(source_offset) + ", length: " + std::to_string(length) + ")";
+    return json{
+        "Assignment",
+        {{"mr_key", mr_key}, {"target_offset", target_offset}, {"source_offset", source_offset}, {"length", length}}};
 }
 
-void Assignment::print() {
-    std::cout << dump() << std::endl;
+std::ostream& operator<<(std::ostream& os, const Assignment& assignment) {
+    os << assignment.dump().dump(2);
+    return os;
 }
+
 }  // namespace slime

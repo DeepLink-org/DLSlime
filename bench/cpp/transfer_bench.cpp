@@ -159,6 +159,8 @@ int initiator(RDMAContext& rdma_context)
             rdma_assignment_batch.emplace_back(rdma_assignment);
             total_bytes += FLAGS_batch_size * FLAGS_block_size;
             total_trips += 1;
+            if (total_trips == 1)
+                std::cout << *rdma_assignment << std::endl;
         }
         for (RDMAAssignmentSharedPtr& rdma_assignment : rdma_assignment_batch) {
             rdma_assignment->wait();

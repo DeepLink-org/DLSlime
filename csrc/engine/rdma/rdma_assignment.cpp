@@ -36,7 +36,7 @@ json RDMAAssignment::dump() const
 {
     json j;
     for (int i = 0; i < batch_size_; ++i) {
-        j["batch"].push_back(batch_[i].dump());
+        j["rdma_assign"].push_back(batch_[i].dump());
     }
     return j;
 }
@@ -66,7 +66,7 @@ json RDMASchedulerAssignment::dump() const
 {
     json j;
     for (int i = 0; i < rdma_assignment_batch_.size(); ++i) {
-        j["assignment_sch"].push_back(rdma_assignment_batch_[i]->dump());
+        j["rdma_sch_assign"].push_back(rdma_assignment_batch_[i]->dump());
     }
     return j;
 }
