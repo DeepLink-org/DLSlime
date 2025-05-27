@@ -1,4 +1,5 @@
 #include "rdma_assignment.h"
+
 #include <stdexcept>
 
 namespace slime {

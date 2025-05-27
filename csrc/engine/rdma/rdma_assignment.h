@@ -67,6 +67,7 @@ typedef struct callback_info {
 
 class RDMAAssignment {
     friend class RDMAContext;
+    friend std::ostream& operator<<(std::ostream& os, const RDMAAssignment& assignment);
 
 public:
     RDMAAssignment(OpCode opcode, AssignmentBatch& batch, callback_fn_t callback = nullptr);
@@ -85,8 +86,7 @@ public:
     void wait();
     bool query();
 
-    json                 dump() const;
-    friend std::ostream& operator<<(std::ostream& os, const RDMAAssignment& assignment);
+    json dump() const;
 
 private:
     OpCode opcode_;
@@ -99,6 +99,7 @@ private:
 
 class RDMASchedulerAssignment {
     friend class RDMAScheduler;
+    friend std::ostream& operator<<(std::ostream& os, const RDMASchedulerAssignment& assignment);
 
 public:
     RDMASchedulerAssignment(RDMAAssignmentSharedPtrBatch& rdma_assignment_batch):
@@ -110,8 +111,7 @@ public:
     void query();
     void wait();
 
-    json                 dump() const;
-    friend std::ostream& operator<<(std::ostream& os, const RDMASchedulerAssignment& assignment);
+    json dump() const;
 
 private:
     RDMAAssignmentSharedPtrBatch rdma_assignment_batch_{};
