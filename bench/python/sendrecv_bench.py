@@ -32,6 +32,7 @@ import os
 
 import torch
 import torch.distributed as dist
+from tabulate import tabulate
 
 # add dlslime backend
 try:
@@ -43,9 +44,16 @@ except ImportError as e:
 import argparse
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--size', nargs='+', type=int, default=[2 << n for n in range(8, 27)])
+parser.add_argument('--size', nargs='+', type=int, default=[2 << n for n in range(8, 25)])
+parser.add_argument('--num-concurrency', type=int, default=8)
 
 args = parser.parse_args()
+
+print('mode: PyTorch SendRecv')
+print(f'num concurrency: {args.num_concurrency}')
+
+# Prepare table data
+benchmark_data = []
 
 rank = int(os.environ['RANK'])
 world_size = int(os.environ['WORLD_SIZE'])
@@ -63,26 +71,39 @@ print('initializing process group done')
 start_event = torch.cuda.Event(enable_timing=True)
 end_event = torch.cuda.Event(enable_timing=True)
 
-n_runs = 100
+n_runs = args.num_concurrency
 
-for size in args.size:
+ttensors = [torch.ones([size]).cuda() for size in args.size]
+
+for ttensor, size in zip(ttensors, args.size):
     total_time = 0.0
-    ttensor = torch.ones([size]).cuda()
-    for _ in range(n_runs):
-        start_event.record()
-        if rank == 0:
-            dist.send(ttensor, dst=1)
-        elif rank == 1:
-            dist.recv(ttensor, src=0)
-        end_event.record()
 
-        torch.cuda.synchronize()
-        elapsed_time = start_event.elapsed_time(end_event)
+    start_event.record()
+    for _ in range(100):
+        futures = []
+        for _ in range(n_runs):
+            if rank == 0:
+                future = dist.isend(ttensor, dst=1)
+            elif rank == 1:
+                future = dist.irecv(ttensor, src=0)
+            futures.append(future)
 
-        total_time += elapsed_time
+        [future.wait() for future in futures]
+    end_event.record()
+    torch.cuda.synchronize()
+    elapsed_time = start_event.elapsed_time(end_event)
 
-    if rank == 1:
-        print(f'size: {size}')
-        print(f'total transport: {n_runs * size * ttensor.itemsize}')
-        print(f'average latency: {total_time / n_runs}ms')
-        print(f'bw: {n_runs * size * ttensor.itemsize / total_time / 1e3} MBps')
+    total_time += elapsed_time
+
+    size_bytes = ttensor.numel() * ttensor.itemsize
+    total_transport = n_runs * size * ttensor.itemsize
+    avg_latency = total_time / n_runs
+    bandwidth = n_runs * size * ttensor.itemsize * 100 / total_time / 1e3
+
+    benchmark_data.append([f'{size_bytes:,}', f'{total_transport:,}', f'{avg_latency:.2f} ms', f'{bandwidth:.2f} MB/s'])
+
+# Print table
+if rank == 1 and benchmark_data:
+    headers = ['Message Size (bytes)', 'Total Transport (bytes)', 'Avg Latency', 'Bandwidth']
+    print('\nBenchmark Results:')
+    print(tabulate(benchmark_data, headers=headers, tablefmt='grid'))

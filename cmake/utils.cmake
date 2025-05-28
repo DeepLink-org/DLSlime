@@ -1,6 +1,6 @@
 macro(slime_option var description default_value)
     if(DEFINED ENV{${var}})
-        message(STATUS "Environment value for ${var}: $ENV{${var}}")
+        message(DEBUG "Environment value for ${var}: $ENV{${var}}")
         if("$ENV{${var}}" MATCHES "^(ON|OFF|TRUE|FALSE)$")
             set(_default "$ENV{${var}}")
         else()
