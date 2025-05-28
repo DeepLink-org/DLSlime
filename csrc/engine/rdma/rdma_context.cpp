@@ -85,7 +85,7 @@ int64_t RDMAContext::init(const std::string& dev_name, uint8_t ib_port, const st
     }
 
     if (!ib_ctx_ && num_devices > 0) {
-        SLIME_LOG_WARN("Can't find or failed to open the specified device",
+        SLIME_LOG_WARN("Can't find or failed to open the specified device ",
                        dev_name,
                        ", try to open "
                        "the default device ",

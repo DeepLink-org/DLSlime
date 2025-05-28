@@ -1,4 +1,33 @@
-import argparse
+"""# Send/Recv Benchmark
+
+# One Node
+torchrun \
+    --nproc-per-node 2 \
+    --nnodes=1 \
+    --node_rank=0 \
+    --master_port=$MASTER_PORT \
+    bench/python/sendrecv_bench.py
+
+# Cross Node
+## Node 0
+torchrun \
+    --nproc-per-node 1 \
+    --nnodes=2 \
+    --node_rank=0 \
+    --master-addr=$MASTER_ADDR \
+    --master_port=$MASTER_PORT \
+    bench/python/sendrecv_bench.py
+
+## Node 1
+torchrun \
+    --nproc-per-node 1 \
+    --nnodes=2 \
+    --node_rank=1 \
+    --master-addr=$MASTER_ADDR \
+    --master_port=$MASTER_PORT \
+    bench/python/sendrecv_bench.py
+"""
+
 import os
 
 import torch
@@ -10,6 +39,8 @@ try:
 except ImportError as e:
     print(e, 'please install dlslime backend first')
     exit()
+
+import argparse
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--size', nargs='+', type=int, default=[2 << n for n in range(8, 27)])

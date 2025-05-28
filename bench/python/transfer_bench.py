@@ -1,3 +1,33 @@
+"""# Send/Recv Benchmark
+
+# One Node
+torchrun \
+    --nproc-per-node 2 \
+    --nnodes=1 \
+    --node_rank=0 \
+    --master_port=$MASTER_PORT \
+    bench/python/transfer_bench.py
+
+# Cross Node
+## Node 0
+torchrun \
+    --nproc-per-node 1 \
+    --nnodes=2 \
+    --node_rank=0 \
+    --master-addr=$MASTER_ADDR \
+    --master_port=$MASTER_PORT \
+    bench/python/transfer_bench.py
+
+## Node 1
+torchrun \
+    --nproc-per-node 1 \
+    --nnodes=2 \
+    --node_rank=1 \
+    --master-addr=$MASTER_ADDR \
+    --master_port=$MASTER_PORT \
+    bench/python/transfer_bench.py
+"""
+
 import argparse
 import os
 
@@ -71,6 +101,7 @@ for idx, ttensor in enumerate(ttensors):
     total_time += elapsed_time
 
     if rank == 1:
+        print(f'size: {ttensor.numel() * ttensor.itemsize}')
         print(f'total transport: {n_runs * ttensor.numel() * ttensor.itemsize}')
         print(f'average latency: {total_time / n_runs}ms')
         print(f'bw: {n_runs * ttensor.numel() * ttensor.itemsize / total_time / 1e3} MBps')
