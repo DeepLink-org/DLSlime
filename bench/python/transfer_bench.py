@@ -31,6 +31,7 @@ torchrun \
 import argparse
 import os
 
+import numpy as np
 import torch
 import zmq
 from tabulate import tabulate
@@ -111,11 +112,13 @@ for idx, (size, ttensor) in enumerate(zip(args.size, ttensors)):
     if rank == 1:
         size_bytes = ttensor.numel() * ttensor.itemsize
         total_transport = n_runs * size * ttensor.itemsize
-        avg_latency = total_time / n_runs
+        avg_latency = np.mean([assign.latency() for assign in assigns])
         bandwidth = n_runs * size * ttensor.itemsize * 100 / total_time / 1e3
 
-        benchmark_data.append(
-            [f'{size_bytes:,}', f'{total_transport:,}', f'{avg_latency:.2f} ms', f'{bandwidth:.2f} MB/s'])
+        benchmark_data.append([
+            f'{size_bytes:,}', f'{total_transport:,}', f'{avg_latency.total_seconds() * 1000:.2f} ms',
+            f'{bandwidth:.2f} MB/s'
+        ])
 
 if rank == 0:
     _ = zmq_recv.recv_pyobj()

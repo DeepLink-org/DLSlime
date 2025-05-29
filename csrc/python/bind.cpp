@@ -28,6 +28,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <pybind11/chrono.h>
 #include <pybind11/functional.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -46,10 +47,12 @@ PYBIND11_MODULE(_slime_c, m)
     py::class_<slime::Assignment>(m, "Assignment").def(py::init<std::string, uint64_t, uint64_t, uint64_t>());
 
     py::class_<slime::RDMAAssignment, slime::RDMAAssignmentSharedPtr>(m, "RDMAAssignment")
-        .def("wait", &slime::RDMAAssignment::wait, py::call_guard<py::gil_scoped_release>());
+        .def("wait", &slime::RDMAAssignment::wait, py::call_guard<py::gil_scoped_release>())
+        .def("latency", &slime::RDMAAssignment::latency, py::call_guard<py::gil_scoped_release>());
 
     py::class_<slime::RDMASchedulerAssignment, slime::RDMASchedulerAssignmentSharedPtr>(m, "RDMASchedulerAssignment")
-        .def("wait", &slime::RDMASchedulerAssignment::wait, py::call_guard<py::gil_scoped_release>());
+        .def("wait", &slime::RDMASchedulerAssignment::wait, py::call_guard<py::gil_scoped_release>())
+        .def("latency", &slime::RDMASchedulerAssignment::latency, py::call_guard<py::gil_scoped_release>());
 
     py::class_<slime::RDMAScheduler>(m, "RDMAScheduler")
         .def(py::init<const std::vector<std::string>&>())
