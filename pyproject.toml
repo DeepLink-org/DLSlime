@@ -21,7 +21,7 @@ classifiers = [
   "Topic :: Scientific/Engineering :: High Performance Computing",
 ]
 description = "DLSlime Transfer Engine"
-name = "DLSlime"
+name = "dlslime"
 readme = "README.md"
 requires-python = ">=3.8"
 version = "0.0.1.post8"

@@ -54,9 +54,8 @@ inline int get_log_level()
         if (!(Expr)) {                                                                                                 \
             std::cerr << "\033[1;91m"                                                                                  \
                       << "[Assertion Failed]"                                                                          \
-                      << "\033[m " << __FILE__ << ": " << __FUNCTION__ << ": Line" << __LINE__                         \
-                      << ", Expected: " << #Expr << ". Error msg: " << Msg __VA_OPT__(STREAM_VAR_ARGS(__VA_ARGS__))    \
-                      << std::endl;                                                                                    \
+                      << "\033[m " << __FILE__ << ":" << __LINE__ << ": " << __FUNCTION__ << ", Expected: " << #Expr   \
+                      << ". Error msg: " << Msg __VA_OPT__(STREAM_VAR_ARGS(__VA_ARGS__)) << std::endl;                 \
             abort();                                                                                                   \
         }                                                                                                              \
     }
@@ -72,7 +71,7 @@ inline int get_log_level()
     {                                                                                                                  \
         std::cerr << "\033[1;91m"                                                                                      \
                   << "[Fatal]"                                                                                         \
-                  << "\033[m " << __FILE__ << ": " << __FUNCTION__ << ": Line" << __LINE__ << ": "                     \
+                  << "\033[m " << __FILE__ << ":" << __LINE__ << ": " << __FUNCTION__ << ": "                          \
                   << Msg __VA_OPT__(STREAM_VAR_ARGS(__VA_ARGS__)) << std::endl;                                        \
         abort();                                                                                                       \
     }
@@ -81,17 +80,17 @@ inline int get_log_level()
     {                                                                                                                  \
         if (get_log_level() >= Level) {                                                                                \
             std::cerr << FlagFormat << "[" << MsgType << "]"                                                           \
-                      << "\033[m " << __FILE__ << ": " << __FUNCTION__ << ": Line" << __LINE__                         \
+                      << "\033[m " << __FILE__ << ":" << __LINE__ << ": " << __FUNCTION__                              \
                       << ": " __VA_OPT__(STREAM_VAR_ARGS(__VA_ARGS__)) << std::endl;                                   \
         }                                                                                                              \
     }
 
 // Error and Warn
-#define SLIME_LOG_ERROR(...) SLIME_LOG_LEVEL("Error", "\033[1;91m", 0, __VA_ARGS__)
-#define SLIME_LOG_WARN(...) SLIME_LOG_LEVEL("Warn", "\033[1;91m", 0, __VA_ARGS__)
+#define SLIME_LOG_ERROR(...) SLIME_LOG_LEVEL("ERROR", "\033[1;91m", 0, __VA_ARGS__)
+#define SLIME_LOG_WARN(...) SLIME_LOG_LEVEL("WARN", "\033[1;91m", 0, __VA_ARGS__)
 
 // Info
-#define SLIME_LOG_INFO(...) SLIME_LOG_LEVEL("Info", "\033[1;92m", 1, __VA_ARGS__)
+#define SLIME_LOG_INFO(...) SLIME_LOG_LEVEL("INFO", "\033[1;92m", 1, __VA_ARGS__)
 
 // Debug
-#define SLIME_LOG_DEBUG(...) SLIME_LOG_LEVEL("Debug", "\033[1;92m", 2, __VA_ARGS__)
+#define SLIME_LOG_DEBUG(...) SLIME_LOG_LEVEL("DEBUG", "\033[1;92m", 2, __VA_ARGS__)

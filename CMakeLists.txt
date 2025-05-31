@@ -28,6 +28,12 @@ if (BUILD_NVLINK)
     set(CUDA_SUPPORTED_ARCHS "7.0;7.2;7.5;8.0;8.6;8.7;8.9;9.0;10.0;10.1;12.0")
 endif()
 
+if (BUILD_PYTHON)
+    set(DLSLIME_INSTALL_PATH "${SKBUILD_PROJECT_NAME}")
+else()
+    set(DLSLIME_INSTALL_PATH "lib")
+endif()
+
 if (BUILD_TORCH_PLUGIN)
     run_python(TORCH_ENABLE_ABI
         "import torch; print(int(torch._C._GLIBCXX_USE_CXX11_ABI))"

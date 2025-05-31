@@ -14,7 +14,7 @@ BUILD_NVLINK=<OFF|ON> BUILD_TORCH_PLUGIN=<OFF|ON> pip install -v --no-build-isol
 
 ## Usage
 
-- IPC Read by NVLink
+- NVLink IPC Read
   - [example](example/python/p2p_nvlink.py)
 - RDMA RC Read
   - [example](example/python/p2p_rdma.py)
