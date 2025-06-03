@@ -11,6 +11,10 @@
 namespace slime {
 int RDMAMemoryPool::register_memory_region(const std::string& mr_key, uintptr_t data_ptr, uint64_t length)
 {
+    if (mrs_.count(mr_key)) {
+        SLIME_LOG_DEBUG("mr_key ", mr_key, " has already been registered.");
+        ibv_dereg_mr(mrs_[mr_key]);
+    }
     /* MemoryRegion Access Right = 777 */
     const static int access_rights = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_READ;
     ibv_mr*          mr            = ibv_reg_mr(pd_, (void*)data_ptr, length, access_rights);
