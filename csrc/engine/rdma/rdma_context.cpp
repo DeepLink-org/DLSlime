@@ -159,7 +159,7 @@ int64_t RDMAContext::init(const std::string& dev_name, uint8_t ib_port, const st
         SLIME_LOG_ERROR("Failed to allocate PD");
         return -1;
     }
-    memory_pool_ = std::make_shared<RDMAMemoryPool>(pd_);
+    memory_pool_ = std::make_unique<RDMAMemoryPool>(pd_);
 
     /* Alloc Complete Queue (CQ) */
     SLIME_ASSERT(ib_ctx_, "init rdma context first");

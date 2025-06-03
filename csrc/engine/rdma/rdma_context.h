@@ -134,7 +134,7 @@ private:
     struct ibv_cq*           cq_           = nullptr;
     uint8_t                  ib_port_      = -1;
 
-    std::shared_ptr<RDMAMemoryPool> memory_pool_;
+    std::unique_ptr<RDMAMemoryPool> memory_pool_;
 
     typedef struct qp_management {
         /* queue peer list */
