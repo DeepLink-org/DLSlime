@@ -31,9 +31,12 @@ public:
     RDMAMemoryPool() = default;
     RDMAMemoryPool(ibv_pd* pd): pd_(pd) {}
 
-    ~RDMAMemoryPool() {
-        for (auto &mr : mrs_)
-            ibv_dereg_mr(mr.second);
+    ~RDMAMemoryPool()
+    {
+        for (auto& mr : mrs_) {
+            if (mr.second)
+                ibv_dereg_mr(mr.second);
+        }
         mrs_.clear();
     }
 
