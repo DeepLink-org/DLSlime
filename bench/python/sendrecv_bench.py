@@ -65,7 +65,8 @@ assert world_size == 2
 torch.cuda.set_device(rank % world_size)
 
 print('initializing process group')
-dist.init_process_group('cuda:dlslime', rank=rank, world_size=2)
+dist.init_process_group('cpu:gloo', rank=rank, world_size=world_size)
+slime_group = dist.new_group(ranks=[0, 1], backend='cuda:dlslime')
 print('initializing process group done')
 
 start_event = torch.cuda.Event(enable_timing=True)
@@ -83,9 +84,9 @@ for ttensor, size in zip(ttensors, args.size):
         futures = []
         for _ in range(n_runs):
             if rank == 0:
-                future = dist.isend(ttensor, dst=1)
+                future = dist.isend(ttensor, dst=1, group=slime_group)
             elif rank == 1:
-                future = dist.irecv(ttensor, src=0)
+                future = dist.irecv(ttensor, src=0, group=slime_group)
             futures.append(future)
 
         [future.wait() for future in futures]
