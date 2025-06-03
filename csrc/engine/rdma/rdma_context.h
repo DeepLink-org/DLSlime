@@ -160,7 +160,8 @@ private:
         std::atomic<bool> stop_wq_future_{false};
 
         ~qp_management() {
-            ibv_destroy_qp(qp_);
+            if (qp_)
+                ibv_destroy_qp(qp_);
         }
     } qp_management_t;
 
