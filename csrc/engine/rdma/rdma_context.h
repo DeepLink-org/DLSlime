@@ -54,11 +54,14 @@ public:
         }
         delete[] qp_management_;
 
-        ibv_destroy_cq(cq_);
+        if (cq_)
+            ibv_destroy_cq(cq_);
 
-        ibv_dealloc_pd(pd_);
+        if (pd_)
+            ibv_dealloc_pd(pd_);
 
-        ibv_close_device(ib_ctx_);
+        if (ib_ctx_)
+            ibv_close_device(ib_ctx_);
 
         SLIME_LOG_DEBUG("RDMAContext deconstructed")
     }
