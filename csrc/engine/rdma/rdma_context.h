@@ -3,8 +3,8 @@
 #include "engine/assignment.h"
 #include "engine/rdma/memory_pool.h"
 #include "engine/rdma/rdma_assignment.h"
-#include "engine/rdma/rdma_env.h"
 #include "engine/rdma/rdma_config.h"
+#include "engine/rdma/rdma_env.h"
 
 #include "utils/json.hpp"
 
@@ -26,6 +26,9 @@ namespace slime {
 using json = nlohmann::json;
 
 class RDMAContext {
+    friend class RDMAEndpoint;
+    friend class RDMABuffer;
+
 public:
     /*
       A context of rdma QP.
@@ -34,7 +37,7 @@ public:
     {
         SLIME_LOG_DEBUG("Initializing qp management, num qp: " << SLIME_QP_NUM);
 
-        qp_list_len_ = SLIME_QP_NUM;
+        qp_list_len_   = SLIME_QP_NUM;
         qp_management_ = new qp_management_t*[qp_list_len_];
         for (int qpi = 0; qpi < qp_list_len_; qpi++) {
             qp_management_[qpi] = new qp_management_t();
@@ -73,7 +76,12 @@ public:
     int64_t connect(const json& endpoint_info_json);
 
     /* Submit an assignment */
-    RDMAAssignmentSharedPtr submit(OpCode opcode, AssignmentBatch& assignment, callback_fn_t callback = nullptr);
+    RDMAAssignmentSharedPtr submit(OpCode opcode, AssignmentBatch& batch, callback_fn_t callback = nullptr);
+    RDMAAssignmentSharedPtr submit_with_imm_data(OpCode           opcode,
+                                                 AssignmentBatch& batch,
+                                                 int32_t          imm_data,
+                                                 callback_fn_t    callback         = nullptr,
+                                                 callback_fn_t    immdata_callback = nullptr);
 
     void launch_future();
     void stop_future();
@@ -96,7 +104,7 @@ public:
 
     json endpoint_info() const
     {
-        json endpoint_info =  json{{"rdma_info", local_rdma_info()}, {"mr_info", memory_pool_.mr_info()}};
+        json endpoint_info = json{{"rdma_info", local_rdma_info()}, {"mr_info", memory_pool_.mr_info()}};
         return endpoint_info;
     }
 
@@ -181,7 +189,6 @@ private:
 
     /* Async RDMA Read */
     int64_t post_read_batch(int qpi, RDMAAssignmentSharedPtr assign);
-
 };
 
 }  // namespace slime

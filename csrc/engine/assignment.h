@@ -5,20 +5,25 @@
 #include <string>
 #include <vector>
 
-#include "utils/logging.h"
 #include "utils/json.hpp"
+#include "utils/logging.h"
 
 namespace slime {
 
 struct Assignment;
 
-using json = nlohmann::json;
+using json            = nlohmann::json;
 using AssignmentBatch = std::vector<Assignment>;
 
 enum class OpCode : uint8_t {
     READ,
+    WRITE,
     SEND,
-    RECV
+    RECV,
+
+    // for RDMA Transport
+    WRITE_WITH_IMM,
+    SEND_WITH_IMM
 };
 
 typedef struct Assignment {

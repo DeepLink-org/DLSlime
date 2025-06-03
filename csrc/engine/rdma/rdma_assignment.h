@@ -44,10 +44,14 @@ typedef struct RDMAMetrics {
 
 typedef struct callback_info {
     callback_info() = default;
-    callback_info(OpCode opcode, size_t batch_size, callback_fn_t callback): opcode_(opcode), batch_size_(batch_size)
+    callback_info(OpCode opcode, size_t batch_size, callback_fn_t callback, callback_fn_t imm_data_callback = nullptr):
+        opcode_(opcode), batch_size_(batch_size)
     {
         if (callback)
             callback_ = std::move(callback);
+
+        if (imm_data_callback)
+            imm_data_callback_ = std::move(imm_data_callback);
 
         metrics.arrive = std::chrono::steady_clock::now();
     }
@@ -58,6 +62,8 @@ typedef struct callback_info {
         metrics.done = std::chrono::steady_clock::now();
         done_cv_.notify_one();
     }};
+
+    callback_fn_t imm_data_callback_{[this](int imm_data) { std::cout << "imm_data: " << imm_data << std::endl; }};
 
     OpCode opcode_;
 
@@ -112,6 +118,9 @@ public:
 
 private:
     OpCode opcode_;
+
+    int32_t imm_data_{0};
+    bool    with_imm_data_{false};
 
     Assignment* batch_{nullptr};
     size_t      batch_size_;

@@ -15,8 +15,10 @@
 #include <chrono>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <functional>
 #include <mutex>
+#include <string>
 #include <sys/types.h>
 #include <thread>
 #include <unistd.h>
@@ -359,6 +361,40 @@ void RDMAContext::stop_future()
     }
 }
 
+RDMAAssignmentSharedPtr RDMAContext::submit_with_imm_data(
+    OpCode opcode, AssignmentBatch& batch, int32_t imm_data, callback_fn_t callback, callback_fn_t imm_data_callback)
+{
+    std::vector<AssignmentBatch> batch_split;
+
+    auto split = [&]() {
+        int split_step = SLIME_MAX_SEND_WR / 2;
+        for (int i = 0; i < batch.size(); i += split_step) {
+            batch_split.push_back(
+                AssignmentBatch(batch.begin() + i, std::min(batch.end(), batch.begin() + i + split_step)));
+        }
+    };
+    split();
+
+    int qpi        = select_qpi();
+    int split_size = batch_split.size();
+
+    {
+        std::unique_lock<std::mutex> lock(qp_management_[qpi]->assign_queue_mutex_);
+        RDMAAssignmentSharedPtr      rdma_assignment;
+
+        for (int i = 0; i < split_size; ++i) {
+            callback_fn_t split_callback = (i == split_size - 1 ? callback : [](int) { return 0; });
+            rdma_assignment              = std::make_shared<RDMAAssignment>(opcode, batch_split[i], split_callback);
+            qp_management_[qpi]->assign_queue_.push(rdma_assignment);
+            rdma_assignment->with_imm_data_ = true;
+            rdma_assignment->imm_data_      = imm_data;
+        }
+
+        qp_management_[qpi]->has_runnable_event_.notify_one();
+        return rdma_assignment;
+    }
+}
+
 RDMAAssignmentSharedPtr RDMAContext::submit(OpCode opcode, AssignmentBatch& batch, callback_fn_t callback)
 {
     std::vector<AssignmentBatch> batch_split;
@@ -391,71 +427,82 @@ RDMAAssignmentSharedPtr RDMAContext::submit(OpCode opcode, AssignmentBatch& batc
 
 int64_t RDMAContext::post_send_batch(int qpi, RDMAAssignmentSharedPtr assign)
 {
-    int ret;
+    int                 ret        = 0;
+    size_t              batch_size = assign->batch_size();
+    struct ibv_send_wr* bad_wr     = nullptr;
+    struct ibv_send_wr* wr         = new ibv_send_wr[batch_size];
+    struct ibv_sge*     sge        = new ibv_sge[batch_size];
 
-    struct ibv_mr* mr        = memory_pool_.get_mr(assign->batch_[0].mr_key);
-    remote_mr_t    remote_mr = memory_pool_.get_remote_mr(assign->batch_[0].mr_key);
+    for (size_t i = 0; i < batch_size; ++i) {
+        struct ibv_mr* mr = memory_pool_.get_mr(assign->batch_[i].mr_key);
 
-    struct ibv_sge sge;
-    memset(&sge, 0, sizeof(sge));
-    sge.addr   = (uintptr_t)mr->addr + assign->batch_[0].source_offset;
-    sge.length = assign->batch_[0].length;
-    sge.lkey   = mr->lkey;
+        memset(&sge[i], 0, sizeof(ibv_sge));
+        sge[i].addr   = (uintptr_t)mr->addr + assign->batch_[i].source_offset;
+        sge[i].length = assign->batch_[i].length;
+        sge[i].lkey   = mr->lkey;
 
-    struct ibv_send_wr wr, *bad_wr = NULL;
-    memset(&wr, 0, sizeof(wr));
-
-    wr.wr_id      = 0;
-    wr.opcode     = IBV_WR_SEND;
-    wr.sg_list    = &sge;
-    wr.num_sge    = 1;
-    wr.send_flags = IBV_SEND_SIGNALED;
+        wr[i].wr_id =
+            (i == batch_size - 1) ? (uintptr_t)(new callback_info_with_qpi_t{assign->callback_info_, qpi}) : 0;
+        wr[i].opcode     = assign->with_imm_data_ ? IBV_WR_SEND : IBV_WR_SEND_WITH_IMM;
+        wr[i].sg_list    = &sge[i];
+        wr[i].num_sge    = 1;
+        wr[i].send_flags = (i == batch_size - 1) ? IBV_SEND_SIGNALED : 0;
+        wr[i].next       = (i == batch_size - 1) ? nullptr : &wr[i + 1];
+        wr[i].imm_data   = assign->with_imm_data_ ? assign->imm_data_ : 0;
+    }
 
     {
         std::unique_lock<std::mutex> lock(qp_management_[qpi]->rdma_post_send_mutex_);
         qp_management_[qpi]->outstanding_rdma_reads_.fetch_add(assign->batch_size(), std::memory_order_relaxed);
-        ret = ibv_post_send(qp_management_[qpi]->qp_, &wr, &bad_wr);
+        ret = ibv_post_send(qp_management_[qpi]->qp_, wr, &bad_wr);
     }
 
     if (ret) {
         SLIME_LOG_ERROR("Failed to post RDMA send : " << strerror(ret));
         return -1;
     }
+
+    delete[] wr;
+    delete[] sge;
 
     return 0;
 }
 
 int64_t RDMAContext::post_recv_batch(int qpi, RDMAAssignmentSharedPtr assign)
 {
+    int64_t             ret        = 0;
+    size_t              batch_size = assign->batch_size();
+    struct ibv_recv_wr* bad_wr     = nullptr;
+    struct ibv_recv_wr* wr         = new ibv_recv_wr[batch_size];
+    struct ibv_sge*     sge        = new ibv_sge[batch_size];
 
-    int ret;
+    for (size_t i = 0; i < batch_size; ++i) {
+        struct ibv_mr* mr = memory_pool_.get_mr(assign->batch_[i].mr_key);
 
-    struct ibv_mr* mr        = memory_pool_.get_mr(assign->batch_[0].mr_key);
-    remote_mr_t    remote_mr = memory_pool_.get_remote_mr(assign->batch_[0].mr_key);
+        memset(&sge[i], 0, sizeof(ibv_sge));
+        sge[i].addr   = (uintptr_t)mr->addr + assign->batch_[i].source_offset;
+        sge[i].length = assign->batch_[i].length;
+        sge[i].lkey   = mr->lkey;
 
-    struct ibv_sge sge;
-    memset(&sge, 0, sizeof(sge));
-    sge.addr   = (uintptr_t)mr->addr + assign->batch_[0].source_offset;
-    sge.length = assign->batch_[0].length;
-    sge.lkey   = mr->lkey;
-
-    struct ibv_recv_wr wr, *bad_wr = NULL;
-    memset(&wr, 0, sizeof(wr));
-
-    wr.wr_id   = 0;
-    wr.sg_list = &sge;
-    wr.num_sge = 1;
+        wr[i].wr_id =
+            (i == batch_size - 1) ? (uintptr_t)(new callback_info_with_qpi_t{assign->callback_info_, qpi}) : 0;
+        wr[i].sg_list = &sge[i];
+        wr[i].num_sge = 1;
+        wr[i].next    = (i == batch_size - 1) ? nullptr : &wr[i + 1];
+    }
 
     {
         std::unique_lock<std::mutex> lock(qp_management_[qpi]->rdma_post_send_mutex_);
         qp_management_[qpi]->outstanding_rdma_reads_.fetch_add(assign->batch_size(), std::memory_order_relaxed);
-        ret = ibv_post_recv(qp_management_[qpi]->qp_, &wr, &bad_wr);
+        ret = ibv_post_recv(qp_management_[qpi]->qp_, wr, &bad_wr);
     }
 
     if (ret) {
         SLIME_LOG_ERROR("Failed to post RDMA send : " << strerror(ret));
         return -1;
     }
+    delete[] wr;
+    delete[] sge;
 
     return 0;
 }
@@ -463,7 +510,7 @@ int64_t RDMAContext::post_recv_batch(int qpi, RDMAAssignmentSharedPtr assign)
 int64_t RDMAContext::post_read_batch(int qpi, RDMAAssignmentSharedPtr assign)
 {
     size_t              batch_size = assign->batch_size();
-    struct ibv_send_wr* bad_wr     = NULL;
+    struct ibv_send_wr* bad_wr     = nullptr;
     struct ibv_send_wr* wr         = new ibv_send_wr[batch_size];
     struct ibv_sge*     sge        = new ibv_sge[batch_size];
 
@@ -486,7 +533,7 @@ int64_t RDMAContext::post_read_batch(int qpi, RDMAAssignmentSharedPtr assign)
         wr[i].send_flags          = (i == batch_size - 1) ? IBV_SEND_SIGNALED : 0;
         wr[i].wr.rdma.remote_addr = remote_addr + assign->batch_[i].target_offset;
         wr[i].wr.rdma.rkey        = remote_rkey;
-        wr[i].next                = (i == batch_size - 1) ? NULL : &wr[i + 1];
+        wr[i].next                = (i == batch_size - 1) ? nullptr : &wr[i + 1];
     }
 
     int ret = 0;
@@ -557,7 +604,10 @@ int64_t RDMAContext::cq_poll_handle()
                     switch (OpCode wr_type = callback_with_qpi->callback_info_->opcode_) {
                         case OpCode::READ:
                         case OpCode::SEND:
+                        case OpCode::SEND_WITH_IMM:
                         case OpCode::RECV:
+                        case OpCode::WRITE_WITH_IMM:
+                            callback_with_qpi->callback_info_->imm_data_callback_(wc[i].imm_data);
                             callback_with_qpi->callback_info_->callback_(status_code);
                             break;
                         default:
@@ -605,6 +655,7 @@ int64_t RDMAContext::wq_dispatch_handle(int qpi)
             else if (batch_size + qp_management_[qpi]->outstanding_rdma_reads_ < SLIME_MAX_SEND_WR) {
                 switch (front_assign->opcode_) {
                     case OpCode::SEND:
+                    case OpCode::SEND_WITH_IMM:
                         post_send_batch(qpi, front_assign);
                         break;
                     case OpCode::RECV:
@@ -613,6 +664,8 @@ int64_t RDMAContext::wq_dispatch_handle(int qpi)
                     case OpCode::READ:
                         post_read_batch(qpi, front_assign);
                         break;
+                    case OpCode::WRITE_WITH_IMM:
+                        post_read_batch(qpi, front_assign);
                     default:
                         SLIME_LOG_ERROR("Unknown OpCode");
                         front_assign->callback_info_->callback_(callback_info_with_qpi_t::UNKNOWN_OPCODE);

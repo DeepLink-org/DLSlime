@@ -1,4 +1,5 @@
 #include "rdma_assignment.h"
+#include "engine/assignment.h"
 
 #include <stdexcept>
 
