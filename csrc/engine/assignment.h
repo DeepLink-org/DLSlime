@@ -17,6 +17,7 @@ using AssignmentBatch = std::vector<Assignment>;
 
 enum class OpCode : uint8_t {
     READ,
+    WRITE,
     SEND,
     RECV
 };

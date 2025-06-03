@@ -43,10 +43,11 @@ parser.add_argument('--size', nargs='+', type=int, default=[2 << n for n in rang
 parser.add_argument('--target-endpoint', type=str, default='127.0.0.1:6006')
 parser.add_argument('--initiator-endpoint', type=str, default='127.0.0.1:6007')
 parser.add_argument('--num-concurrency', type=int, default=80)
+parser.add_argument('--opcode', type=str, choices=['read', 'write'], default='read')
 
 args = parser.parse_args()
 
-print('mode: RDMA RC Read')
+print(f'mode: RDMA RC {args.opcode}')
 print(f'num concurrency: {args.num_concurrency}')
 
 benchmark_data = []
@@ -90,6 +91,13 @@ end_event = torch.cuda.Event(enable_timing=True)
 
 n_runs = args.num_concurrency
 
+if args.opcode == 'read':
+    fn = rdma_endpoint.read_batch
+elif args.opcode == 'write':
+    fn = rdma_endpoint.write_batch
+else:
+    raise ValueError
+
 for idx, (size, ttensor) in enumerate(zip(args.size, ttensors)):
     total_time = 0.0
     start_event.record()
@@ -97,11 +105,11 @@ for idx, (size, ttensor) in enumerate(zip(args.size, ttensors)):
         assigns = []
         for _ in range(n_runs):
             if rank == 1:
-                assign = rdma_endpoint.read_batch([
+                assign = fn([
                     Assignment(
                         mr_key=str(idx), target_offset=0, source_offset=0, length=ttensor.numel() * ttensor.itemsize)
                 ],
-                                                  async_op=True)
+                            async_op=True)
                 assigns.append(assign)
         [assign.wait() for assign in assigns]
     end_event.record()

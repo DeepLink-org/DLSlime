@@ -41,6 +41,7 @@ PYBIND11_MODULE(_slime_c, m)
 {
     py::enum_<slime::OpCode>(m, "OpCode")
         .value("READ", slime::OpCode::READ)
+        .value("WRITE", slime::OpCode::WRITE)
         .value("SEND", slime::OpCode::SEND)
         .value("RECV", slime::OpCode::RECV);
 

@@ -31,6 +31,12 @@ public:
     RDMAMemoryPool() = default;
     RDMAMemoryPool(ibv_pd* pd): pd_(pd) {}
 
+    ~RDMAMemoryPool() {
+        for (auto &mr : mrs_)
+            ibv_dereg_mr(mr.second);
+        mrs_.clear();
+    }
+
     int register_memory_region(const std::string& mr_key, uintptr_t data_ptr, uint64_t length);
     int unregister_memory_region(const std::string& mr_key);
 
