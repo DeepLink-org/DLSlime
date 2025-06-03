@@ -180,6 +180,39 @@ class RDMAEndpoint(BaseEndpoint):
         else:
             return rdma_assignment.wait()
 
+    def write_batch(
+        self,
+        batch: List[Assignment],
+        async_op=False,
+    ) -> int:
+        """Perform batched read from remote MR to local buffer.
+
+        Args:
+            remote_mr_key: Target MR identifier registered at remote
+            remote_offset: Offset in remote MR (bytes)
+            local_buffer_addr: Local destination VA
+            read_size: Data size in bytes
+
+        Returns:
+            ibv_wc_status code (0 = IBV_WC_SUCCESS)
+        """
+        rdma_assignment = self._ctx.submit(
+            _slime_c.OpCode.WRITE,
+            [
+                _slime_c.Assignment(
+                    assign.mr_key,
+                    assign.target_offset,
+                    assign.source_offset,
+                    assign.length,
+                ) for assign in batch
+            ],
+            None,
+        )
+        if async_op:
+            return rdma_assignment
+        else:
+            return rdma_assignment.wait()
+
     def stop(self):
         """Safely stops the endpoint by terminating all background activities
         and releasing resources."""

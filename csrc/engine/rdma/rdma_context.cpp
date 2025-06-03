@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <sys/types.h>
 #include <thread>
@@ -158,7 +159,7 @@ int64_t RDMAContext::init(const std::string& dev_name, uint8_t ib_port, const st
         SLIME_LOG_ERROR("Failed to allocate PD");
         return -1;
     }
-    memory_pool_ = RDMAMemoryPool(pd_);
+    memory_pool_ = std::make_unique<RDMAMemoryPool>(pd_);
 
     /* Alloc Complete Queue (CQ) */
     SLIME_ASSERT(ib_ctx_, "init rdma context first");
@@ -393,8 +394,8 @@ int64_t RDMAContext::post_send_batch(int qpi, RDMAAssignmentSharedPtr assign)
 {
     int ret;
 
-    struct ibv_mr* mr        = memory_pool_.get_mr(assign->batch_[0].mr_key);
-    remote_mr_t    remote_mr = memory_pool_.get_remote_mr(assign->batch_[0].mr_key);
+    struct ibv_mr* mr        = memory_pool_->get_mr(assign->batch_[0].mr_key);
+    remote_mr_t    remote_mr = memory_pool_->get_remote_mr(assign->batch_[0].mr_key);
 
     struct ibv_sge sge;
     memset(&sge, 0, sizeof(sge));
@@ -430,8 +431,8 @@ int64_t RDMAContext::post_recv_batch(int qpi, RDMAAssignmentSharedPtr assign)
 
     int ret;
 
-    struct ibv_mr* mr        = memory_pool_.get_mr(assign->batch_[0].mr_key);
-    remote_mr_t    remote_mr = memory_pool_.get_remote_mr(assign->batch_[0].mr_key);
+    struct ibv_mr* mr        = memory_pool_->get_mr(assign->batch_[0].mr_key);
+    remote_mr_t    remote_mr = memory_pool_->get_remote_mr(assign->batch_[0].mr_key);
 
     struct ibv_sge sge;
     memset(&sge, 0, sizeof(sge));
@@ -460,7 +461,7 @@ int64_t RDMAContext::post_recv_batch(int qpi, RDMAAssignmentSharedPtr assign)
     return 0;
 }
 
-int64_t RDMAContext::post_read_batch(int qpi, RDMAAssignmentSharedPtr assign)
+int64_t RDMAContext::post_rc_oneside_batch(int qpi, RDMAAssignmentSharedPtr assign)
 {
     size_t              batch_size = assign->batch_size();
     struct ibv_send_wr* bad_wr     = NULL;
@@ -469,8 +470,8 @@ int64_t RDMAContext::post_read_batch(int qpi, RDMAAssignmentSharedPtr assign)
 
     for (size_t i = 0; i < batch_size; ++i) {
         Assignment     subassign   = assign->batch_[i];
-        struct ibv_mr* mr          = memory_pool_.get_mr(subassign.mr_key);
-        remote_mr_t    remote_mr   = memory_pool_.get_remote_mr(subassign.mr_key);
+        struct ibv_mr* mr          = memory_pool_->get_mr(subassign.mr_key);
+        remote_mr_t    remote_mr   = memory_pool_->get_remote_mr(subassign.mr_key);
         uint64_t       remote_addr = remote_mr.addr;
         uint32_t       remote_rkey = remote_mr.rkey;
         memset(&sge[i], 0, sizeof(ibv_sge));
@@ -480,7 +481,7 @@ int64_t RDMAContext::post_read_batch(int qpi, RDMAAssignmentSharedPtr assign)
 
         wr[i].wr_id =
             (i == batch_size - 1) ? (uintptr_t)(new callback_info_with_qpi_t{assign->callback_info_, qpi}) : 0;
-        wr[i].opcode              = IBV_WR_RDMA_READ;
+        wr[i].opcode              = ASSIGN_OP_2_IBV_WR_OP.at(assign->opcode_);
         wr[i].sg_list             = &sge[i];
         wr[i].num_sge             = 1;
         wr[i].send_flags          = (i == batch_size - 1) ? IBV_SEND_SIGNALED : 0;
@@ -556,6 +557,7 @@ int64_t RDMAContext::cq_poll_handle()
                         reinterpret_cast<callback_info_with_qpi_t*>(wc[i].wr_id);
                     switch (OpCode wr_type = callback_with_qpi->callback_info_->opcode_) {
                         case OpCode::READ:
+                        case OpCode::WRITE:
                         case OpCode::SEND:
                         case OpCode::RECV:
                             callback_with_qpi->callback_info_->callback_(status_code);
@@ -611,7 +613,8 @@ int64_t RDMAContext::wq_dispatch_handle(int qpi)
                         post_recv_batch(qpi, front_assign);
                         break;
                     case OpCode::READ:
-                        post_read_batch(qpi, front_assign);
+                    case OpCode::WRITE:
+                        post_rc_oneside_batch(qpi, front_assign);
                         break;
                     default:
                         SLIME_LOG_ERROR("Unknown OpCode");

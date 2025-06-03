@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <infiniband/verbs.h>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -30,6 +31,12 @@ using RDMAAssignmentSharedPtrBatch = std::vector<RDMAAssignmentSharedPtr>;
 
 // TODO (Jimy): add timeout check
 const std::chrono::milliseconds kNoTimeout = std::chrono::milliseconds::zero();
+
+static const std::map<OpCode, ibv_wr_opcode> ASSIGN_OP_2_IBV_WR_OP = {
+    {OpCode::READ, ibv_wr_opcode::IBV_WR_RDMA_READ},
+    {OpCode::WRITE, ibv_wr_opcode::IBV_WR_RDMA_WRITE},
+    {OpCode::SEND, ibv_wr_opcode::IBV_WR_SEND}
+};
 
 typedef struct RDMAMetrics {
     std::chrono::steady_clock::time_point arrive{std::chrono::milliseconds::zero()};

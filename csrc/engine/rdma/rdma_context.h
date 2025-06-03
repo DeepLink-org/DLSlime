@@ -7,11 +7,13 @@
 #include "engine/rdma/rdma_config.h"
 
 #include "utils/json.hpp"
+#include "utils/logging.h"
 
 #include <condition_variable>
 #include <cstdint>
 #include <functional>
 #include <future>
+#include <memory>
 #include <mutex>
 #include <queue>
 #include <stdexcept>
@@ -51,6 +53,17 @@ public:
             delete qp_management_[qpi];
         }
         delete[] qp_management_;
+
+        if (cq_)
+            ibv_destroy_cq(cq_);
+
+        if (pd_)
+            ibv_dealloc_pd(pd_);
+
+        if (ib_ctx_)
+            ibv_close_device(ib_ctx_);
+
+        SLIME_LOG_DEBUG("RDMAContext deconstructed")
     }
 
     /* Initialize */
@@ -59,13 +72,13 @@ public:
     /* Memory Allocation */
     int64_t register_memory_region(std::string mr_key, uintptr_t data_ptr, size_t length)
     {
-        memory_pool_.register_memory_region(mr_key, data_ptr, length);
+        memory_pool_->register_memory_region(mr_key, data_ptr, length);
         return 0;
     }
 
     int64_t register_remote_memory_region(std::string mr_key, json mr_info)
     {
-        memory_pool_.register_remote_memory_region(mr_key, mr_info);
+        memory_pool_->register_remote_memory_region(mr_key, mr_info);
         return 0;
     }
 
@@ -96,7 +109,7 @@ public:
 
     json endpoint_info() const
     {
-        json endpoint_info =  json{{"rdma_info", local_rdma_info()}, {"mr_info", memory_pool_.mr_info()}};
+        json endpoint_info =  json{{"rdma_info", local_rdma_info()}, {"mr_info", memory_pool_->mr_info()}};
         return endpoint_info;
     }
 
@@ -121,7 +134,7 @@ private:
     struct ibv_cq*           cq_           = nullptr;
     uint8_t                  ib_port_      = -1;
 
-    RDMAMemoryPool memory_pool_;
+    std::unique_ptr<RDMAMemoryPool> memory_pool_;
 
     typedef struct qp_management {
         /* queue peer list */
@@ -145,6 +158,11 @@ private:
         /* async wq handler */
         std::future<void> wq_future_;
         std::atomic<bool> stop_wq_future_{false};
+
+        ~qp_management() {
+            if (qp_)
+                ibv_destroy_qp(qp_);
+        }
     } qp_management_t;
 
     size_t            qp_list_len_{1};
@@ -180,7 +198,7 @@ private:
     int64_t post_recv_batch(int qpi, RDMAAssignmentSharedPtr assign);
 
     /* Async RDMA Read */
-    int64_t post_read_batch(int qpi, RDMAAssignmentSharedPtr assign);
+    int64_t post_rc_oneside_batch(int qpi, RDMAAssignmentSharedPtr assign);
 
 };
 
