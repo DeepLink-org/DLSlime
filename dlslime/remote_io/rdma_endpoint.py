@@ -93,7 +93,7 @@ class RDMAEndpoint(BaseEndpoint):
         """
         self._ctx.register_memory_region(mr_key, addr + offset, length)
 
-    def register_remote_memory_region(self, remote_mr_info: str) -> None:
+    def register_remote_memory_region(self, mr_key: str, remote_mr_info: dict) -> None:
         """Register a Remote Memory Region (MR) for RDMA operations.
 
         Args:
@@ -101,7 +101,7 @@ class RDMAEndpoint(BaseEndpoint):
                 - key: mr_key
                 - value: mr_info
         """
-        self._ctx.register_remote_memory_region(remote_mr_info)
+        self._ctx.register_remote_memory_region(mr_key, remote_mr_info)
 
     async def send_async(self, mr_key, offset, length) -> int:
         loop = asyncio.get_running_loop()

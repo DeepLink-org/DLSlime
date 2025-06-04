@@ -164,7 +164,7 @@ int64_t RDMAContext::init(const std::string& dev_name, uint8_t ib_port, const st
     /* Alloc Complete Queue (CQ) */
     SLIME_ASSERT(ib_ctx_, "init rdma context first");
     comp_channel_ = ibv_create_comp_channel(ib_ctx_);
-    cq_           = ibv_create_cq(ib_ctx_, SLIME_MAX_SEND_WR + SLIME_MAX_RECV_WR, NULL, comp_channel_, 0);
+    cq_           = ibv_create_cq(ib_ctx_, SLIME_MAX_CQ_DEPTH, NULL, comp_channel_, 0);
     SLIME_ASSERT(cq_, "create CQ failed");
 
     for (int qpi = 0; qpi < qp_list_len_; ++qpi) {
@@ -365,7 +365,7 @@ RDMAAssignmentSharedPtr RDMAContext::submit(OpCode opcode, AssignmentBatch& batc
     std::vector<AssignmentBatch> batch_split;
 
     auto split = [&]() {
-        int split_step = SLIME_MAX_SEND_WR / 2;
+        int split_step = SLIME_MAX_CQ_DEPTH / 2;
         for (int i = 0; i < batch.size(); i += split_step) {
             batch_split.push_back(
                 AssignmentBatch(batch.begin() + i, std::min(batch.end(), batch.begin() + i + split_step)));
@@ -598,13 +598,13 @@ int64_t RDMAContext::wq_dispatch_handle(int qpi)
         while (!(qp_management_[qpi]->assign_queue_.empty())) {
             RDMAAssignmentSharedPtr front_assign = qp_management_[qpi]->assign_queue_.front();
             size_t                  batch_size   = front_assign->batch_size();
-            if (batch_size > SLIME_MAX_SEND_WR) {
-                SLIME_LOG_ERROR("batch_size(" << batch_size << ") > MAX SEND WR(" << SLIME_MAX_SEND_WR
+            if (batch_size > SLIME_MAX_CQ_DEPTH) {
+                SLIME_LOG_ERROR("batch_size(" << batch_size << ") > MAX SLIME_MAX_CQ_DEPTH (" << SLIME_MAX_CQ_DEPTH
                                               << "), this request will be ignored");
                 front_assign->callback_info_->callback_(callback_info_with_qpi_t::ASSIGNMENT_BATCH_OVERFLOW);
                 qp_management_[qpi]->assign_queue_.pop();
             }
-            else if (batch_size + qp_management_[qpi]->outstanding_rdma_reads_ < SLIME_MAX_SEND_WR) {
+            else if (batch_size + qp_management_[qpi]->outstanding_rdma_reads_ < SLIME_MAX_CQ_DEPTH) {
                 switch (front_assign->opcode_) {
                     case OpCode::SEND:
                         post_send_batch(qpi, front_assign);
