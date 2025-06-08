@@ -1,4 +1,3 @@
-import asyncio
 from typing import Any, Callable, Dict, List
 
 from dlslime import _slime_c
@@ -103,27 +102,49 @@ class RDMAEndpoint(BaseEndpoint):
         """
         self._ctx.register_remote_memory_region(mr_key, remote_mr_info)
 
-    async def send_async(self, mr_key, offset, length) -> int:
-        loop = asyncio.get_running_loop()
-        future = loop.create_future()
+    def send_batch(
+        self,
+        batch: List[Assignment],
+        async_op=False,
+    ) -> _slime_c.RDMAAssignment:
+        rdma_assignment = self._ctx.submit(
+            _slime_c.OpCode.SEND,
+            [
+                _slime_c.Assignment(
+                    assign.mr_key,
+                    assign.target_offset,
+                    assign.source_offset,
+                    assign.length,
+                ) for assign in batch
+            ],
+            None,
+        )
+        if not async_op:
+            return rdma_assignment.wait()
+        else:
+            return rdma_assignment
 
-        def _completion_handler(status: int):
-            loop.call_soon_threadsafe(future.set_result, status)
-
-        self._ctx.submit(_slime_c.Assignment(_slime_c.OpCode.SEND, mr_key, [], [offset], length, _completion_handler))
-
-        return await future
-
-    async def recv_async(self, mr_key, offset, length) -> int:
-        loop = asyncio.get_running_loop()
-        future = loop.create_future()
-
-        def _completion_handler(status: int):
-            loop.call_soon_threadsafe(future.set_result, status)
-
-        self._ctx.submit(_slime_c.Assignment(_slime_c.OpCode.RECV, mr_key, [], [offset], length, _completion_handler))
-
-        return await future
+    def recv_batch(
+        self,
+        batch: List[Assignment],
+        async_op=False,
+    ) -> _slime_c.RDMAAssignment:
+        rdma_assignment = self._ctx.submit(
+            _slime_c.OpCode.RECV,
+            [
+                _slime_c.Assignment(
+                    assign.mr_key,
+                    assign.target_offset,
+                    assign.source_offset,
+                    assign.length,
+                ) for assign in batch
+            ],
+            None,
+        )
+        if not async_op:
+            return rdma_assignment.wait()
+        else:
+            return rdma_assignment
 
     def read_batch_with_callback(self, batch: List[Assignment], callback: Callable[[int], None]):
         callback_obj_id = id(callback)
