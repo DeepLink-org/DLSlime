@@ -32,8 +32,8 @@ T get_env(const char* name, T default_value)
 
 inline const std::vector<std::string> SLIME_VISIBLE_DEVICES =
     get_env<std::vector<std::string>>("SLIME_VISIBLE_DEVICES", {});
-inline const int SLIME_MAX_SEND_WR        = get_env<int>("SLIME_MAX_SEND_WR", 4096);
-inline const int SLIME_MAX_RECV_WR        = get_env<int>("SLIME_MAX_RECV_WR", 4096);
+inline const int SLIME_MAX_SEND_WR        = get_env<int>("SLIME_MAX_SEND_WR", 8192);
+inline const int SLIME_MAX_RECV_WR        = get_env<int>("SLIME_MAX_RECV_WR", 8192);
 inline const int SLIME_POLL_COUNT         = get_env<int>("SLIME_POLL_COUNT", 256);
 inline const int SLIME_MAX_RD_ATOMIC      = get_env<int>("SLIME_MAX_RD_ATOMIC", 16);
 inline const int SLIME_MAX_DEST_RD_ATOMIC = get_env<int>("SLIME_MAX_DEST_RD_ATOMIC", 16);
