@@ -615,6 +615,7 @@ int64_t RDMAContext::wq_dispatch_handle(int qpi)
                 qp_management_[qpi]->assign_queue_.pop();
             }
             else if (batch_size + qp_management_[qpi]->outstanding_rdma_reads_ < SLIME_MAX_CQ_DEPTH) {
+                SLIME_LOG_DEBUG("Schedule batch, batch size: ", batch_size, ". Outstanding: ", qp_management_[qpi]->outstanding_rdma_reads_);
                 switch (front_assign->opcode_) {
                     case OpCode::SEND:
                         post_send_batch(qpi, front_assign);
@@ -634,7 +635,7 @@ int64_t RDMAContext::wq_dispatch_handle(int qpi)
             }
             else {
                 std::this_thread::sleep_for(std::chrono::nanoseconds(500000));
-                SLIME_LOG_WARN("Assignment Queue is full.");
+                SLIME_LOG_DEBUG("Assignment Queue is full(", batch_size, ", ", qp_management_[qpi]->outstanding_rdma_reads_, ").");
             }
         }
     }

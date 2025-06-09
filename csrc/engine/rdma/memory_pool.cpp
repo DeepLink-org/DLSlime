@@ -21,11 +21,11 @@ int RDMAMemoryPool::register_memory_region(const std::string& mr_key, uintptr_t 
 
     SLIME_ASSERT(mr, " Failed to register memory " << data_ptr);
 
-    SLIME_LOG_INFO("Memory region: " << (void*)data_ptr << " -- " << (void*)(data_ptr + length)
-                                     << ", Device name: " << pd_->context->device->dev_name << ", Length: " << length
-                                     << " (" << length / 1024 / 1024 << " MB)"
-                                     << ", Permission: " << access_rights << ", LKey: " << mr->lkey
-                                     << ", RKey: " << mr->rkey);
+    SLIME_LOG_DEBUG("Memory region: " << (void*)data_ptr << " -- " << (void*)(data_ptr + length)
+                                      << ", Device name: " << pd_->context->device->dev_name << ", Length: " << length
+                                      << " (" << length / 1024 / 1024 << " MB)"
+                                      << ", Permission: " << access_rights << ", LKey: " << mr->lkey
+                                      << ", RKey: " << mr->rkey);
 
     mrs_[mr_key] = mr;
     return 0;
