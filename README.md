@@ -36,7 +36,7 @@ BUILD_NVLINK=<OFF|ON> BUILD_TORCH_PLUGIN=<OFF|ON> pip install -v --no-build-isol
 ![Throughput](docs/imgs/performance.png)
 
 
-#### interconnection between MetaX(沐曦)/Iluvatar(天数)/PPU(平头哥) 
+#### Interconnection between MetaX(沐曦)/Iluvatar(天数)/PPU(平头哥) 
 
 - hardware configs
   - MetaX:Mellanox ConnectX-4 Lx 400Gbps（MT4129）；PCIe 5.0 x16 with x16 PCIe extension option;
@@ -52,10 +52,10 @@ BUILD_NVLINK=<OFF|ON> BUILD_TORCH_PLUGIN=<OFF|ON> pip install -v --no-build-isol
 
 - throughput matrix：（MB/s, demonstrates attainment of the theoretical bound）
 
-| send/recv |     MetaX |      PPU |  Iluvatar |
+| send/recv |     MetaX （MB/s）|      PPU （MB/s）|  Iluvatar （MB/s）|
 |:----------|---------:|---------:|---------:|
-| MetaX      | 48967.45 | 28686.29 | 24524.29 |
-| PPU       | 28915.72 | 28275.85 | 23472.29 |
-| Iluvatar   | 24496.14 | 24496.51 | 24513.57 |
+| MetaX （MB/s）     | 48967.45  | 28686.29 | 24524.29  |
+| PPU    （MB/s）   | 28915.72 | 28275.85 | 23472.29  |
+| Iluvatar （MB/s）  | 24496.14 | 24496.51 | 24513.57 |
 
 detailed results: [bench](bench/results)
