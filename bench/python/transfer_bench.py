@@ -1,35 +1,27 @@
 """# Remote Read Benchmark
 
-# One Node
-torchrun \
-    --nproc-per-node 2 \
-    --nnodes=1 \
-    --node_rank=0 \
-    --master_port=$MASTER_PORT \
-    bench/python/transfer_bench.py
+# One Node: LocalHost Test
+## Process 0:
+python3 bench/python/transfer_bench.py --rank 0
+
+## Process 1:
+python3 bench/python/transfer_bench.py --rank 1
 
 # Cross Node
 ## Node 0
-torchrun \
-    --nproc-per-node 1 \
-    --nnodes=2 \
-    --node_rank=0 \
-    --master-addr=$MASTER_ADDR \
-    --master_port=$MASTER_PORT \
-    bench/python/transfer_bench.py
+python3 bench/python/transfer_bench.py --rank 0 \
+    --target-endpoint ${NODE_0_IP:PORT} \
+    --initiator-endpoint ${NODE_1_IP:PORT}
 
 ## Node 1
-torchrun \
-    --nproc-per-node 1 \
-    --nnodes=2 \
-    --node_rank=1 \
-    --master-addr=$MASTER_ADDR \
-    --master_port=$MASTER_PORT \
-    bench/python/transfer_bench.py
+python3 bench/python/transfer_bench.py --rank 1 \
+    --target-endpoint ${NODE_0_IP:PORT} \
+    --initiator-endpoint ${NODE_1_IP:PORT}
 """
 
 import argparse
 import os
+import csv
 
 import numpy as np
 import torch
@@ -39,11 +31,17 @@ from tabulate import tabulate
 from dlslime import Assignment, RDMAEndpoint, available_nic
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--size', nargs='+', type=int, default=[2 << n for n in range(8, 25)])
+parser.add_argument('--rank', type=int, required=True, help='Rank of the current process (0 or 1)')
+parser.add_argument('--world-size', type=int, choices=[2], default=2, help='World size (must be 2)')
+parser.add_argument('--size', nargs='+', type=int, default=[n for n in range(8, 25)])
 parser.add_argument('--target-endpoint', type=str, default='127.0.0.1:6006')
 parser.add_argument('--initiator-endpoint', type=str, default='127.0.0.1:6007')
-parser.add_argument('--num-concurrency', type=int, default=80)
+parser.add_argument('--target-affi', type=int, default=0, help='CUDA device ID for target (rank 0)')
+parser.add_argument('--initiator-affi', type=int, default=1, help='CUDA device ID for initiator (rank 1)')
+parser.add_argument('--num-concurrency', type=int, default=16)
 parser.add_argument('--opcode', type=str, choices=['read', 'write'], default='read')
+parser.add_argument('--save-csv', action='store_true', help='Save benchmark results to CSV file')
+parser.add_argument('--csv-filename', type=str, default='./output.csv', help='Filename for CSV output')
 
 args = parser.parse_args()
 
@@ -51,12 +49,8 @@ print(f'mode: RDMA RC {args.opcode}')
 print(f'num concurrency: {args.num_concurrency}')
 
 benchmark_data = []
-
-rank = int(os.environ['RANK'])
-world_size = int(os.environ['WORLD_SIZE'])
-master_addr = os.environ['MASTER_ADDR']
-master_port = os.environ['MASTER_PORT']
-
+rank = args.rank
+world_size = args.world_size
 assert world_size == 2
 
 rdma_devices = available_nic()
@@ -75,8 +69,14 @@ else:
     zmq_send.bind(f'tcp://{args.initiator_endpoint}')
     zmq_recv.connect(f'tcp://{args.target_endpoint}')
 
-torch.cuda.set_device(rank % world_size)
-ttensors = [torch.ones([size]).cuda() for size in args.size]
+if rank == 0:
+    target_device = args.target_affi
+    torch.cuda.set_device(target_device)
+else:
+    initiator_device = args.initiator_affi
+    torch.cuda.set_device(initiator_device)
+ttensors = [torch.ones([2 << rawsize]).cuda() for rawsize in args.size]
+torch.cuda.synchronize()
 
 for idx, ttensor in enumerate(ttensors):
     rdma_endpoint.register_memory_region(str(idx), ttensor.data_ptr(), ttensor.storage_offset(),
@@ -98,7 +98,8 @@ elif args.opcode == 'write':
 else:
     raise ValueError
 
-for idx, (size, ttensor) in enumerate(zip(args.size, ttensors)):
+for idx, (rawsize, ttensor) in enumerate(zip(args.size, ttensors)):
+    size = 2 << rawsize
     total_time = 0.0
     start_event.record()
     for _ in range(100):
@@ -124,14 +125,24 @@ for idx, (size, ttensor) in enumerate(zip(args.size, ttensors)):
         bandwidth = n_runs * size * ttensor.itemsize * 100 / total_time / 1e3
 
         benchmark_data.append([
-            f'{size_bytes:,}', f'{total_transport:,}', f'{avg_latency.total_seconds() * 1000:.2f} ms',
-            f'{bandwidth:.2f} MB/s'
+            f'{size_bytes:,}', f'{total_transport:,}', str(args.target_affi), str(args.initiator_affi), f'{avg_latency.total_seconds() * 1000:.2f}',
+            f'{bandwidth:.2f}'
         ])
 
 if rank == 0:
     _ = zmq_recv.recv_pyobj()
 else:
-    headers = ['Message Size (bytes)', 'Total Transport (bytes)', 'Avg Latency', 'Bandwidth']
+    headers = ['Message Size (bytes)', 'Total Transport (bytes)', 'Target Affinity', 'Initiator Affinity', 'Avg Latency(ms)', 'Bandwidth(MB/s)']
     print('\nBenchmark Results:')
     print(tabulate(benchmark_data, headers=headers, tablefmt='grid'))
+    if args.save_csv:
+        with open(args.csv_filename, 'w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(headers)
+            writer.writerows(benchmark_data)
+        print(f"CSV saved to {args.csv_filename}")
     zmq_send.send_pyobj('TERMINATE')
+
+zmq_send.close()
+zmq_recv.close()
+zmq_ctx.term()
