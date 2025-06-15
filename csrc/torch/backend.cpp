@@ -311,7 +311,11 @@ c10::intrusive_ptr<::c10d::Work> slimeBackend::send(std::vector<at::Tensor>& ten
 
     // The work captures the tensor to prevent it being deallocated and
     // the unbound buffer to synchronize on completion of the send.
-    return c10::make_intrusive<SendWork>(tensor, std::move(buf), seq_);
+    auto send_work = c10::make_intrusive<SendWork>(tensor, std::move(buf), seq_);
+    if (group_active_) {
+        grouped_works_.emplace_back(send_work);
+    }
+    return send_work;
 }
 
 c10::intrusive_ptr<::c10d::Work> slimeBackend::recv(std::vector<at::Tensor>& tensors, int srcRank, int tag)
@@ -329,7 +333,11 @@ c10::intrusive_ptr<::c10d::Work> slimeBackend::recv(std::vector<at::Tensor>& ten
 
     // The work captures the tensor to prevent it being deallocated and
     // the unbound buffer to synchronize on completion of the recv.
-    return c10::make_intrusive<RecvWork>(tensor, std::move(buf), ::c10d::OpType::RECV, seq_);
+    auto recv_work = c10::make_intrusive<RecvWork>(tensor, std::move(buf), ::c10d::OpType::RECV, seq_);
+    if (group_active_) {
+        grouped_works_.emplace_back(recv_work);
+    }
+    return recv_work;
 }
 
 void slimeBackend::runLoop(int workerIndex)
