@@ -102,6 +102,9 @@ class RDMAEndpoint(BaseEndpoint):
         """
         self._ctx.register_remote_memory_region(mr_key, remote_mr_info)
 
+    def reload_memory_pool(self):
+        return self._ctx.reload_memory_pool()
+
     def send_batch(
         self,
         batch: List[Assignment],

@@ -82,6 +82,11 @@ public:
         return 0;
     }
 
+    int64_t reload_memory_pool() {
+        memory_pool_ = std::make_unique<RDMAMemoryPool>(pd_);
+        return 0;
+    }
+
     /* RDMA Link Construction */
     int64_t connect(const json& endpoint_info_json);
 

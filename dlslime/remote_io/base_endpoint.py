@@ -23,7 +23,11 @@ class BaseEndpoint:
         raise NotImplementedError
 
     @abc.abstractmethod
-    def register_remote_memory_region(self, mr_key: str, remote_mr_info):
+    def register_remote_memory_region(self):
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def reload_memory_pool(self, mr_key: str, remote_mr_info):
         raise NotImplementedError
 
     @abc.abstractmethod
