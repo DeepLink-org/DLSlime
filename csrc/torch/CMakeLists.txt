@@ -33,16 +33,14 @@ if (USE_MACA)
     target_compile_definitions(_slime_torch PRIVATE "-DUSE_MACA")
 endif()
 
-target_link_options(_slime_torch PRIVATE "-Wl,--no-as-needed")
 target_link_libraries(
     _slime_torch
     PRIVATE
+    ${Torch_DIR}/lib/libtorch.so
+    ${Torch_DIR}/lib/libtorch_cuda.so
+    ${Torch_DIR}/lib/libtorch_python.so
     ${Torch_DIR}/lib/libc10.so
     ${Torch_DIR}/lib/libc10_cuda.so
-    ${Torch_DIR}/lib/libtorch_python.so
-    ${Torch_DIR}/lib/libtorch.so
-    ${Torch_DIR}/lib/libtorch_cpu.so
-    ${Torch_DIR}/lib/libtorch_cuda.so
     _slime_gloo
     _slime_utils
 )
