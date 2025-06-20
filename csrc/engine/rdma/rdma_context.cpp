@@ -362,26 +362,42 @@ void RDMAContext::stop_future()
 
 RDMAAssignmentSharedPtr RDMAContext::submit(OpCode opcode, AssignmentBatch& batch, callback_fn_t callback)
 {
-    std::vector<AssignmentBatch> batch_split;
+    AssignmentBatch              batch_split_after_max_length;
+    std::vector<AssignmentBatch> batch_split_after_cq_depth;
 
-    auto split = [&]() {
-        int split_step = SLIME_MAX_CQ_DEPTH / 2;
-        for (int i = 0; i < batch.size(); i += split_step) {
-            batch_split.push_back(
-                AssignmentBatch(batch.begin() + i, std::min(batch.end(), batch.begin() + i + split_step)));
+    auto split_by_max_length = [&]() {
+        for (size_t i = 0; i < batch.size(); ++i) {
+            for (size_t j = 0; j < batch[i].length; j += SLIME_MAX_LENGTH_PER_ASSIGNMENT) {
+                batch_split_after_max_length.push_back(
+                    Assignment(batch[i].mr_key,
+                               batch[i].target_offset + j,
+                               batch[i].source_offset + j,
+                               std::min(static_cast<size_t>(SLIME_MAX_LENGTH_PER_ASSIGNMENT), batch[i].length - j)));
+            }
         }
     };
-    split();
+
+    auto split_by_max_cq_depth = [&]() {
+        int split_step = SLIME_MAX_CQ_DEPTH / 2;
+        for (int i = 0; i < batch_split_after_max_length.size(); i += split_step) {
+            batch_split_after_cq_depth.push_back(AssignmentBatch(
+                batch_split_after_max_length.begin() + i,
+                std::min(batch_split_after_max_length.end(), batch_split_after_max_length.begin() + i + split_step)));
+        }
+    };
+
+    split_by_max_length();
+    split_by_max_cq_depth();
 
     int qpi        = select_qpi();
-    int split_size = batch_split.size();
+    int split_size = batch_split_after_cq_depth.size();
 
     {
         std::unique_lock<std::mutex> lock(qp_management_[qpi]->assign_queue_mutex_);
         RDMAAssignmentSharedPtr      rdma_assignment;
         for (int i = 0; i < split_size; ++i) {
             callback_fn_t split_callback = (i == split_size - 1 ? callback : [](int) { return 0; });
-            rdma_assignment              = std::make_shared<RDMAAssignment>(opcode, batch_split[i], split_callback);
+            rdma_assignment = std::make_shared<RDMAAssignment>(opcode, batch_split_after_cq_depth[i], split_callback);
             qp_management_[qpi]->assign_queue_.push(rdma_assignment);
         }
 
@@ -615,7 +631,10 @@ int64_t RDMAContext::wq_dispatch_handle(int qpi)
                 qp_management_[qpi]->assign_queue_.pop();
             }
             else if (batch_size + qp_management_[qpi]->outstanding_rdma_reads_ < SLIME_MAX_CQ_DEPTH) {
-                SLIME_LOG_DEBUG("Schedule batch, batch size: ", batch_size, ". Outstanding: ", qp_management_[qpi]->outstanding_rdma_reads_);
+                SLIME_LOG_DEBUG("Schedule batch, batch size: ",
+                                batch_size,
+                                ". Outstanding: ",
+                                qp_management_[qpi]->outstanding_rdma_reads_);
                 switch (front_assign->opcode_) {
                     case OpCode::SEND:
                         post_send_batch(qpi, front_assign);
@@ -635,7 +654,8 @@ int64_t RDMAContext::wq_dispatch_handle(int qpi)
             }
             else {
                 std::this_thread::sleep_for(std::chrono::nanoseconds(500000));
-                SLIME_LOG_DEBUG("Assignment Queue is full(", batch_size, ", ", qp_management_[qpi]->outstanding_rdma_reads_, ").");
+                SLIME_LOG_DEBUG(
+                    "Assignment Queue is full(", batch_size, ", ", qp_management_[qpi]->outstanding_rdma_reads_, ").");
             }
         }
     }
