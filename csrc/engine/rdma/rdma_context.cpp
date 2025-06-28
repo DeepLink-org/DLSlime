@@ -415,30 +415,39 @@ int64_t RDMAContext::post_send_batch(int qpi, RDMAAssignmentSharedPtr assign)
     struct ibv_sge*     sge        = new ibv_sge[batch_size];
 
     for (size_t i = 0; i < batch_size; ++i) {
-        struct ibv_mr* mr = memory_pool_->get_mr(assign->batch_[i].mr_key);
+
+        Assignment& subassign = assign->batch_[i];
+        struct ibv_mr* mr = memory_pool_->get_mr(subassign.mr_key);
+        remote_mr_t remote_mr = memory_pool_->get_remote_mr(subassign.mr_key);
+        uint64_t remote_addr = remote_mr.addr;
+        uint64_t remote_rkey = remote_mr.rkey;
 
         memset(&sge[i], 0, sizeof(ibv_sge));
-        sge[i].addr   = (uintptr_t)mr->addr + assign->batch_[i].source_offset;
-        sge[i].length = assign->batch_[i].length;
+        sge[i].addr   = (uintptr_t)mr->addr + subassign.source_offset;
+        sge[i].length = subassign.length;
         sge[i].lkey   = mr->lkey;
 
+        memset(&wr[i], 0, sizeof(ibv_send_wr));
         wr[i].wr_id =
             (i == batch_size - 1) ? (uintptr_t)(new callback_info_with_qpi_t{assign->callback_info_, qpi}) : 0;
         wr[i].opcode     = IBV_WR_SEND;
         wr[i].sg_list    = &sge[i];
         wr[i].num_sge    = 1;
         wr[i].send_flags = (i == batch_size - 1) ? IBV_SEND_SIGNALED : 0;
+        wr[i].wr.rdma.remote_addr = remote_addr + subassign.source_offset; 
+        wr[i].wr.rdma.rkey = remote_rkey;
         wr[i].next       = (i == batch_size - 1) ? nullptr : &wr[i + 1];
     }
 
     {
         std::unique_lock<std::mutex> lock(qp_management_[qpi]->rdma_post_send_mutex_);
-        qp_management_[qpi]->outstanding_rdma_reads_.fetch_add(assign->batch_size(), std::memory_order_relaxed);
+        qp_management_[qpi]->outstanding_rdma_reads_.fetch_add(batch_size , std::memory_order_relaxed);
         ret = ibv_post_send(qp_management_[qpi]->qp_, wr, &bad_wr);
     }
 
     if (ret) {
         SLIME_LOG_ERROR("Failed to post RDMA send : " << strerror(ret));
+        qp_management_[qpi]->outstanding_rdma_reads_.fetch_sub(batch_size, std::memory_order_relaxed);
         return -1;
     }
 
@@ -457,13 +466,20 @@ int64_t RDMAContext::post_recv_batch(int qpi, RDMAAssignmentSharedPtr assign)
     struct ibv_sge*     sge        = new ibv_sge[batch_size];
 
     for (size_t i = 0; i < batch_size; ++i) {
-        struct ibv_mr* mr = memory_pool_->get_mr(assign->batch_[i].mr_key);
+
+        Assignment& subassign = assign->batch_[i]; //
+        
+    
+        struct ibv_mr* mr = memory_pool_->get_mr(subassign.mr_key);
+
 
         memset(&sge[i], 0, sizeof(ibv_sge));
-        sge[i].addr   = (uintptr_t)mr->addr + assign->batch_[i].source_offset;
-        sge[i].length = assign->batch_[i].length;
+        sge[i].addr   = (uintptr_t)mr->addr + subassign.source_offset;
+        sge[i].length = subassign.length;
         sge[i].lkey   = mr->lkey;
 
+
+        memset(&wr[i], 0, sizeof(ibv_recv_wr));
         wr[i].wr_id =
             (i == batch_size - 1) ? (uintptr_t)(new callback_info_with_qpi_t{assign->callback_info_, qpi}) : 0;
         wr[i].sg_list = &sge[i];
@@ -473,12 +489,13 @@ int64_t RDMAContext::post_recv_batch(int qpi, RDMAAssignmentSharedPtr assign)
 
     {
         std::unique_lock<std::mutex> lock(qp_management_[qpi]->rdma_post_send_mutex_);
-        qp_management_[qpi]->outstanding_rdma_reads_.fetch_add(assign->batch_size(), std::memory_order_relaxed);
+        qp_management_[qpi]->outstanding_rdma_reads_.fetch_add(batch_size, std::memory_order_relaxed);
         ret = ibv_post_recv(qp_management_[qpi]->qp_, wr, &bad_wr);
     }
 
     if (ret) {
         SLIME_LOG_ERROR("Failed to post RDMA send : " << strerror(ret));
+        qp_management_[qpi]->outstanding_rdma_reads_.fetch_sub(batch_size, std::memory_order_relaxed);
         return -1;
     }
     delete[] wr;
