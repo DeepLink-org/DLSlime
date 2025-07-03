@@ -23,16 +23,22 @@ target_compile_definitions(_slime_torch PRIVATE
     "-DTORCH_EXTENSION_NAME=_slime_torch"
 )
 
-if (NOT ${TORCH_ENABLE_ABI})
-    target_compile_definitions(_slime_torch PRIVATE
-        "-DPYBIND11_BUILD_ABI=\"_cxxabi1011\""
-    )
-endif()
+run_python(
+    "Torch_PYBIND11_BUILD_ABI"
+    "import torch; print(torch._C._PYBIND11_BUILD_ABI)"
+    "Cannot get TORCH_PYBIND11_BUILD_ABI"
+)
+
+target_compile_definitions(
+    _slime_torch PRIVATE
+    -DPYBIND11_BUILD_ABI=\"${Torch_PYBIND11_BUILD_ABI}\"
+)
 
 if (USE_MACA)
     target_compile_definitions(_slime_torch PRIVATE "-DUSE_MACA")
 endif()
 
+target_link_options(_slime_torch PRIVATE "-Wl,--no-as-needed")
 target_link_libraries(
     _slime_torch
     PRIVATE
@@ -57,3 +63,4 @@ install(
     _slime_torch
     LIBRARY DESTINATION ${DLSLIME_INSTALL_PATH}
 )
+
