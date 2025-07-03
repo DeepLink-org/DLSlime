@@ -35,15 +35,15 @@ BUILD_NVLINK=<OFF|ON> BUILD_TORCH_PLUGIN=<OFF|ON> pip install -v --no-build-isol
 
 ![Throughput](docs/imgs/performance.png)
 
-#### Interconnection between MetaX(沐曦) / Iluvatar(天数) / PPU(平头哥)
+#### Interconnection between Chip A / Chip B / Chip C
 
 - hardware configs
 
-| Device   |                       NIC Model | Bandwidth | PCIe Version | PCIe Lanes |
-| :------- | ------------------------------: | --------: | -----------: | ---------: |
-| MetaX    | Mellanox ConnectX-4 Lx (MT4129) |  400 Gbps |     PCIe 5.0 |        x16 |
-| PPU      | Mellanox ConnectX-4 Lx (MT4129) |  400 Gbps |     PCIe 5.0 |         x8 |
-| Iluvatar | Mellanox ConnectX-4 Lx (MT4129) |  200 Gbps |     PCIe 5.0 |        x16 |
+| Device |                       NIC Model | Bandwidth | PCIe Version | PCIe Lanes |
+| :----- | ------------------------------: | --------: | -----------: | ---------: |
+| A      | Mellanox ConnectX-4 Lx (MT4129) |  400 Gbps |     PCIe 5.0 |        x16 |
+| B      | Mellanox ConnectX-4 Lx (MT4129) |  400 Gbps |     PCIe 5.0 |         x8 |
+| C      | Mellanox ConnectX-4 Lx (MT4129) |  200 Gbps |     PCIe 5.0 |        x16 |
 
 - experiments configs
 
@@ -54,10 +54,10 @@ BUILD_NVLINK=<OFF|ON> BUILD_TORCH_PLUGIN=<OFF|ON> pip install -v --no-build-isol
 
 - Interconnect bandwidth matrix：(MB/s, demonstrates attainment of the theoretical bound).
 
-| Throughput (MB/s) |    MetaX |      PPU | Iluvatar |
+| Throughput (MB/s) |        A |        B |        C |
 | :---------------- | -------: | -------: | -------: |
-| MetaX             | 48967.45 | 28686.29 | 24524.29 |
-| PPU               | 28915.72 | 28275.85 | 23472.29 |
-| Iluvatar          | 24496.14 | 24496.51 | 24513.57 |
+| A                 | 48967.45 | 28686.29 | 24524.29 |
+| B                 | 28915.72 | 28275.85 | 23472.29 |
+| C                 | 24496.14 | 24496.51 | 24513.57 |
 
 detailed results: [bench](bench/results)
