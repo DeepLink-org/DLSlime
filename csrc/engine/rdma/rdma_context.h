@@ -87,11 +87,15 @@ public:
         return 0;
     }
 
+
     /* RDMA Link Construction */
     int64_t connect(const json& endpoint_info_json);
 
     /* Submit an assignment */
     RDMAAssignmentSharedPtr submit(OpCode opcode, AssignmentBatch& assignment, callback_fn_t callback = nullptr);
+
+
+    RDMAAssignmentSharedPtr submit_with_imm_data(OpCode opcode, AssignmentBatch& batch, int32_t imm_data, callback_fn_t callback, callback_fn_t imm_data_callback);
 
     void launch_future();
     void stop_future();
@@ -204,6 +208,10 @@ private:
 
     /* Async RDMA Read */
     int64_t post_rc_oneside_batch(int qpi, RDMAAssignmentSharedPtr assign);
+
+    void post_write_batch(int qpi, RDMAAssignmentSharedPtr assign);
+
+    friend class RDMAEndpoint;
 
 };
 
