@@ -16,6 +16,7 @@
 
 #include "utils/logging.h"
 #include "utils/utils.h"
+#include "engine/rdma/rdma_env.h"
 
 namespace slime {
 namespace c10d {
@@ -224,12 +225,14 @@ slimeBackend::slimeBackend(const c10::intrusive_ptr<::c10d::Store>& store, int r
     // context->setTimeout(options_->timeout);
     try {
         ::gloo::transport::ibverbs::attr attr;
+
         std::vector<std::string>         available_devices = available_nic();
-        size_t                           idx               = rank_ % available_devices.size();
+        size_t                           idx               = get_env<int>("SLIME_LOCAL_RANK", 0) % available_devices.size();
         attr.name                                          = available_devices[idx];
         attr.port                                          = 1;
-        // TODO: find out index definition
-        attr.index                                         = 3;
+
+        attr.index                                         = get_gid_index(available_devices[idx]);
+        SLIME_LOG_INFO("rank: " << rank_ << ", slime rank: " << get_env<int>("SLIME_LOCAL_RANK", 0) << ", idx: " << idx << ", device: " << available_devices[idx] << ", gidx: " << attr.index << ".");
 
         auto dev = gloo::transport::ibverbs::CreateDevice(attr);
         context->connectFullMesh(connectStore, dev);
