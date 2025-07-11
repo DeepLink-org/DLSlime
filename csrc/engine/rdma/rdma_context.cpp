@@ -285,7 +285,6 @@ int64_t RDMAContext::connect(const json& endpoint_info_json)
 
         ret = ibv_modify_qp(qp, &attr, flags);
         if (ret) {
-            std::cout << "!!!!!!!!!!!!!!!!!!!************************&&&&&&&&&&&&&&" << std::endl;
             SLIME_ABORT("Failed to modify QP to RTR: reason: " << strerror(ret));
         }
 
@@ -303,7 +302,6 @@ int64_t RDMAContext::connect(const json& endpoint_info_json)
 
         ret = ibv_modify_qp(qp, &attr, flags);
         if (ret) {
-            std::cout << "!!!!!!!!!!!!!!!!!!!************************" << std::endl;
             SLIME_ABORT("Failed to modify QP to RTS");
         }
         SLIME_LOG_INFO("RDMA exchange done");
@@ -367,39 +365,39 @@ void RDMAContext::stop_future()
 
 
 
-RDMAAssignmentSharedPtr RDMAContext::submit_with_imm_data(
-    OpCode opcode, AssignmentBatch& batch, int32_t imm_data, callback_fn_t callback, callback_fn_t imm_data_callback)
-{
-    std::vector<AssignmentBatch> batch_split;
+// RDMAAssignmentSharedPtr RDMAContext::submit_with_imm_data(
+//     OpCode opcode, AssignmentBatch& batch, int32_t imm_data, callback_fn_t callback, callback_fn_t imm_data_callback)
+// {
+//     std::vector<AssignmentBatch> batch_split;
 
-    auto split = [&]() {
-        int split_step = SLIME_MAX_SEND_WR / 2;
-        for (int i = 0; i < batch.size(); i += split_step) {
-            batch_split.push_back(
-                AssignmentBatch(batch.begin() + i, std::min(batch.end(), batch.begin() + i + split_step)));
-        }
-    };
-    split();
+//     auto split = [&]() {
+//         int split_step = SLIME_MAX_SEND_WR / 2;
+//         for (int i = 0; i < batch.size(); i += split_step) {
+//             batch_split.push_back(
+//                 AssignmentBatch(batch.begin() + i, std::min(batch.end(), batch.begin() + i + split_step)));
+//         }
+//     };
+//     split();
 
-    int qpi        = select_qpi();
-    int split_size = batch_split.size();
+//     int qpi        = select_qpi();
+//     int split_size = batch_split.size();
 
-    {
-        std::unique_lock<std::mutex> lock(qp_management_[qpi]->assign_queue_mutex_);
-        RDMAAssignmentSharedPtr      rdma_assignment;
+//     {
+//         std::unique_lock<std::mutex> lock(qp_management_[qpi]->assign_queue_mutex_);
+//         RDMAAssignmentSharedPtr      rdma_assignment;
 
-        for (int i = 0; i < split_size; ++i) {
-            callback_fn_t split_callback = (i == split_size - 1 ? callback : [](int) { return 0; });
-            rdma_assignment              = std::make_shared<RDMAAssignment>(opcode, batch_split[i], split_callback);
-            qp_management_[qpi]->assign_queue_.push(rdma_assignment);
-            rdma_assignment->with_imm_data_ = true;
-            rdma_assignment->imm_data_      = imm_data;
-        }
+//         for (int i = 0; i < split_size; ++i) {
+//             callback_fn_t split_callback = (i == split_size - 1 ? callback : [](int) { return 0; });
+//             rdma_assignment              = std::make_shared<RDMAAssignment>(opcode, batch_split[i], split_callback);
+//             qp_management_[qpi]->assign_queue_.push(rdma_assignment);
+//             rdma_assignment->with_imm_data_ = true;
+//             rdma_assignment->imm_data_      = imm_data;
+//         }
 
-        qp_management_[qpi]->has_runnable_event_.notify_one();
-        return rdma_assignment;
-    }
-}
+//         qp_management_[qpi]->has_runnable_event_.notify_one();
+//         return rdma_assignment;
+//     }
+// }
 
 
 RDMAAssignmentSharedPtr RDMAContext::submit(OpCode opcode, AssignmentBatch& batch, callback_fn_t callback)
@@ -685,8 +683,11 @@ int64_t RDMAContext::cq_poll_handle()
                         reinterpret_cast<callback_info_with_qpi_t*>(wc[i].wr_id);
                     switch (OpCode wr_type = callback_with_qpi->callback_info_->opcode_) {
                         case OpCode::READ:
+
                         case OpCode::WRITE:
                         case OpCode::SEND:
+                            callback_with_qpi->callback_info_->callback_(status_code);
+                            break;
                         case OpCode::RECV:
                             callback_with_qpi->callback_info_->callback_(status_code);
                             break;
@@ -723,7 +724,8 @@ int64_t RDMAContext::wq_dispatch_handle(int qpi)
     if (comp_channel_ == NULL)
         SLIME_LOG_ERROR("comp_channel_ should be constructed");
 
-    while (!qp_management_[qpi]->stop_wq_future_) {
+    while (!qp_management_[qpi]->stop_wq_future_) 
+    {
         std::unique_lock<std::mutex> lock(qp_management_[qpi]->assign_queue_mutex_);
         qp_management_[qpi]->has_runnable_event_.wait(lock, [this, &qpi]() {
             return !(qp_management_[qpi]->assign_queue_.empty()) || qp_management_[qpi]->stop_wq_future_;

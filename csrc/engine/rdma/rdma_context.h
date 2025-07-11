@@ -82,6 +82,12 @@ public:
         return 0;
     }
 
+    int64_t unregister_memory_region(std::string mr_key)
+    {
+        memory_pool_->unregister_memory_region(mr_key);
+        return 0;
+    }
+
     int64_t reload_memory_pool() {
         memory_pool_ = std::make_unique<RDMAMemoryPool>(pd_);
         return 0;
