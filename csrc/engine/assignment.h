@@ -47,7 +47,8 @@ typedef struct Assignment {
 
     uint64_t remote_addr{};
     uint32_t remote_rkey{};
-    uint32_t slot_id;
+    uint8_t  target_rank_id;
+    uint8_t  local_rank_id;
 
 } assignment_t;
 
