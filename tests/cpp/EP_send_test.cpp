@@ -28,82 +28,80 @@ DEFINE_uint64(DURATION, 10, "duration (s)");
 
 
 int main(int argc, char** argv)
-{   
+{
 
-    auto send_ep = std::make_shared<RDMAEndpoint>();
-    //std::shared_ptr<RDMAEndpoint> send_ep = std::make_shared<RDMAEndpoint>();  
+    std::cout<<"Init the RMDA ENDPOINT OF SEND... "<<std::endl;
+    // Construct the sender
+    RDMAEndpoint sender(FLAGS_DEVICE_NAME, FLAGS_IB_PORT, FLAGS_LINK_TYPE, 16);
 
-    std::cout<<"Init... "<<std::endl;
-    send_ep->init(FLAGS_DEVICE_NAME, FLAGS_IB_PORT, FLAGS_LINK_TYPE);
-
-    const size_t buf_size = FLAGS_BATCH_SIZE * FLAGS_BLOCK_SIZE;
-    void *buf = malloc(buf_size);
-    memset(buf, 0xAA, buf_size);
-
-
-    std::cout<<"register memory region"<<std::endl;
-    send_ep->data_ctx->register_memory_region("KEY", (uintptr_t) buf, buf_size);
-
-
+    std::cout<<"RDMA QP INFO VIA TCP... "<<std::endl;
+    // RDMA control plane via TCP
     zmq::context_t zmq_ctx_data(2);
-    zmq::context_t zmq_ctx_mr(2);
+    zmq::context_t zmq_ctx_mmrg(2);
 
     zmq::socket_t  sock_data(zmq_ctx_data, ZMQ_REQ);
-    zmq::socket_t  sock_mr(zmq_ctx_mr, ZMQ_REQ);
+    zmq::socket_t  sock_mmrg(zmq_ctx_mmrg, ZMQ_REQ);
 
     sock_data.connect("tcp://" + FLAGS_PEER_ADDR + ":" + std::to_string(FLAGS_PORT_DATA));
-    sock_mr.connect("tcp://" + FLAGS_PEER_ADDR + ":" + std::to_string(FLAGS_PORT_MRCN));
+    sock_mmrg.connect("tcp://" + FLAGS_PEER_ADDR + ":" + std::to_string(FLAGS_PORT_MRCN));
+
+    zmq::message_t local_data_channel_info(sender.GetSendDataContextInfo().dump());
+    zmq::message_t local_meta_channel_info(sender.GetSendMetaContextInfo().dump());
+
+    sock_data.send(local_data_channel_info, zmq::send_flags::none);
+    sock_mmrg.send(local_meta_channel_info, zmq::send_flags::none);
+
+    // Connect the RECV side
+    std::cout << "Connect to the Rx side..." << std::endl;
+
+    zmq::message_t data_channel_info;
+    zmq::message_t meta_channel_info;
+
+    auto send_data_result = sock_data.recv(data_channel_info);
+    auto recv_data_result = sock_mmrg.recv(meta_channel_info);
 
 
-    zmq::message_t EP_DATA(send_ep->data_ctx->endpoint_info().dump());
-    zmq::message_t EP_MR(send_ep->mem_region_ctx->endpoint_info().dump());
-
-    sock_data.send(EP_DATA, zmq::send_flags::none);
-
-    zmq::message_t PEER_EP_DATA;
+    std::cout << "Connect to the Rx side..." << std::endl;
+    sender.ContextConnect(json::parse(data_channel_info.to_string()), json::parse(meta_channel_info.to_string()));
+    std::cout << "Connect Success..." << std::endl;
 
 
-    if (auto recv_result = sock_data.recv(PEER_EP_DATA); !recv_result) 
+    std::cout << "Finish the connection of QP, start to RECV... " << std::endl;
+
+    const uint32_t batch_size = 4;
+    std::vector<char> data_0(1024, 'A'); 
+    std::vector<char> data_1(1024, 'B'); 
+    std::vector<char> data_2(1024, 'C'); 
+    std::vector<char> data_3(1024, 'D'); 
+
+
+    void* ptrs[batch_size] = {data_0.data(), data_1.data(), data_2.data(), data_3.data()};
+    size_t data_sizes[batch_size] = {data_0.size(), data_1.size(), data_2.size(), data_3.size()};
+
+    sender.Launch();
+    try 
     {
-        std::cerr << "Failed to receive message: " << std::endl;
-        return -1;
+        sender.Send(ptrs, data_sizes, batch_size);
+        std::cout << "Send called successfully with batch size: " << batch_size << std::endl;
+    } 
+    catch (const std::exception& e) 
+    {
+        std::cerr << "Send failed: " << e.what() << std::endl;
+        assert(false);
     }
 
 
-    sock_mr.send(EP_MR, zmq::send_flags::none);
-    zmq::message_t PEER_EP_MR;
-    if (auto recv_result = sock_mr.recv(PEER_EP_MR); !recv_result) 
-    {
-        std::cerr << "Failed to receive message: " << std::endl;
-        return -1;
-    }
+    std::cout << "Main thread working Test..." << std::endl; 
+    std::cout << "Main thread working Test..." << std::endl;
+    std::cout << "Main thread working Test..." << std::endl;
+
+    std::cout << "Wait Send Complete..." << std::endl;
+    sender.Stop();
+    sender.WaitSend();
 
 
-    send_ep->connect(json::parse(PEER_EP_DATA.to_string()), json::parse(PEER_EP_MR.to_string()));
-
-    auto s_time = std::chrono::steady_clock::now();
-    uint64_t total = 0;
-    std::cout<<"等待发送"<<std::endl;
-    int cnt = 0;
-    //while(std::chrono::steady_clock::now() - s_time < std::chrono::seconds(FLAGS_DURATION))
-    while(cnt <= 10)
-    {
-        AssignmentBatch send_batch;
-        for (int n = 0; n < FLAGS_BATCH_SIZE; n++)
-            send_batch.push_back(Assignment("KEY", n * FLAGS_BLOCK_SIZE, n * FLAGS_BLOCK_SIZE, FLAGS_BLOCK_SIZE));
-            
-        send_ep->send(send_batch);
-        total += FLAGS_BATCH_SIZE * FLAGS_BLOCK_SIZE;
-        cnt += 1;
-    }
-
-
-    auto duration = std::chrono::duration<double>(std::chrono::steady_clock::now() - s_time).count();
-    std::cout << "吞吐量: " 
-              << total / duration / (1 << 20) << " MB/s\n";
-
-
-    free(buf);
+    std::cout << "SEND endpoint test completed." << std::endl;
 
     return 0;
+
 }

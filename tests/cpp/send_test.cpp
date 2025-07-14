@@ -28,18 +28,18 @@ DEFINE_uint64(DURATION, 10, "duration (s)");
 
 
 int main(int argc, char** argv)
-{   
+{
     // 初始化RDMA上下文(设备信息)
     RDMAContext RDMA_ctx;
     RDMA_ctx.init(FLAGS_DEVICE_NAME, FLAGS_IB_PORT, FLAGS_LINK_TYPE);
-    
+
     // 注册内存
     const size_t buf_size = FLAGS_BATCH_SIZE * FLAGS_BLOCK_SIZE;
     void *buf = malloc(buf_size);
     memset(buf, 0xAA, buf_size);
 
     RDMA_ctx.register_memory_region("KEY", (uintptr_t) buf, buf_size);
-            
+
     // 控制面连接(走TCP)
     zmq::context_t zmq_ctx(1);
     zmq::socket_t  sock(zmq_ctx, ZMQ_REQ);
@@ -62,13 +62,13 @@ int main(int argc, char** argv)
 
     auto s_time = std::chrono::steady_clock::now();
     uint64_t total = 0;
-    
+
     while(std::chrono::steady_clock::now() - s_time < std::chrono::seconds(FLAGS_DURATION))
     {
         AssignmentBatch send_batch;
         for (int n = 0; n < FLAGS_BATCH_SIZE; n++)
             send_batch.push_back(Assignment("KEY", n * FLAGS_BLOCK_SIZE, n * FLAGS_BLOCK_SIZE, FLAGS_BLOCK_SIZE));
-            
+
         auto RDMA_atx = RDMA_ctx.submit(OpCode::SEND, send_batch);
         RDMA_atx->wait();
         total += FLAGS_BATCH_SIZE * FLAGS_BLOCK_SIZE;
@@ -76,15 +76,11 @@ int main(int argc, char** argv)
 
 
     auto duration = std::chrono::duration<double>(std::chrono::steady_clock::now() - s_time).count();
-    std::cout << "吞吐量: " 
+    std::cout << "吞吐量: "
               << total / duration / (1 << 20) << " MB/s\n";
-  
+
     RDMA_ctx.stop_future();
     free(buf);
 
     return 0;
 }
-
-
-
-

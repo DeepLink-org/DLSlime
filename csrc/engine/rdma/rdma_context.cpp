@@ -415,7 +415,7 @@ RDMAAssignmentSharedPtr RDMAContext::submit(OpCode opcode, AssignmentBatch& batc
                                std::min(static_cast<size_t>(SLIME_MAX_LENGTH_PER_ASSIGNMENT), batch[i].length - j),
                                batch[i].remote_addr,
                                batch[i].remote_rkey));
-            
+
             }
         }
     };
@@ -476,7 +476,7 @@ int64_t RDMAContext::post_send_batch(int qpi, RDMAAssignmentSharedPtr assign)
         wr[i].sg_list    = &sge[i];
         wr[i].num_sge    = 1;
         wr[i].send_flags = (i == batch_size - 1) ? IBV_SEND_SIGNALED : 0;
-        //wr[i].wr.rdma.remote_addr = remote_addr + subassign.source_offset; 
+        //wr[i].wr.rdma.remote_addr = remote_addr + subassign.source_offset;
         //wr[i].wr.rdma.rkey = remote_rkey;
         wr[i].next       = (i == batch_size - 1) ? nullptr : &wr[i + 1];
     }
@@ -505,8 +505,8 @@ int64_t RDMAContext::post_recv_batch(int qpi, RDMAAssignmentSharedPtr assign)
     for (size_t i = 0; i < batch_size; ++i) {
 
         Assignment& subassign = assign->batch_[i]; //
-        
-    
+
+
         struct ibv_mr* mr = memory_pool_->get_mr(subassign.mr_key);
 
 
@@ -555,7 +555,7 @@ void RDMAContext::post_write_batch(int qpi, RDMAAssignmentSharedPtr assign)
         memset(&sge[i], 0, sizeof(ibv_sge));
         sge[i].addr   = (uint64_t)mr->addr + subassign.source_offset;
         sge[i].length = subassign.length;
-        sge[i].lkey   = mr->lkey;   
+        sge[i].lkey   = mr->lkey;
 
         wr[i].wr_id =
             (i == batch_size - 1) ? (uintptr_t)(new callback_info_with_qpi_t{assign->callback_info_, qpi}) : 0;
@@ -724,7 +724,7 @@ int64_t RDMAContext::wq_dispatch_handle(int qpi)
     if (comp_channel_ == NULL)
         SLIME_LOG_ERROR("comp_channel_ should be constructed");
 
-    while (!qp_management_[qpi]->stop_wq_future_) 
+    while (!qp_management_[qpi]->stop_wq_future_)
     {
         std::unique_lock<std::mutex> lock(qp_management_[qpi]->assign_queue_mutex_);
         qp_management_[qpi]->has_runnable_event_.wait(lock, [this, &qpi]() {

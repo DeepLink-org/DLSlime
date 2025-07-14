@@ -12,7 +12,7 @@ using namespace slime;
 
 DEFINE_string(DEVICE_NAME, "rxe_0", "RDMA device name");
 DEFINE_string(LINK_TYPE, "RoCE", "IB or RoCE");
-DEFINE_int32(IB_PORT, 1, "RDMA port number"); 
+DEFINE_int32(IB_PORT, 1, "RDMA port number");
 DEFINE_int32(PORT, 5555, "ZMQ control port");
 DEFINE_int32(BATCH_SIZE, 64, "Batch size for RDMA operations");
 DEFINE_int32(BLOCK_SIZE, 4096, "Block size in bytes");
@@ -20,10 +20,10 @@ DEFINE_int32(BLOCK_SIZE, 4096, "Block size in bytes");
 
 int main(int argc, char** argv)
 {
-     // 初始化RDMA上下文(设备信息)
+     
 
     RDMAContext RDMA_ctx;
-    RDMA_ctx.init(FLAGS_DEVICE_NAME, FLAGS_IB_PORT, FLAGS_LINK_TYPE);
+    RDMA_ctx.init(FLAGS_DEVICE_NAME, FLAGS_IB_PORT, FLAGS_LINK_TYPE, 16);
 
     // 注册内存
     const size_t buf_size = FLAGS_BATCH_SIZE * FLAGS_BLOCK_SIZE;
@@ -52,14 +52,14 @@ int main(int argc, char** argv)
     RDMA_ctx.launch_future();
     std::cout<<"开始等待接收："<<std::endl;
     while (1)
-    {   
+    {
         AssignmentBatch recv_batch;
         for (int n = 0; n < FLAGS_BATCH_SIZE; n++)
             recv_batch.push_back(Assignment("KEY", n * FLAGS_BLOCK_SIZE, n * FLAGS_BLOCK_SIZE, FLAGS_BLOCK_SIZE));
 
         auto RDMA_atx = RDMA_ctx.submit(OpCode::RECV, recv_batch);
         RDMA_atx->wait();
-        
+
         for (int n = 0; n < FLAGS_BLOCK_SIZE; n++) {
             if (((uint8_t*)buf)[n] != 0xAA) {
                 std::cout << "Data verification failed" << "\n";
@@ -67,7 +67,7 @@ int main(int argc, char** argv)
             }
         }
         std::cout<<"数据验证成功："<<std::endl;
-        memset(buf, 0, buf_size); 
+        memset(buf, 0, buf_size);
     }
     std::cout<<"结束接收："<<std::endl;
     RDMA_ctx.stop_future();
@@ -75,4 +75,3 @@ int main(int argc, char** argv)
 
     return 0;
 }
-

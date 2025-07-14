@@ -14,7 +14,7 @@
 namespace slime {
 
 class RDMABuffer {
-    
+
     static constexpr size_t MAX_BATCH = 8192;
     friend class RDMAEndpoint;
 
