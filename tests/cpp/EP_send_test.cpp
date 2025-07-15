@@ -7,10 +7,8 @@
 #include <cstdlib>
 
 
-
 using json = nlohmann::json;
 using namespace slime;
-
 
 DEFINE_string(DEVICE_NAME, "rxe_0", "device name");
 DEFINE_uint32(IB_PORT, 1, "device name");
@@ -24,7 +22,6 @@ DEFINE_uint64(BLOCK_SIZE, 4096, "block size");
 DEFINE_uint64(BATCH_SIZE, 256, "batch size");
 
 DEFINE_uint64(DURATION, 10, "duration (s)");
-
 
 
 int main(int argc, char** argv)
@@ -45,8 +42,8 @@ int main(int argc, char** argv)
     sock_data.connect("tcp://" + FLAGS_PEER_ADDR + ":" + std::to_string(FLAGS_PORT_DATA));
     sock_mmrg.connect("tcp://" + FLAGS_PEER_ADDR + ":" + std::to_string(FLAGS_PORT_MRCN));
 
-    zmq::message_t local_data_channel_info(sender.GetSendDataContextInfo().dump());
-    zmq::message_t local_meta_channel_info(sender.GetSendMetaContextInfo().dump());
+    zmq::message_t local_data_channel_info(sender.GetDataContextInfo().dump());
+    zmq::message_t local_meta_channel_info(sender.GetMetaContextInfo().dump());
 
     sock_data.send(local_data_channel_info, zmq::send_flags::none);
     sock_mmrg.send(local_meta_channel_info, zmq::send_flags::none);
@@ -60,44 +57,42 @@ int main(int argc, char** argv)
     auto send_data_result = sock_data.recv(data_channel_info);
     auto recv_data_result = sock_mmrg.recv(meta_channel_info);
 
-
     std::cout << "Connect to the Rx side..." << std::endl;
     sender.ContextConnect(json::parse(data_channel_info.to_string()), json::parse(meta_channel_info.to_string()));
     std::cout << "Connect Success..." << std::endl;
 
-
     std::cout << "Finish the connection of QP, start to RECV... " << std::endl;
 
     const uint32_t batch_size = 4;
-    std::vector<char> data_0(1024, 'A'); 
-    std::vector<char> data_1(1024, 'B'); 
-    std::vector<char> data_2(1024, 'C'); 
-    std::vector<char> data_3(1024, 'D'); 
+    std::vector<char> data_0(1024, 'A');
+    std::vector<char> data_1(1024, 'B');
+    std::vector<char> data_2(1024, 'C');
+    std::vector<char> data_3(1024, 'D');
+
+    std::vector<char*> ptrs = {data_0.data(), data_1.data(), data_2.data(), data_3.data()};
+    std::vector<size_t> data_sizes = {data_0.size(), data_1.size(), data_2.size(), data_3.size()};
 
 
-    void* ptrs[batch_size] = {data_0.data(), data_1.data(), data_2.data(), data_3.data()};
-    size_t data_sizes[batch_size] = {data_0.size(), data_1.size(), data_2.size(), data_3.size()};
-
-    sender.Launch();
-    try 
+    sender.LaunchSend(1);
+    try
     {
         sender.Send(ptrs, data_sizes, batch_size);
         std::cout << "Send called successfully with batch size: " << batch_size << std::endl;
-    } 
-    catch (const std::exception& e) 
+    }
+    catch (const std::exception& e)
     {
         std::cerr << "Send failed: " << e.what() << std::endl;
         assert(false);
     }
-
-
-    std::cout << "Main thread working Test..." << std::endl; 
     std::cout << "Main thread working Test..." << std::endl;
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
     std::cout << "Main thread working Test..." << std::endl;
-
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    std::cout << "Main thread working Test..." << std::endl;
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
     std::cout << "Wait Send Complete..." << std::endl;
     sender.Stop();
-    sender.WaitSend();
+    //sender.WaitSend();
 
 
     std::cout << "SEND endpoint test completed." << std::endl;

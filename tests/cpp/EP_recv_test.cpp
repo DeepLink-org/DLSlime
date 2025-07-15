@@ -26,7 +26,7 @@ int main(int argc, char** argv)
     std::cout<<"Init the RMDA ENDPOINT OF RECV... "<<std::endl;
     // Construct the Receiver
     RDMAEndpoint receiver(FLAGS_DEVICE_NAME, FLAGS_IB_PORT, FLAGS_LINK_TYPE, 16);
-    
+
     std::cout<<"RDMA QP INFO VIA TCP... "<<std::endl;
     // RDMA control plane via TCP
     zmq::context_t zmq_ctx_data(2);
@@ -50,8 +50,8 @@ int main(int argc, char** argv)
 
 
     std::cout << "Send the RDMA Info to Tx..." << std::endl;
-    zmq::message_t local_data_channel_info(receiver.GetRecvDataContextInfo().dump());
-    zmq::message_t local_meta_channel_info(receiver.GetRecvMetaContextInfo().dump());
+    zmq::message_t local_data_channel_info(receiver.GetDataContextInfo().dump());
+    zmq::message_t local_meta_channel_info(receiver.GetMetaContextInfo().dump());
 
     sock_data.send(local_data_channel_info, zmq::send_flags::none);
     sock_mmrg.send(local_meta_channel_info, zmq::send_flags::none);
@@ -65,32 +65,32 @@ int main(int argc, char** argv)
     std::vector<char> data_2(1024, '2');
     std::vector<char> data_3(1024, '3');
 
-    void* ptrs[batch_size] = {data_0.data(), data_1.data(), data_2.data(), data_3.data()};
-    size_t data_sizes[batch_size] = {data_0.size(), data_1.size(), data_2.size(), data_3.size()};
+    std::vector<char*> ptrs = {data_0.data(), data_1.data(), data_2.data(), data_3.data()};
+    std::vector<size_t> data_sizes = {data_0.size(), data_1.size(), data_2.size(), data_3.size()};
 
 
     std::cout<<"Launch Recv..." << std::endl;
-    receiver.Launch();
+    receiver.LaunchRecv(1);
 
-    try 
+    try
     {
         receiver.Recv(ptrs, data_sizes, batch_size);
         std::cout << "Recv called successfully with batch size: " << batch_size << std::endl;
-    } 
-    catch (const std::exception& e) 
+    }
+    catch (const std::exception& e)
     {
         std::cerr << "Recv failed: " << e.what() << std::endl;
         assert(false);
     }
     std::cout << "Wait Recv Complete..." << std::endl;
-    std::cout << "Main thread working Test..." << std::endl; 
+    std::cout << "Main thread working Test..." << std::endl;
     std::cout << "Main thread working Test..." << std::endl;
     std::cout << "Main thread working Test..." << std::endl;
     std::cout << "Main thread working Test..." << std::endl;
     std::cout << "Main thread working Test..." << std::endl;
     std::cout << "Wait Recv Complete..." << std::endl;
     receiver.Stop();
-    receiver.WaitRecv();
+    //receiver.WaitRecv();
 
 
 
@@ -104,9 +104,7 @@ int main(int argc, char** argv)
     assert(data_3_correct && "Data_3 should contain 'D'");
 
     std::cout << "RECV endpoint test completed. Data verified." << std::endl;
-   
+
     return 0;
-   
+
 }
-
-
