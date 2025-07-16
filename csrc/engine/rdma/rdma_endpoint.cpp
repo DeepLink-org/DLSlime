@@ -6,7 +6,7 @@ void RDMAEndpoint::LaunchSend(int max_threads)
 {
     SEND_RUN = true;
     for (int i = 0; i < max_threads; ++i)
-        send_futures_.push_back(std::async(std::launch::async, &RDMAEndpoint::AsyncSendData, this));
+        send_futures_.push_back(std::async(std::launch::async, &RDMAEndpoint::SyncSendData, this));
     std::cout << max_threads << "Threads of SEND are Started..." << std::endl;
 }
 
@@ -14,7 +14,7 @@ void RDMAEndpoint::LaunchRecv(int max_threads)
 {
     RECV_RUN = true;
     for (int i = 0; i < max_threads; ++i)
-        recv_futures_.push_back(std::async(std::launch::async, &RDMAEndpoint::AsyncRecvData, this));
+        recv_futures_.push_back(std::async(std::launch::async, &RDMAEndpoint::SyncRecvData, this));
     std::cout << max_threads << "Threads of RECV are Started..." << std::endl;
 }
 
@@ -67,14 +67,12 @@ void RDMAEndpoint::Stop()
     std::cout << "All SEND and RECV threads have been terminated." << std::endl;
 }
 
-void RDMAEndpoint::AsyncRecvData()
+
+
+
+void RDMAEndpoint::SyncRecvData()
 {
     while (RECV_RUN) {
-        // if(recv_buffer_->IsEmpty())
-        // {
-        //     std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        //     continue;
-        // }
 
         AssignmentBatch recv_data_batch;
         // recv_buffer_->WaitAndPop(recv_data_batch);
@@ -105,7 +103,7 @@ void RDMAEndpoint::AsyncRecvData()
         }
         {
             std::lock_guard<std::mutex> lock(meta_data_mutex);
-            auto                        meta_atx = meta_ctx_->submit(OpCode::SEND, meta_data_assignments);
+            auto meta_atx = meta_ctx_->submit(OpCode::SEND, meta_data_assignments);
             meta_atx->wait();
 
             auto data_atx = data_ctx_->submit(OpCode::RECV, recv_data_batch);
@@ -119,14 +117,9 @@ void RDMAEndpoint::AsyncRecvData()
     }
 }
 
-void RDMAEndpoint::AsyncSendData()
+void RDMAEndpoint::SyncSendData()
 {
     while (SEND_RUN) {
-        // if(send_buffer_->IsEmpty())
-        // {
-        //     std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        //     continue;
-        // }
 
         AssignmentBatch send_data_batch;
         if (!send_buffer_->WaitAndPop(send_data_batch, std::chrono::milliseconds(500)))

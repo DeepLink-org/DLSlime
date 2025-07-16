@@ -1,57 +1,97 @@
 #pragma once
-
 #include "engine/rdma/memory_pool.h"
 #include "engine/rdma/rdma_context.h"
+#include "engine/rdma/rdma_endpoint.h"
 
 #include <condition_variable>
-#include <mutex>
-#include <vector>
-#include <map>
 #include <infiniband/verbs.h>
-
+#include <map>
+#include <memory>
+#include <mutex>
+#include <queue>
+#include <stdexcept>
+#include <unordered_map>
+#include <vector>
 
 
 namespace slime {
 
+
+class RDMAEndpoint;
+
 class RDMABuffer {
 
-    static constexpr size_t MAX_BATCH = 8192;
-    friend class RDMAEndpoint;
+//
 
 public:
-    ibv_mr* mr_list;
+    // 参数RDMAEndpoint: 作为共享指针传入， 多个RDMABuffer共同使用
 
-    RDMABuffer(AssignmentBatch& batch)
+    // 单个Tensor的构造函数
+    template<typename T>
+    explicit RDMABuffer(std::shared_ptr<RDMAEndpoint> end_point, std::vector<T> &data) : end_point_(end_point), batch_size_(1)
     {
-        size_t assign_batch_size = batch_size();
-        // Copy AssignmentBatch to RDMABuffer
-        assign_batch_.reserve(assign_batch_size);
-        for (int i = 0; i < assign_batch_size; ++i) {
-            assign_batch_.emplace_back(batch[i]);
-        }
-        // Allocate MemoryRegion
-        mr_list = new ibv_mr[assign_batch_size];
-        memset(mr_list, 0, sizeof(ibv_mr) * assign_batch_size);
+        std::cout<< "Init the RDMA Buffer with only one tensor" << std::endl;
+        data_ptrs_.push_back(reinterpret_cast<uintptr_t>(data.data()));
+        data_size_.push_back(static_cast<uint32_t>(data.size() * sizeof(T)));
+
     }
+
+    // 多个Tensers(一个Batch)的构造函数
+    explicit RDMABuffer( std::shared_ptr<RDMAEndpoint> end_point,
+                std::vector<uintptr_t> &ptrs,
+                std::vector<size_t> &data_size,
+                size_t batch_size)
+    {
+
+        for(uint32_t i = 0; i < batch_size; ++i)
+        {
+            data_ptrs_.push_back(ptrs[i]);
+            data_size_.push_back(data_size[i]);
+        }
+
+        batch_size_ = batch_size;
+        end_point_  = end_point;
+    }
+
 
     ~RDMABuffer()
     {
-        delete[] mr_list;
+        std::cout << "析构函数" << std::endl;
+        data_ptrs_.clear();
+        data_size_.clear();
     }
 
-    inline size_t batch_size() const
-    {
-        return assign_batch_.size();
-    }
+    void Send();
 
-    void waitSend();
-    void waitRecv();
+    void Recv();
+
+    void WaitSend();
+
+    void WaitRecv();
+
+
 
 private:
-    AssignmentBatch assign_batch_{};
 
-    std::atomic<int64_t>    finished_;
-    std::condition_variable finished_cv_;
+    std::shared_ptr<RDMAEndpoint> end_point_;
+
+    std::vector<uintptr_t> data_ptrs_;
+    std::vector<size_t>  data_size_;
+    uint32_t batch_size_;
+
+    bool send_pending_{false};
+    bool recv_pending_{false};
+
+    bool send_completed_{false};
+    bool recv_completed_{false};
+
+    std::condition_variable send_cv_;
+    std::condition_variable recv_cv_;
+
+    std::mutex send_mutex_;
+    std::mutex recv_mutex_;
+
+
 };
 
 }
