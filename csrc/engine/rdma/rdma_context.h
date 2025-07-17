@@ -151,6 +151,9 @@ private:
 
     std::unique_ptr<RDMAMemoryPool> memory_pool_;
 
+    std::unique_ptr<RDMAAssignment> rdma_assignment_test_;
+    std::unordered_map<int, std::unique_ptr<RDMAAssignment>> rdma_assignment_m_;
+
     typedef struct qp_management {
         /* queue peer list */
         struct ibv_qp* qp_{nullptr};
@@ -161,6 +164,8 @@ private:
 
         /* Send Mutex */
         std::mutex rdma_post_send_mutex_;
+
+        std::mutex cq_temp_mutex_;
 
         /* Assignment Queue */
         std::mutex                          assign_queue_mutex_;

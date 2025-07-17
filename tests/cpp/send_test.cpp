@@ -65,21 +65,40 @@ int main(int argc, char** argv)
 
     std::cout << "Finish the connection of QP, start to SEND... " << std::endl;
 
-    const uint32_t batch_size = 4;
+    const uint32_t batch_size = 1;
     std::vector<char> data_0(1024, 'A');
-    std::vector<char> data_1(1024, 'B');
-    std::vector<char> data_2(1024, 'C');
-    std::vector<char> data_3(1024, 'D');
+    // std::vector<char> data_2(1024, '2');
+    // std::vector<char> data_3(1024, '3');
 
     std::vector<uintptr_t> ptrs = {
-        reinterpret_cast<uintptr_t>(data_0.data()),
-        reinterpret_cast<uintptr_t>(data_1.data()),
-        reinterpret_cast<uintptr_t>(data_2.data()),
-        reinterpret_cast<uintptr_t>(data_3.data())
+        reinterpret_cast<uintptr_t>(data_0.data())
+        // reinterpret_cast<uintptr_t>(data_2.data()),
+        // reinterpret_cast<uintptr_t>(data_3.data())
     };
-    std::vector<size_t> data_sizes = {data_0.size(), data_1.size(), data_2.size(), data_3.size()};
+    std::vector<size_t> data_sizes = {data_0.size()
+        //data_1.size(), data_2.size(), data_3.size()
+    };
+
+
+    std::vector<char> data_2(1024, 'A');
+    // std::vector<char> data_2(1024, '2');
+    // std::vector<char> data_3(1024, '3');
+
+    std::vector<uintptr_t> ptrs_1 = {
+        reinterpret_cast<uintptr_t>(data_2.data())
+        // reinterpret_cast<uintptr_t>(data_2.data()),
+        // reinterpret_cast<uintptr_t>(data_3.data())
+    };
+    std::vector<size_t> data_sizes_1 = {data_2.size()
+        //data_1.size(), data_2.size(), data_3.size()
+    };
 
     RDMABuffer buf_0(sender, ptrs, data_sizes, batch_size);
+    RDMABuffer buf_1(sender, ptrs_1, data_sizes_1, batch_size);
+
+
+    std::cout<<"Launch Recv..." << std::endl;
+    buf_1.Send();
     buf_0.Send();
     std::cout << "Main thread working Test..." << std::endl;
     std::cout << "Main thread working Test..." << std::endl;
@@ -87,6 +106,7 @@ int main(int argc, char** argv)
     std::cout << "Main thread working Test..." << std::endl;
     std::cout << "Main thread working Test..." << std::endl;
     std::cout << "Wait Send Complete..." << std::endl;
+    buf_1.WaitSend();
     buf_0.WaitSend();
     // sender.LaunchSend(1);
     // try

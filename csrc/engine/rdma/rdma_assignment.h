@@ -58,6 +58,7 @@ typedef struct callback_info {
         if (callback)
             callback_ = std::move(callback);
 
+        std::cout<<"callback moved!" << std::endl;
         metrics.arrive = std::chrono::steady_clock::now();
     }
 

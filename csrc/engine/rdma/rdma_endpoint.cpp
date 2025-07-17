@@ -69,13 +69,79 @@ void RDMAEndpoint::Stop()
 
 
 
+void RDMAEndpoint::AsyncSendData(RDMA_task_t &task)
+{
+
+    std::cout<<"AsyncSendDataAsyncSendDataAsyncSendDataAsyncSendData" << std::endl;
+    size_t      batch_size    = task.batch_size;
+    //std::shared_ptr<meta_data_t[]> meta_data_buf(new meta_data_t[batch_size], std::default_delete<meta_data_t[]>());
+    auto meta_data_buf = (meta_data_t *) malloc(sizeof(meta_data_t) * batch_size);
+    std::string META_KEY      = "SEND_META_" + std::to_string(task.task_id);
+    auto taskcb = task.callback;
+    auto data_callback = [&,taskcb] (int status)
+    {
+        //std::string cur_key = "SEND_KEY_" + std::to_string(slot_id);
+        //UnregisterMemRegionBatch(cur_key, batch_size);
+       std::cout<<"Send data callback" << std::endl;
+       //this->meta_ctx_->unregister_memory_region(META_KEY);
+       taskcb();
+       std::cout<<"Data has been successfully Send" << std::endl;
+    };
+
+    auto meta_callback = [meta_data_buf, batch_size, data_callback, this] (int status)
+    {
+        std::cout<<"Meta Data RECV" << std::endl;
+        uint8_t slot_id = meta_data_buf[0].mr_slot;
+        std::cout<<"Meta Data slot_id" << slot_id << std::endl;
+        auto    it      = this->send_batch_slot_.find(slot_id);
+        if (it != this->send_batch_slot_.end())
+        {
+            auto send_data = it->second;
+            for (size_t i = 0; i < batch_size; ++i)
+            {
+                send_data[i].remote_addr   = meta_data_buf[i].mr_addr;
+                send_data[i].remote_rkey   = meta_data_buf[i].mr_rkey;
+                send_data[i].length        = meta_data_buf[i].mr_size;
+                std::cout<<meta_data_buf[i].mr_addr << std::endl;
+                std::cout<<meta_data_buf[i].mr_rkey << std::endl;
+                std::cout<<meta_data_buf[i].mr_size << std::endl;
+                send_data[i].target_offset = 0;
+            }
+            std::cout<<"Meta Data has been successfully RECV" << std::endl;
+            auto data_atx = this->data_ctx_->submit(OpCode::WRITE_WITH_IMM, send_data,data_callback);
+            //data_atx->wait();
+
+        }
+        else
+        {
+            std::cout << "The data in slot " << meta_data_buf[0].mr_slot << "is not prepared" << std::endl;
+            std::cout << "There must be some bugs..." << std::endl;
+        }
+    };
+
+    {
+        std::lock_guard<std::mutex> lock(meta_data_mutex);
+        meta_ctx_->register_memory_region(
+            META_KEY, reinterpret_cast<uintptr_t>(meta_data_buf), batch_size * sizeof(meta_data_t));
+
+        AssignmentBatch meta_data(batch_size);
+        for (size_t i = 0; i < batch_size; ++i)
+        {
+            meta_data[i] = Assignment(META_KEY, 0, i * sizeof(meta_data_t),sizeof(meta_data_t));
+        }
+
+        std::cout << "Meta Data" << meta_data_buf[0].mr_addr << std::endl;
+        auto  meta_atx = meta_ctx_->submit(OpCode::RECV, meta_data, meta_callback);
+    }
+
+}
+
 
 void RDMAEndpoint::SyncRecvData()
 {
     while (RECV_RUN) {
 
         AssignmentBatch recv_data_batch;
-        // recv_buffer_->WaitAndPop(recv_data_batch);
         if (!recv_buffer_->WaitAndPop(recv_data_batch, std::chrono::milliseconds(500)))
             continue;
 
@@ -124,7 +190,6 @@ void RDMAEndpoint::SyncSendData()
         AssignmentBatch send_data_batch;
         if (!send_buffer_->WaitAndPop(send_data_batch, std::chrono::milliseconds(500)))
             continue;
-        // send_buffer_->WaitAndPop(send_data_batch);
 
         size_t      batch_size    = send_data_batch.size();
         auto        meta_data_buf = std::make_unique<meta_data_t[]>(batch_size);

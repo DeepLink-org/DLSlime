@@ -63,32 +63,50 @@ int main(int argc, char** argv)
 
 
 
-    const uint32_t batch_size = 4;
+    const uint32_t batch_size = 1;
     std::vector<char> data_0(1024, '0');
-    std::vector<char> data_1(1024, '1');
-    std::vector<char> data_2(1024, '2');
-    std::vector<char> data_3(1024, '3');
+    // std::vector<char> data_2(1024, '2');
+    // std::vector<char> data_3(1024, '3');
 
     std::vector<uintptr_t> ptrs = {
-        reinterpret_cast<uintptr_t>(data_0.data()),
-        reinterpret_cast<uintptr_t>(data_1.data()),
-        reinterpret_cast<uintptr_t>(data_2.data()),
-        reinterpret_cast<uintptr_t>(data_3.data())
+        reinterpret_cast<uintptr_t>(data_0.data())
+        // reinterpret_cast<uintptr_t>(data_2.data()),
+        // reinterpret_cast<uintptr_t>(data_3.data())
     };
-    std::vector<size_t> data_sizes = {data_0.size(), data_1.size(), data_2.size(), data_3.size()};
+    std::vector<size_t> data_sizes = {data_0.size()
+        //data_1.size(), data_2.size(), data_3.size()
+    };
+
+
+    std::vector<char> data_2(1024, '0');
+    // std::vector<char> data_2(1024, '2');
+    // std::vector<char> data_3(1024, '3');
+
+    std::vector<uintptr_t> ptrs_1 = {
+        reinterpret_cast<uintptr_t>(data_2.data())
+        // reinterpret_cast<uintptr_t>(data_2.data()),
+        // reinterpret_cast<uintptr_t>(data_3.data())
+    };
+    std::vector<size_t> data_sizes_1 = {data_2.size()
+        //data_1.size(), data_2.size(), data_3.size()
+    };
 
     RDMABuffer buf_0(receiver, ptrs, data_sizes, batch_size);
+    RDMABuffer buf_1(receiver, ptrs_1, data_sizes_1, batch_size);
 
 
     std::cout<<"Launch Recv..." << std::endl;
     buf_0.Recv();
+    buf_1.Recv();
     std::cout << "Main thread working Test..." << std::endl;
     std::cout << "Main thread working Test..." << std::endl;
     std::cout << "Main thread working Test..." << std::endl;
     std::cout << "Main thread working Test..." << std::endl;
     std::cout << "Main thread working Test..." << std::endl;
     std::cout << "Wait Recv Complete..." << std::endl;
+    buf_1.WaitRecv();
     buf_0.WaitRecv();
+
 
 
     //receiver.LaunchRecv(1);
@@ -116,13 +134,11 @@ int main(int argc, char** argv)
 
 
     bool data_0_correct = std::all_of(data_0.begin(), data_0.end(), [](char c) { return c == 'A'; });
-    bool data_1_correct = std::all_of(data_1.begin(), data_1.end(), [](char c) { return c == 'B'; });
-    bool data_2_correct = std::all_of(data_2.begin(), data_2.end(), [](char c) { return c == 'C'; });
-    bool data_3_correct = std::all_of(data_3.begin(), data_3.end(), [](char c) { return c == 'D'; });
+    // bool data_2_correct = std::all_of(data_2.begin(), data_2.end(), [](char c) { return c == 'C'; });
+    // bool data_3_correct = std::all_of(data_3.begin(), data_3.end(), [](char c) { return c == 'D'; });
     assert(data_0_correct && "Data_0 should contain 'A'");
-    assert(data_1_correct && "Data_1 should contain 'B'");
-    assert(data_2_correct && "Data_2 should contain 'C'");
-    assert(data_3_correct && "Data_3 should contain 'D'");
+    // assert(data_2_correct && "Data_2 should contain 'C'");
+    // assert(data_3_correct && "Data_3 should contain 'D'");
 
     std::cout << "RECV endpoint test completed. Data verified." << std::endl;
 

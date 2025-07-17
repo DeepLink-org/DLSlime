@@ -9,6 +9,7 @@
 #include <iostream>
 #include <string>
 #include <tuple>
+#include <cstddef>
 #include <unordered_map>
 
 namespace slime {

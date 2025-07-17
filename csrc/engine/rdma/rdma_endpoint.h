@@ -14,6 +14,8 @@
 
 namespace slime {
 
+constexpr uint8_t batch_sizezzzz = 64;
+
 using callback_t = std::function<void()>;
 
 typedef struct meta_data {
@@ -178,6 +180,7 @@ public:
     ~RDMAEndpoint()
     {
         // 析构所有对象
+        std::cout << "RDMAEndpoint destroyed! this=" << this << std::endl;
 
         {
             std::unique_lock<std::mutex> lock(RDMA_tasks_mutex_);
@@ -437,7 +440,7 @@ private:
 
     void AsyncRecvData(RDMA_task_t &task)
     {
-        std::cout<<"AsyncRecvData"<< std::endl;
+        std::cout<<"Start AsyncRecvData at slot" << task.task_id << std::endl;
         size_t      batch_size    = task.batch_size;
         //auto        meta_data_buf = std::make_shared<meta_data_t[]>(batch_size);
         auto meta_data_buf = std::shared_ptr<meta_data_t[]>(new meta_data_t[batch_size], std::default_delete<meta_data_t[]>());
@@ -445,24 +448,39 @@ private:
         std::string META_KEY      = "RECV_META_" + std::to_string(slot_id);
         auto it = recv_batch_slot_.find(slot_id);
         if (it != recv_batch_slot_.end())
-        {
-            auto  recv_data = it->second;
 
-            auto data_callback = [this, slot_id, batch_size, task] (int status)
+        {   auto recv_data_t = it->second;
+            auto taskcb = task.callback;
+            auto data_callback = [&,taskcb] (int status)
             {
+                std::cout<< "Start data callback" << std::endl;
                 std::string cur_key  = "RECV_KEY_" + std::to_string(slot_id);
                 std::string META_KEY = "RECV_META_" + std::to_string(slot_id);
-                UnregisterMemRegionBatch(cur_key, batch_size);
-                meta_ctx_->unregister_memory_region(META_KEY);
+                //UnregisterMemRegionBatch(cur_key, batch_size);
+                //this->meta_ctx_->unregister_memory_region(META_KEY);
                 std::cout << "The slot_id: " << slot_id << "has been successfully received" << std::endl;
-                task.callback();
+                taskcb();
             };
 
-            auto meta_callback = [&] (int status)
+            auto meta_callback = [this, batch_size, meta_data_buf,  slot_id, data_callback] (int status)
             {
                 //if (status != 0) return;
+
                 std::cout<< "The meta data has been transmitted, post the recv..." << std::endl;
-                auto data_atx = data_ctx_->submit(OpCode::RECV, recv_data, data_callback);
+                for (size_t i = 0; i < batch_size; ++i)
+                {
+                    std::cout<<meta_data_buf[i].mr_addr << std::endl;
+                    std::cout<<meta_data_buf[i].mr_rkey << std::endl;
+                    std::cout<<meta_data_buf[i].mr_size << std::endl;
+                }
+
+                auto    it      = this->recv_batch_slot_.find(slot_id);
+                if (it != this->send_batch_slot_.end())
+                {
+                    auto recv_data = it->second;
+                    auto data_atx = this->data_ctx_->submit(OpCode::RECV, recv_data, data_callback);
+                }
+                std::cout<< "FFFFFFFFFFFFFFFFFFFFFFFFFFFf." << std::endl;
 
             };
 
@@ -471,10 +489,10 @@ private:
                 for (size_t i = 0; i < batch_size; ++i)
                 {
                     meta_data_buf[i].mr_addr =
-                        reinterpret_cast<uint64_t>(data_ctx_->memory_pool_->get_mr(recv_data[i].mr_key)->addr);
-                    meta_data_buf[i].mr_rkey = data_ctx_->memory_pool_->get_mr(recv_data[i].mr_key)->rkey;
-                    meta_data_buf[i].mr_size = data_ctx_->memory_pool_->get_mr(recv_data[i].mr_key)->length;
-                    meta_data_buf[i].mr_slot = recv_data[i].slot_id;
+                        reinterpret_cast<uint64_t>(data_ctx_->memory_pool_->get_mr(recv_data_t[i].mr_key)->addr);
+                    meta_data_buf[i].mr_rkey = data_ctx_->memory_pool_->get_mr(recv_data_t[i].mr_key)->rkey;
+                    meta_data_buf[i].mr_size = data_ctx_->memory_pool_->get_mr(recv_data_t[i].mr_key)->length;
+                    meta_data_buf[i].mr_slot = recv_data_t[i].slot_id;
                 }
 
                 meta_ctx_->register_memory_region(
@@ -485,7 +503,6 @@ private:
                 {
                     meta_data[i] = Assignment(META_KEY, 0, i * sizeof(meta_data_t), sizeof(meta_data_t));
                 }
-                std::cout<<"STSSSSSSSSSSSSSSS"<< std::endl;
                 auto meta_atx = meta_ctx_->submit(OpCode::SEND, meta_data, meta_callback);
             }
 
@@ -501,80 +518,7 @@ private:
     }
 
 
-    void AsyncSendData(RDMA_task_t &task)
-    {
-         std::cout << "AsyncSendData" << std::endl;
-        size_t      batch_size    = task.batch_size;
-        std::cout<<"batch_size: " << batch_size << std::endl;
-        //auto        meta_data_buf = std::make_shared<meta_data_t[]>(batch_size);
-        // auto meta_data_buf = std::shared_ptr<meta_data_t[]>(new meta_data_t[batch_size], std::default_delete<meta_data_t[]>());
-        auto meta_data_buf = (meta_data_t*)malloc(sizeof(meta_data_t) * batch_size);
-        std::cout << meta_data_buf[0].mr_slot << std::endl;
-        std::string META_KEY      = "SEND_META_" + std::to_string(task.task_id);
-
-        std::cout << "SEND_META_" << std::endl;
-
-        auto data_callback = [this, META_KEY, batch_size, task] (int status)
-        {
-            //std::string cur_key = "SEND_KEY_" + std::to_string(slot_id);
-            //UnregisterMemRegionBatch(cur_key, batch_size);
-            meta_ctx_->unregister_memory_region(META_KEY);
-            task.callback();
-            std::cout<<"Data has been successfully Send" << std::endl;
-        };
-
-        auto meta_callback = [&] (int status) mutable
-        {
-            std::cout << "submit SSSSSS" << std::endl;
-            std::cout << "submit SSSSSSsubmit SSSSSSsubmit SSSSSSsubmit SSSSSS"<< std::endl;
-            //if (status != 0) return;
-            uint8_t slot_id = 1;
-            std::cout << "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBB" << &send_batch_slot_ << std::endl;
-            auto    it      = this->send_batch_slot_.find(0);
-            // std::cout << meta_data_buf[0].mr_slot << std::endl;
-            // if (it != send_batch_slot_.end())
-            // {
-            //     std::cout << "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" << std::endl;
-            //     std::cout << meta_data_buf[0].mr_addr<< std::endl;
-            //     auto send_data = it->second;
-            //     for (size_t i = 0; i < batch_size; ++i)
-            //     {
-            //         send_data[i].remote_addr   = meta_data_buf[i].mr_addr;
-            //         send_data[i].remote_rkey   = meta_data_buf[i].mr_rkey;
-            //         send_data[i].length        = meta_data_buf[i].mr_size;
-            //         send_data[i].target_offset = 0;
-            //     }
-            //      std::cout << "submit SSSSSS" << std::endl;
-            //      std::cout << send_data[0].remote_addr << std::endl;
-            //     auto data_atx = data_ctx_->submit(OpCode::WRITE_WITH_IMM, send_data, data_callback);
-
-            // }
-            // else
-            // {
-            //     std::cout << "The data in slot " << meta_data_buf[0].mr_slot << "is not prepared" << std::endl;
-            //     std::cout << "There must be some bugs..." << std::endl;
-            // }
-        };
-
-
-        {
-            std::lock_guard<std::mutex> lock(meta_data_mutex);
-            std::cout << META_KEY << std::endl;
-            //std::cout << reinterpret_cast<uintptr_t>(meta_data_buf.get()) << std::endl;
-            meta_ctx_->register_memory_region(
-                META_KEY, reinterpret_cast<uintptr_t>(meta_data_buf), batch_size * sizeof(meta_data_t));
-
-            AssignmentBatch meta_data(batch_size);
-            for (size_t i = 0; i < batch_size; ++i)
-            {
-                meta_data[i] = Assignment(META_KEY, 0, i * sizeof(meta_data_t), sizeof(meta_data_t));
-            }
-            std::cout << "submit metaCCCCCCCCCCcc" << std::endl;
-            auto  meta_atx = meta_ctx_->submit(OpCode::RECV, meta_data, meta_callback);
-            std::cout << "submit meta" << std::endl;
-        }
-
-    }
+    void AsyncSendData(RDMA_task_t &task);
 
     void SyncRecvData();
     void SyncSendData();
