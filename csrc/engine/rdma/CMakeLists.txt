@@ -5,6 +5,8 @@ add_library(
     rdma_assignment.cpp
     rdma_context.cpp
     rdma_scheduler.cpp
+    rdma_endpoint.cpp
+    rdma_buffer.cpp
 )
 
 target_link_libraries(_slime_rdma PUBLIC _slime_engine _slime_utils)

@@ -82,16 +82,26 @@ public:
         return 0;
     }
 
+    int64_t unregister_memory_region(std::string mr_key)
+    {
+        memory_pool_->unregister_memory_region(mr_key);
+        return 0;
+    }
+
     int64_t reload_memory_pool() {
         memory_pool_ = std::make_unique<RDMAMemoryPool>(pd_);
         return 0;
     }
+
 
     /* RDMA Link Construction */
     int64_t connect(const json& endpoint_info_json);
 
     /* Submit an assignment */
     RDMAAssignmentSharedPtr submit(OpCode opcode, AssignmentBatch& assignment, callback_fn_t callback = nullptr);
+
+
+    RDMAAssignmentSharedPtr submit_with_imm_data(OpCode opcode, AssignmentBatch& batch, int32_t imm_data, callback_fn_t callback, callback_fn_t imm_data_callback);
 
     void launch_future();
     void stop_future();
@@ -141,6 +151,9 @@ private:
 
     std::unique_ptr<RDMAMemoryPool> memory_pool_;
 
+    std::unique_ptr<RDMAAssignment> rdma_assignment_test_;
+    std::unordered_map<int, std::unique_ptr<RDMAAssignment>> rdma_assignment_m_;
+
     typedef struct qp_management {
         /* queue peer list */
         struct ibv_qp* qp_{nullptr};
@@ -151,6 +164,8 @@ private:
 
         /* Send Mutex */
         std::mutex rdma_post_send_mutex_;
+
+        std::mutex cq_temp_mutex_;
 
         /* Assignment Queue */
         std::mutex                          assign_queue_mutex_;
@@ -204,6 +219,10 @@ private:
 
     /* Async RDMA Read */
     int64_t post_rc_oneside_batch(int qpi, RDMAAssignmentSharedPtr assign);
+
+    void post_write_batch(int qpi, RDMAAssignmentSharedPtr assign);
+
+    friend class RDMAEndpoint;
 
 };
 

@@ -35,7 +35,9 @@ const std::chrono::milliseconds kNoTimeout = std::chrono::milliseconds::zero();
 static const std::map<OpCode, ibv_wr_opcode> ASSIGN_OP_2_IBV_WR_OP = {
     {OpCode::READ, ibv_wr_opcode::IBV_WR_RDMA_READ},
     {OpCode::WRITE, ibv_wr_opcode::IBV_WR_RDMA_WRITE},
-    {OpCode::SEND, ibv_wr_opcode::IBV_WR_SEND}
+    {OpCode::SEND, ibv_wr_opcode::IBV_WR_SEND},
+    {OpCode::SEND_WITH_IMM, ibv_wr_opcode::IBV_WR_SEND_WITH_IMM},
+    {OpCode::WRITE_WITH_IMM, ibv_wr_opcode::IBV_WR_RDMA_WRITE_WITH_IMM},
 };
 
 typedef struct RDMAMetrics {
@@ -56,6 +58,7 @@ typedef struct callback_info {
         if (callback)
             callback_ = std::move(callback);
 
+        std::cout<<"callback moved!" << std::endl;
         metrics.arrive = std::chrono::steady_clock::now();
     }
 
@@ -117,11 +120,19 @@ public:
 
     json dump() const;
 
+
+    uint64_t remote_addr{};
+    uint32_t remote_rkey{};
+
 private:
     OpCode opcode_;
 
     Assignment* batch_{nullptr};
     size_t      batch_size_;
+
+
+    int32_t imm_data_{0};
+    bool    with_imm_data_{false};
 
     callback_info_t* callback_info_;
 };
