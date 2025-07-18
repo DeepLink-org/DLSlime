@@ -9,13 +9,10 @@ slime_option(BUILD_NVLINK       "Build NVLINK"                     OFF)
 slime_option(BUILD_BENCH        "Build transfer engine benchmark"  OFF)
 slime_option(BUILD_EXAMPLE      "Build example"                    OFF)
 slime_option(BUILD_PYTHON       "Build python wrapper"             OFF)
-slime_option(BUILD_TEST         "Build test"                        ON)
+slime_option(BUILD_TEST         "Build test"                       OFF)
 slime_option(BUILD_TORCH_PLUGIN "Build torch plugin"               OFF)
 
 set(CMAKE_CXX_STANDARD 17)
-# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O0")  # -g 生成调试信息，-O0 禁用优化
-# set(CMAKE_BUILD_TYPE Debug)  # 显式设置为 Debug 模式
-
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
@@ -32,6 +29,7 @@ endif()
 
 if (BUILD_PYTHON)
     set(DLSLIME_INSTALL_PATH "${SKBUILD_PROJECT_NAME}")
+
 else()
     set(DLSLIME_INSTALL_PATH "lib")
 endif()

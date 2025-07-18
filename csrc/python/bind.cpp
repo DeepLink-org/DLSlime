@@ -76,15 +76,15 @@ PYBIND11_MODULE(_slime_c, m)
         .def("stop_future", &slime::RDMAContext::stop_future)
         .def("submit", &slime::RDMAContext::submit, py::call_guard<py::gil_scoped_release>());
 
-    py::class_<slime::RDMAEndpoint>(m, "rdma_endpoint")
+    py::class_<slime::RDMAEndpoint, std::shared_ptr<slime::RDMAEndpoint>>(m, "rdma_endpoint")
         .def(py::init<const std::string&, uint8_t, const std::string&, size_t>())
         .def("context_connect", &slime::RDMAEndpoint::ContextConnect)
         .def("get_data_context_info", &slime::RDMAEndpoint::GetDataContextInfo)
         .def("get_meta_context_info", &slime::RDMAEndpoint::GetMetaContextInfo);
 
     py::class_<slime::RDMABuffer>(m, "rdma_buffer")
-        .def(py::init<std::shared_ptr<slime::RDMAEndpoint>, std::vector<uintptr_t>&,
-                      std::vector<size_t>&, size_t>())
+        .def(py::init<std::shared_ptr<slime::RDMAEndpoint>, std::vector<uintptr_t>,
+                      std::vector<size_t>, size_t>())
         .def("send", &slime::RDMABuffer::Send)
         .def("recv", &slime::RDMABuffer::Recv)
         .def("wait_send", &slime::RDMABuffer::WaitSend)

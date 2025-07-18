@@ -1,84 +1,81 @@
 import argparse
-# import ctypes
 import json
 import time
 
-import _slime_c
-import numpy as np
+import torch
 import zmq
+
+from dlslime import _slime_c
 
 
 def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--device', default='rxe_0', help='RDMA device name')
-    parser.add_argument('--ib-port', type=int, default=1, help='IB port number')
-    parser.add_argument('--link-type', default='RoCE', choices=['IB', 'RoCE'])
-    parser.add_argument('--peer-addr', default='192.168.254.128', help='Peer IP address')
-    parser.add_argument('--port-data', type=int, default=5557, help='Data plane port')
-    parser.add_argument('--port-meta', type=int, default=5558, help='Metadata port')
-    parser.add_argument('--block-size', type=int, default=4096, help='Block size')
-    parser.add_argument('--batch-size', type=int, default=256, help='Batch size')
-    parser.add_argument('--duration', type=int, default=10, help='Test duration (seconds)')
+    parser = argparse.ArgumentParser(description='RDMA Python SEND Test')
+    parser.add_argument('--device', type=str, default='rxe_0', help='RDMA device name')
+    parser.add_argument('--ib_port', type=int, default=1, help='RDMA port number')
+    parser.add_argument('--link_type', type=str, default='RoCE', help='IB or RoCE')
+    parser.add_argument('--port_data', type=int, default=5557, help='ZMQ data port')
+    parser.add_argument('--port_mrcn', type=int, default=5558, help='ZMQ metadata port')
     return parser.parse_args()
 
 
 def main():
+
     args = parse_args()
 
-    print('Initializing RDMA sender endpoint...')
-    sender = _slime_c.rdma_endpoint(args.device, args.ib_port, args.link_type, 16)
+    print('Init the RDMA ENDPOINT OF SEND...')
+    end_point = _slime_c.rdma_endpoint(args.device, args.ib_port, args.link_type, 16)
 
     print('Establishing control plane via ZMQ...')
-    zmq_ctx = zmq.Context()
-    sock_data = zmq_ctx.socket(zmq.REQ)
-    sock_meta = zmq_ctx.socket(zmq.REQ)
 
-    sock_data.connect(f'tcp://{args.peer_addr}:{args.port_data}')
-    sock_meta.connect(f'tcp://{args.peer_addr}:{args.port_meta}')
+    zmq_ctx_data = zmq.Context()
+    zmq_ctx_mmrg = zmq.Context()
+    sock_data = zmq_ctx_data.socket(zmq.REP)
+    sock_mmrg = zmq_ctx_mmrg.socket(zmq.REP)
 
-    sock_data.send_string(json.dumps(sender.get_data_context_info()))
-    sock_meta.send_string(json.dumps(sender.get_meta_context_info()))
+    sock_data.bind(f'tcp://*:{args.port_data}')
+    sock_mmrg.bind(f'tcp://*:{args.port_mrcn}')
 
-    print('Connecting to receiver side...')
-    data_info = json.loads(sock_data.recv_string())
-    meta_info = json.loads(sock_meta.recv_string())
+    print('Receive the RDMA Info to other side...')
+    data_channel_info = sock_data.recv_string()
+    mmrg_channel_info = sock_mmrg.recv_string()
 
-    sender.context_connect(data_info, meta_info)
-    print('Connection established successfully')
+    sock_data.send_string(json.dumps(end_point.get_data_context_info()))
+    sock_mmrg.send_string(json.dumps(end_point.get_meta_context_info()))
 
-    batch_size = 4
-    buffers = [
-        np.full(1024, ord('A'), dtype=np.uint8),
-        np.full(1024, ord('B'), dtype=np.uint8),
-        np.full(1024, ord('C'), dtype=np.uint8),
-        np.full(1024, ord('D'), dtype=np.uint8)
+    end_point.context_connect(json.loads(data_channel_info), json.loads(mmrg_channel_info))
+    print('Endpoint Connection established successfully')
+    print('Finish the connection of QP, start to SEND of buf_0 and buf_1...')
+
+    batch_size_buf_0 = 1
+    data_buf_0 = torch.full((1024, ), ord('0'), dtype=torch.uint8)
+    ptrs_buf_0 = [data_buf_0.data_ptr()]
+    data_sizes_buf_0 = [data_buf_0.numel() * data_buf_0.element_size()]
+
+    batch_size_buf_1 = 2
+    data_buf_1_0 = torch.full((1024, ), ord('1'), dtype=torch.uint8)
+    data_buf_1_1 = torch.full((2048, ), ord('2'), dtype=torch.uint8)
+    ptrs_buf_1 = [data_buf_1_0.data_ptr(), data_buf_1_1.data_ptr()]
+    data_sizes_buf_1 = [
+        data_buf_1_0.numel() * data_buf_1_0.element_size(),
+        data_buf_1_1.numel() * data_buf_1_1.element_size()
     ]
 
-    ptrs = [buf.ctypes.data for buf in buffers]
-    sizes = [buf.nbytes for buf in buffers]
+    buf_0 = _slime_c.rdma_buffer(end_point, ptrs_buf_0, data_sizes_buf_0, batch_size_buf_0)
+    buf_1 = _slime_c.rdma_buffer(end_point, ptrs_buf_1, data_sizes_buf_1, batch_size_buf_1)
 
-    print('Starting send operations...')
-    sender.launch_send(1)
+    buf_0.send()
+    buf_1.send()
 
-    try:
-        sender.send(ptrs, sizes, batch_size)
-        print(f'Successfully sent batch of size {batch_size}')
-    except Exception as e:
-        print(f'Send failed: {str(e)}')
-        raise
+    for _ in range(5):
+        print('Main thread working Test...')
+        time.sleep(0.2)
 
-    print('Main thread alive...')
-    time.sleep(0.2)
-    print('Main thread alive...')
-    time.sleep(0.2)
-    print('Main thread alive...')
-    time.sleep(0.2)
-    print('Main thread alive...')
-    time.sleep(0.2)
+    print('Wait SEND Complete...')
+    buf_0.wait_send()
+    buf_1.wait_send()
 
-    print('Stopping sender...')
-    sender.stop()
-    print('Sender test completed')
+    print('The SEND test completed.')
+    return 0
 
 
 if __name__ == '__main__':

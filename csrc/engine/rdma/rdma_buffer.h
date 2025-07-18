@@ -35,8 +35,8 @@ public:
     // }
 
     explicit RDMABuffer( std::shared_ptr<RDMAEndpoint> end_point,
-                std::vector<uintptr_t> &ptrs,
-                std::vector<size_t> &data_size,
+                std::vector<uintptr_t> ptrs,
+                std::vector<size_t> data_size,
                 size_t batch_size)
     {
 

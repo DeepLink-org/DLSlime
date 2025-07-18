@@ -588,8 +588,11 @@ int64_t RDMAContext::post_rc_oneside_batch(int qpi, RDMAAssignmentSharedPtr assi
         sge[i].addr   = (uint64_t)mr->addr + subassign.source_offset;
         sge[i].length = subassign.length;
         sge[i].lkey   = mr->lkey;
+        //wr[i].wr_id =
+        //    (i == batch_size - 1) ? (uintptr_t)(new callback_info_with_qpi_t{assign->callback_info_, qpi}) : 0;
+        // check the life cycle, the callback need to "new" another callback_info_t to use in cq polling
         wr[i].wr_id =
-            (i == batch_size - 1) ? (uintptr_t)(new callback_info_with_qpi_t{assign->callback_info_, qpi}) : 0;
+            (i == batch_size - 1) ? (uintptr_t)(new callback_info_with_qpi_t{new callback_info_t(assign->callback_info_->opcode_,assign->callback_info_->batch_size_, assign->callback_info_->callback_), qpi}) : 0;
         wr[i].opcode              = ASSIGN_OP_2_IBV_WR_OP.at(assign->opcode_);
         wr[i].sg_list             = &sge[i];
         wr[i].num_sge             = 1;
