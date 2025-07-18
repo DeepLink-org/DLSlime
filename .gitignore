@@ -6,6 +6,16 @@ __pycache__/
 # C extensions
 *.so
 
+
+# CMake 相关
+build/
+CMakeCache.txt
+CMakeFiles/
+*.cmake
+Makefile
+
+
+
 # Distribution / packaging
 .Python
 build/
