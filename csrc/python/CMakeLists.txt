@@ -26,14 +26,14 @@ set_target_properties(
     INSTALL_RPATH "\${ORIGIN}"
 )
 
-include(GNUInstallDirs)
-install(
-    TARGETS _slime_c
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}/python${Python3_VERSION_MAJOR}.${Python3_VERSION_MINOR}/site-packages
-)
-
+# include(GNUInstallDirs)
 # install(
-#     TARGETS
-#     _slime_c
-#     LIBRARY DESTINATION ${DLSLIME_INSTALL_PATH}
+#     TARGETS _slime_c
+#     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}/python${Python3_VERSION_MAJOR}.${Python3_VERSION_MINOR}/site-packages
 # )
+
+install(
+    TARGETS
+    _slime_c
+    LIBRARY DESTINATION ${DLSLIME_INSTALL_PATH}
+)

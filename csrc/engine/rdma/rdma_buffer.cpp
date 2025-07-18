@@ -41,7 +41,7 @@ namespace slime {
         // waiting for the send complete...
         send_cv_.wait(lock, [this] (){ return send_completed_;});
         send_pending_ = false;
-        std::cout<<"complete to send the data" << std::endl;
+        //std::cout<<"complete to send the data" << std::endl;
 
     }
 
@@ -55,7 +55,7 @@ namespace slime {
         // waiting for the recv complete...
         recv_cv_.wait(lock, [this] (){ return recv_completed_;});
         recv_pending_ = false;
-        std::cout<<"complete to recv the data" << std::endl;
+        //std::cout<<"complete to recv the data" << std::endl;
     }
 
 

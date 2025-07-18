@@ -24,19 +24,16 @@ class RDMABuffer {
 //
 
 public:
-    // 参数RDMAEndpoint: 作为共享指针传入， 多个RDMABuffer共同使用
 
-    // 单个Tensor的构造函数
-    template<typename T>
-    explicit RDMABuffer(std::shared_ptr<RDMAEndpoint> end_point, std::vector<T> &data) : end_point_(end_point), batch_size_(1)
-    {
-        std::cout<< "Init the RDMA Buffer with only one tensor" << std::endl;
-        data_ptrs_.push_back(reinterpret_cast<uintptr_t>(data.data()));
-        data_size_.push_back(static_cast<uint32_t>(data.size() * sizeof(T)));
+    // template<typename T>
+    // explicit RDMABuffer(std::shared_ptr<RDMAEndpoint> end_point, std::vector<T> &data) : end_point_(end_point), batch_size_(1)
+    // {
+    //     std::cout<< "Init the RDMA Buffer with only one tensor" << std::endl;
+    //     data_ptrs_.push_back(reinterpret_cast<uintptr_t>(data.data()));
+    //     data_size_.push_back(static_cast<uint32_t>(data.size() * sizeof(T)));
 
-    }
+    // }
 
-    // 多个Tensers(一个Batch)的构造函数
     explicit RDMABuffer( std::shared_ptr<RDMAEndpoint> end_point,
                 std::vector<uintptr_t> &ptrs,
                 std::vector<size_t> &data_size,
@@ -53,13 +50,7 @@ public:
         end_point_  = end_point;
     }
 
-
-    ~RDMABuffer()
-    {
-        std::cout << "析构函数" << std::endl;
-        data_ptrs_.clear();
-        data_size_.clear();
-    }
+    ~RDMABuffer() = default;
 
     void Send();
 
@@ -68,8 +59,6 @@ public:
     void WaitSend();
 
     void WaitRecv();
-
-
 
 private:
 
