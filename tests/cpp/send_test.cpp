@@ -97,17 +97,17 @@ int main(int argc, char** argv)
     RDMABuffer buf_1(sender, ptrs_1, data_sizes_1, batch_size);
 
 
-    std::cout<<"Launch Recv..." << std::endl;
-    buf_1.Send();
-    buf_0.Send();
+    std::cout<<"Launch ENDPOINT A..." << std::endl;
+    buf_0.Recv();
+    buf_1.Recv();
     std::cout << "Main thread working Test..." << std::endl;
     std::cout << "Main thread working Test..." << std::endl;
     std::cout << "Main thread working Test..." << std::endl;
     std::cout << "Main thread working Test..." << std::endl;
     std::cout << "Main thread working Test..." << std::endl;
     std::cout << "Wait Send Complete..." << std::endl;
-    buf_1.WaitSend();
-    buf_0.WaitSend();
+    buf_0.WaitRecv();
+    buf_1.WaitRecv();
     // sender.LaunchSend(1);
     // try
     // {

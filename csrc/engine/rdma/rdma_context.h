@@ -151,8 +151,9 @@ private:
 
     std::unique_ptr<RDMAMemoryPool> memory_pool_;
 
-    std::unique_ptr<RDMAAssignment> rdma_assignment_test_;
-    std::unordered_map<int, std::unique_ptr<RDMAAssignment>> rdma_assignment_m_;
+    std::shared_ptr<RDMAAssignment> rdma_assignment_test_;
+    std::unordered_map<uint64_t, std::shared_ptr<RDMAAssignment>> rdma_assignment_m_;
+    std::unordered_map<uint8_t, std::deque<std::shared_ptr<RDMAAssignment>>> rdma_assignment_d_temp_;
 
     typedef struct qp_management {
         /* queue peer list */

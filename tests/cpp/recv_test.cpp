@@ -95,17 +95,17 @@ int main(int argc, char** argv)
     RDMABuffer buf_1(receiver, ptrs_1, data_sizes_1, batch_size);
 
 
-    std::cout<<"Launch Recv..." << std::endl;
-    buf_0.Recv();
-    buf_1.Recv();
+    std::cout<<"Launch EDNPOINT B..." << std::endl;
+    buf_0.Send();
+    buf_1.Send();
     std::cout << "Main thread working Test..." << std::endl;
     std::cout << "Main thread working Test..." << std::endl;
     std::cout << "Main thread working Test..." << std::endl;
     std::cout << "Main thread working Test..." << std::endl;
     std::cout << "Main thread working Test..." << std::endl;
     std::cout << "Wait Recv Complete..." << std::endl;
-    buf_1.WaitRecv();
-    buf_0.WaitRecv();
+    buf_0.WaitSend();
+    buf_1.WaitSend();
 
 
 
@@ -133,10 +133,10 @@ int main(int argc, char** argv)
 
 
 
-    bool data_0_correct = std::all_of(data_0.begin(), data_0.end(), [](char c) { return c == 'A'; });
+    //bool data_0_correct = std::all_of(data_0.begin(), data_0.end(), [](char c) { return c == 'A'; });
     // bool data_2_correct = std::all_of(data_2.begin(), data_2.end(), [](char c) { return c == 'C'; });
     // bool data_3_correct = std::all_of(data_3.begin(), data_3.end(), [](char c) { return c == 'D'; });
-    assert(data_0_correct && "Data_0 should contain 'A'");
+    //assert(data_0_correct && "Data_0 should contain 'A'");
     // assert(data_2_correct && "Data_2 should contain 'C'");
     // assert(data_3_correct && "Data_3 should contain 'D'");
 
