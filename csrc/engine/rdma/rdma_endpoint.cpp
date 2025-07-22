@@ -34,6 +34,11 @@ void RDMAEndpoint::UnregisterDataMemRegionBatch(std::string str, uint32_t batch_
     }
 }
 
+void RDMAEndpoint::RegisterRemoteMemoryRegion(std::string mr_key, uintptr_t addr, size_t length, uint32_t rkey)
+{
+    data_ctx_->register_remote_memory_region(mr_key, addr, length, rkey);
+}
+
 void RDMAEndpoint::WaitandPopTask(std::chrono::milliseconds timeout)
 {
     while (true) {
@@ -61,7 +66,7 @@ void RDMAEndpoint::WaitandPopTask(std::chrono::milliseconds timeout)
                     AsyncRecvData(task);
                     break;
                 default:
-                    SLIME_LOG_ERROR("Unknown OpCode");
+                    SLIME_LOG_ERROR("Unknown OpCode in WaitandPopTask");
                     break;
             }
         }
@@ -125,12 +130,12 @@ void RDMAEndpoint::AsyncSendData(RDMA_task_t& task)
         if (it != this->send_batch_slot_.end()) {
             auto send_data_batch = it->second;
             for (size_t i = 0; i < batch_size; ++i) {
-                send_data_batch[i].remote_addr   = meta_buf[i].mr_addr;
-                send_data_batch[i].remote_rkey   = meta_buf[i].mr_rkey;
-                send_data_batch[i].length        = meta_buf[i].mr_size;
-                send_data_batch[i].target_offset = 0;
+                this->RegisterRemoteMemoryRegion(
+                    send_data_batch[i].mr_key, meta_buf[i].mr_addr, meta_buf[i].mr_size, meta_buf[i].mr_rkey);
             }
-            auto data_atx = this->data_ctx_->submit(OpCode::WRITE_WITH_IMM, send_data_batch, data_callback);
+            // std::cout << send_data_batch[0].slot_id << std::endl;
+            auto data_atx = this->data_ctx_->submit_with_imm_data(
+                OpCode::WRITE_WITH_IMM, send_data_batch, send_data_batch[0].slot_id, data_callback);
         }
         else {
             std::cout << "The data in slot " << slot_id << "is not prepared" << std::endl;
@@ -170,7 +175,8 @@ void RDMAEndpoint::AsyncRecvData(RDMA_task_t& task)
         auto it = this->recv_batch_slot_.find(slot_id);
         if (it != this->send_batch_slot_.end()) {
             auto recv_data_batch = it->second;
-            auto data_atx        = this->data_ctx_->submit(OpCode::RECV, recv_data_batch, data_callback);
+            auto data_atx        = this->data_ctx_->submit_with_imm_data(
+                OpCode::RECV, recv_data_batch, recv_data_batch[0].slot_id, data_callback);
         }
     };
 

@@ -3,8 +3,8 @@
 #include "engine/assignment.h"
 #include "engine/rdma/memory_pool.h"
 #include "engine/rdma/rdma_assignment.h"
-#include "engine/rdma/rdma_env.h"
 #include "engine/rdma/rdma_config.h"
+#include "engine/rdma/rdma_env.h"
 
 #include "utils/json.hpp"
 #include "utils/logging.h"
@@ -36,7 +36,7 @@ public:
     {
         SLIME_LOG_DEBUG("Initializing qp management, num qp: " << SLIME_QP_NUM);
 
-        qp_list_len_ = SLIME_QP_NUM;
+        qp_list_len_   = SLIME_QP_NUM;
         qp_management_ = new qp_management_t*[qp_list_len_];
         for (int qpi = 0; qpi < qp_list_len_; qpi++) {
             qp_management_[qpi] = new qp_management_t();
@@ -76,6 +76,12 @@ public:
         return 0;
     }
 
+    int64_t register_remote_memory_region(std::string mr_key, uintptr_t addr, size_t length, uint32_t rkey)
+    {
+        memory_pool_->register_remote_memory_region(mr_key, addr, length, rkey);
+        return 0;
+    }
+
     int64_t register_remote_memory_region(std::string mr_key, json mr_info)
     {
         memory_pool_->register_remote_memory_region(mr_key, mr_info);
@@ -88,11 +94,11 @@ public:
         return 0;
     }
 
-    int64_t reload_memory_pool() {
+    int64_t reload_memory_pool()
+    {
         memory_pool_ = std::make_unique<RDMAMemoryPool>(pd_);
         return 0;
     }
-
 
     /* RDMA Link Construction */
     int64_t connect(const json& endpoint_info_json);
@@ -100,8 +106,8 @@ public:
     /* Submit an assignment */
     RDMAAssignmentSharedPtr submit(OpCode opcode, AssignmentBatch& assignment, callback_fn_t callback = nullptr);
 
-
-    RDMAAssignmentSharedPtr submit_with_imm_data(OpCode opcode, AssignmentBatch& batch, int32_t imm_data, callback_fn_t callback, callback_fn_t imm_data_callback);
+    RDMAAssignmentSharedPtr
+    submit_with_imm_data(OpCode opcode, AssignmentBatch& batch, int32_t imm_data, callback_fn_t callback);
 
     void launch_future();
     void stop_future();
@@ -124,7 +130,7 @@ public:
 
     json endpoint_info() const
     {
-        json endpoint_info =  json{{"rdma_info", local_rdma_info()}, {"mr_info", memory_pool_->mr_info()}};
+        json endpoint_info = json{{"rdma_info", local_rdma_info()}, {"mr_info", memory_pool_->mr_info()}};
         return endpoint_info;
     }
 
@@ -176,7 +182,8 @@ private:
         std::future<void> wq_future_;
         std::atomic<bool> stop_wq_future_{false};
 
-        ~qp_management() {
+        ~qp_management()
+        {
             if (qp_)
                 ibv_destroy_qp(qp_);
         }
@@ -184,6 +191,8 @@ private:
 
     size_t            qp_list_len_{1};
     qp_management_t** qp_management_;
+
+    std::unordered_map<uint32_t, std::deque<callback_info_t>> imm_data_callback_;
 
     int last_qp_selection_ = -1;
     int select_qpi()
@@ -220,7 +229,6 @@ private:
     void post_write_batch(int qpi, RDMAAssignmentSharedPtr assign);
 
     friend class RDMAEndpoint;
-
 };
 
 }  // namespace slime

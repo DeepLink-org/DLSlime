@@ -5,14 +5,14 @@
 #include <string>
 #include <vector>
 
-#include "utils/logging.h"
 #include "utils/json.hpp"
+#include "utils/logging.h"
 
 namespace slime {
 
 struct Assignment;
 
-using json = nlohmann::json;
+using json            = nlohmann::json;
 using AssignmentBatch = std::vector<Assignment>;
 
 enum class OpCode : uint8_t {
@@ -32,11 +32,6 @@ typedef struct Assignment {
     {
     }
 
-    Assignment(std::string mr_key, uint64_t target_offset, uint64_t source_offset, uint64_t length, uint64_t r_addr, uint32_t r_key):
-        mr_key(mr_key), target_offset(target_offset), source_offset(source_offset), length(length), remote_addr(r_addr), remote_rkey(r_key)
-    {
-    }
-
     /* dump */
     json dump() const;
 
@@ -45,9 +40,7 @@ typedef struct Assignment {
     uint64_t    target_offset{};
     uint64_t    length{};
 
-    uint64_t remote_addr{};
-    uint32_t remote_rkey{};
-    uint8_t  slot_id{};
+    uint32_t slot_id{0};
 
 } assignment_t;
 

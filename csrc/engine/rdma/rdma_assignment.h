@@ -97,11 +97,13 @@ class RDMAAssignment {
 
 public:
     RDMAAssignment(OpCode opcode, AssignmentBatch& batch, callback_fn_t callback = nullptr);
+    RDMAAssignment(OpCode opcode, AssignmentBatch& batch, int32_t imm_data, callback_fn_t callback_imm = nullptr);
 
     ~RDMAAssignment()
     {
         delete[] batch_;
         delete callback_info_;
+        delete callback_info_imm_;
     }
 
     inline size_t batch_size()
@@ -119,21 +121,17 @@ public:
 
     json dump() const;
 
-
-    uint64_t remote_addr{};
-    uint32_t remote_rkey{};
-
 private:
     OpCode opcode_;
 
     Assignment* batch_{nullptr};
     size_t      batch_size_;
 
-
     int32_t imm_data_{0};
     bool    with_imm_data_{false};
 
     callback_info_t* callback_info_;
+    callback_info_t* callback_info_imm_;
 };
 
 class RDMASchedulerAssignment {

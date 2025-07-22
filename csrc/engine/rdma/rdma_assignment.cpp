@@ -17,11 +17,10 @@ RDMAAssignment::RDMAAssignment(OpCode opcode, AssignmentBatch& batch, callback_f
         batch_[cnt].source_offset = assignment.source_offset;
         batch_[cnt].target_offset = assignment.target_offset;
         batch_[cnt].length        = assignment.length;
-        batch_[cnt].remote_addr   = assignment.remote_addr;
-        batch_[cnt].remote_rkey   = assignment.remote_rkey;
         cnt += 1;
     }
-    callback_info_ = new callback_info_t(opcode, batch_size_, callback);
+    callback_info_     = new callback_info_t(opcode, batch_size_, callback);
+    callback_info_imm_ = nullptr;
 }
 
 void RDMAAssignment::wait()

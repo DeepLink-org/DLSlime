@@ -43,6 +43,7 @@ public:
     int register_memory_region(const std::string& mr_key, uintptr_t data_ptr, uint64_t length);
     int unregister_memory_region(const std::string& mr_key);
 
+    int register_remote_memory_region(const std::string& mr_key, uintptr_t addr, size_t length, uint32_t rkey);
     int register_remote_memory_region(const std::string& mr_key, const json& mr_info);
     int unregister_remote_memory_region(const std::string& mr_key);
 
