@@ -361,39 +361,7 @@ void RDMAContext::stop_future()
 }
 
 RDMAAssignmentSharedPtr
-RDMAContext::submit_with_imm_data(OpCode opcode, AssignmentBatch& batch, int32_t imm_data, callback_fn_t callback)
-{
-    std::vector<AssignmentBatch> batch_split;
-
-    auto split = [&]() {
-        int split_step = SLIME_MAX_SEND_WR / 2;
-        for (int i = 0; i < batch.size(); i += split_step) {
-            batch_split.push_back(
-                AssignmentBatch(batch.begin() + i, std::min(batch.end(), batch.begin() + i + split_step)));
-        }
-    };
-    split();
-    int qpi        = select_qpi();
-    int split_size = batch_split.size();
-    {
-        std::unique_lock<std::mutex> lock(qp_management_[qpi]->assign_queue_mutex_);
-        RDMAAssignmentSharedPtr      rdma_assignment;
-        for (int i = 0; i < split_size; ++i) {
-            callback_fn_t split_callback = (i == split_size - 1 ? callback : [](int) { return 0; });
-            rdma_assignment              = std::make_shared<RDMAAssignment>(opcode, batch_split[i], split_callback);
-            qp_management_[qpi]->assign_queue_.push(rdma_assignment);
-            rdma_assignment->with_imm_data_ = true;
-            rdma_assignment->imm_data_      = imm_data;
-        }
-        imm_data_callback_[imm_data].emplace_back(rdma_assignment->callback_info_->opcode_,
-                                                  rdma_assignment->callback_info_->batch_size_,
-                                                  rdma_assignment->callback_info_->callback_);
-        qp_management_[qpi]->has_runnable_event_.notify_one();
-        return rdma_assignment;
-    }
-}
-
-RDMAAssignmentSharedPtr RDMAContext::submit(OpCode opcode, AssignmentBatch& batch, callback_fn_t callback)
+RDMAContext::submit(OpCode opcode, AssignmentBatch& batch, callback_fn_t callback, int qpi, int32_t imm_data)
 {
     AssignmentBatch              batch_split_after_max_length;
     std::vector<AssignmentBatch> batch_split_after_cq_depth;
@@ -421,19 +389,21 @@ RDMAAssignmentSharedPtr RDMAContext::submit(OpCode opcode, AssignmentBatch& batc
 
     split_by_max_length();
     split_by_max_cq_depth();
+    if (qpi == UNDEFINED_QPI) {
+        qpi = select_qpi();
+    }
 
-    int qpi        = select_qpi();
     int split_size = batch_split_after_cq_depth.size();
 
     {
         std::unique_lock<std::mutex> lock(qp_management_[qpi]->assign_queue_mutex_);
         RDMAAssignmentSharedPtr      rdma_assignment;
-        callback_fn_t                test;
         for (int i = 0; i < split_size; ++i) {
-            callback_fn_t split_callback = (i == split_size - 1 ? callback : [](int) { return 0; });
+            callback_fn_t split_callback = (i == split_size - 1 ? callback : [](int, int) { return 0; });
             rdma_assignment = std::make_shared<RDMAAssignment>(opcode, batch_split_after_cq_depth[i], split_callback);
             qp_management_[qpi]->assign_queue_.push(rdma_assignment);
-            test = split_callback;
+            rdma_assignment->with_imm_data_ = (i == split_size - 1) ? (imm_data != UNDEFINED_IMM_DATA) : false;
+            rdma_assignment->imm_data_      = (i == split_size - 1) ? imm_data : UNDEFINED_IMM_DATA;
         }
 
         qp_management_[qpi]->has_runnable_event_.notify_one();
@@ -555,14 +525,11 @@ int64_t RDMAContext::post_rc_oneside_batch(int qpi, RDMAAssignmentSharedPtr assi
         wr[i].opcode              = ASSIGN_OP_2_IBV_WR_OP.at(assign->opcode_);
         wr[i].sg_list             = &sge[i];
         wr[i].num_sge             = 1;
-        wr[i].imm_data            = 0;
+        wr[i].imm_data            = (i == batch_size - 1) ? assign->imm_data_ : UNDEFINED_IMM_DATA;
         wr[i].send_flags          = (i == batch_size - 1) ? IBV_SEND_SIGNALED : 0;
         wr[i].wr.rdma.remote_addr = remote_addr + assign->batch_[i].target_offset;
         wr[i].wr.rdma.rkey        = remote_rkey;
         wr[i].next                = (i == batch_size - 1) ? NULL : &wr[i + 1];
-    }
-    if (assign->with_imm_data_) {
-        wr[batch_size - 1].imm_data = assign->imm_data_;
     }
     int ret = 0;
     {
@@ -626,33 +593,19 @@ int64_t RDMAContext::cq_poll_handle()
                         reinterpret_cast<callback_info_with_qpi_t*>(wc[i].wr_id);
                     switch (OpCode wr_type = callback_with_qpi->callback_info_->opcode_) {
                         case OpCode::READ:
-                            callback_with_qpi->callback_info_->callback_(status_code);
+                            callback_with_qpi->callback_info_->callback_(status_code, wc[i].imm_data);
                             break;
                         case OpCode::WRITE:
-                            callback_with_qpi->callback_info_->callback_(status_code);
+                            callback_with_qpi->callback_info_->callback_(status_code, wc[i].imm_data);
                             break;
                         case OpCode::SEND:
-                            callback_with_qpi->callback_info_->callback_(status_code);
+                            callback_with_qpi->callback_info_->callback_(status_code, wc[i].imm_data);
                             break;
                         case OpCode::RECV:
-                            if (wc[i].opcode == IBV_WC_RECV_RDMA_WITH_IMM && wc[i].imm_data != 0) {
-                                std::cout << "imm data: " << wc[i].imm_data << std::endl;
-                                auto it = imm_data_callback_.find(wc[i].imm_data);
-                                if (it != imm_data_callback_.end() && !it->second.empty()) {
-                                    auto& callback_info = it->second.front();
-                                    std::cout << "callback from imm data " << std::endl;
-                                    callback_info.callback_(0);
-                                    it->second.pop_front();
-                                    if (it->second.empty()) {
-                                        imm_data_callback_.erase(it);
-                                    }
-                                }
-                                break;
-                            }
-                            callback_with_qpi->callback_info_->callback_(status_code);
+                            callback_with_qpi->callback_info_->callback_(status_code, wc[i].imm_data);
                             break;
                         case OpCode::WRITE_WITH_IMM:
-                            callback_with_qpi->callback_info_->callback_(status_code);
+                            callback_with_qpi->callback_info_->callback_(status_code, wc[i].imm_data);
                             break;
                         default:
                             SLIME_ABORT("Unimplemented WrType " << int64_t(wr_type));
@@ -660,6 +613,8 @@ int64_t RDMAContext::cq_poll_handle()
                     size_t batch_size = callback_with_qpi->callback_info_->batch_size_;
                     qp_management_[callback_with_qpi->qpi_]->outstanding_rdma_reads_.fetch_sub(
                         batch_size, std::memory_order_relaxed);
+
+                    delete callback_with_qpi->callback_info_;  // need to free the callback_info_ ptr.
                     delete callback_with_qpi;
                 }
             }
@@ -693,7 +648,7 @@ int64_t RDMAContext::wq_dispatch_handle(int qpi)
             if (batch_size > SLIME_MAX_CQ_DEPTH) {
                 SLIME_LOG_ERROR("batch_size(" << batch_size << ") > MAX SLIME_MAX_CQ_DEPTH (" << SLIME_MAX_CQ_DEPTH
                                               << "), this request will be ignored");
-                front_assign->callback_info_->callback_(callback_info_with_qpi_t::ASSIGNMENT_BATCH_OVERFLOW);
+                front_assign->callback_info_->callback_(callback_info_with_qpi_t::ASSIGNMENT_BATCH_OVERFLOW, 0);
                 qp_management_[qpi]->assign_queue_.pop();
             }
             else if (batch_size + qp_management_[qpi]->outstanding_rdma_reads_ < SLIME_MAX_CQ_DEPTH) {
@@ -709,6 +664,7 @@ int64_t RDMAContext::wq_dispatch_handle(int qpi)
                         post_recv_batch(qpi, front_assign);
                         break;
                     case OpCode::READ:
+                        post_rc_oneside_batch(qpi, front_assign);
                         break;
                     case OpCode::WRITE:
                         post_rc_oneside_batch(qpi, front_assign);
@@ -721,7 +677,7 @@ int64_t RDMAContext::wq_dispatch_handle(int qpi)
                         break;
                     default:
                         SLIME_LOG_ERROR("Unknown OpCode");
-                        front_assign->callback_info_->callback_(callback_info_with_qpi_t::UNKNOWN_OPCODE);
+                        front_assign->callback_info_->callback_(callback_info_with_qpi_t::UNKNOWN_OPCODE, 0);
                         break;
                 }
                 qp_management_[qpi]->assign_queue_.pop();

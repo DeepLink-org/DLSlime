@@ -39,13 +39,13 @@ int main(int argc, char** argv)
     auto           mmrg_channel_info_res = sock_mmrg.recv(mmrg_channel_info);
 
     std::cout << "Send the RDMA Info to other side..." << std::endl;
-    zmq::message_t local_data_channel_info(end_point->GetDataContextInfo().dump());
-    zmq::message_t local_meta_channel_info(end_point->GetMetaContextInfo().dump());
+    zmq::message_t local_data_channel_info(end_point->getDataContextInfo().dump());
+    zmq::message_t local_meta_channel_info(end_point->getMetaContextInfo().dump());
 
     sock_data.send(local_data_channel_info, zmq::send_flags::none);
     sock_mmrg.send(local_meta_channel_info, zmq::send_flags::none);
 
-    end_point->ContextConnect(json::parse(data_channel_info.to_string()), json::parse(mmrg_channel_info.to_string()));
+    end_point->contextConnect(json::parse(data_channel_info.to_string()), json::parse(mmrg_channel_info.to_string()));
     std::cout << "Connect Success..." << std::endl;
     std::cout << "Finish the connection of QP, start to SEND of buf_0 and buf_1..." << std::endl;
 
@@ -67,16 +67,16 @@ int main(int argc, char** argv)
     RDMABuffer buf_1(end_point, ptrs_buf_1, data_sizes_buf_1, batch_size_buf_1);
     std::cout << "Launch EDNPOINT ..." << std::endl;
 
-    buf_1.Send();
-    buf_0.Send();
+    buf_1.send();
+    buf_0.send();
     std::cout << "Main thread working Test..." << std::endl;
     std::cout << "Main thread working Test..." << std::endl;
     std::cout << "Main thread working Test..." << std::endl;
     std::cout << "Main thread working Test..." << std::endl;
     std::cout << "Main thread working Test..." << std::endl;
     std::cout << "Wait SEND Complete..." << std::endl;
-    buf_0.WaitSend();
-    buf_1.WaitSend();
+    buf_0.waitSend();
+    buf_1.waitSend();
 
     std::cout << "The SEND test completed." << std::endl;
 

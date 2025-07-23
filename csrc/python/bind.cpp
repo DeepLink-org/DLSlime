@@ -1,9 +1,9 @@
 #include "engine/assignment.h"
 #include "engine/rdma/rdma_assignment.h"
+#include "engine/rdma/rdma_buffer.h"
 #include "engine/rdma/rdma_config.h"
 #include "engine/rdma/rdma_context.h"
 #include "engine/rdma/rdma_endpoint.h"
-#include "engine/rdma/rdma_buffer.h"
 #include "engine/rdma/rdma_scheduler.h"
 
 #include "gloo/rendezvous/context.h"
@@ -78,17 +78,16 @@ PYBIND11_MODULE(_slime_c, m)
 
     py::class_<slime::RDMAEndpoint, std::shared_ptr<slime::RDMAEndpoint>>(m, "rdma_endpoint")
         .def(py::init<const std::string&, uint8_t, const std::string&, size_t>())
-        .def("context_connect", &slime::RDMAEndpoint::ContextConnect)
-        .def("get_data_context_info", &slime::RDMAEndpoint::GetDataContextInfo)
-        .def("get_meta_context_info", &slime::RDMAEndpoint::GetMetaContextInfo);
+        .def("context_connect", &slime::RDMAEndpoint::contextConnect)
+        .def("get_data_context_info", &slime::RDMAEndpoint::getDataContextInfo)
+        .def("get_meta_context_info", &slime::RDMAEndpoint::getMetaContextInfo);
 
     py::class_<slime::RDMABuffer>(m, "rdma_buffer")
-        .def(py::init<std::shared_ptr<slime::RDMAEndpoint>, std::vector<uintptr_t>,
-                      std::vector<size_t>, size_t>())
-        .def("send", &slime::RDMABuffer::Send)
-        .def("recv", &slime::RDMABuffer::Recv)
-        .def("wait_send", &slime::RDMABuffer::WaitSend)
-        .def("wait_recv", &slime::RDMABuffer::WaitRecv);
+        .def(py::init<std::shared_ptr<slime::RDMAEndpoint>, std::vector<uintptr_t>, std::vector<size_t>, size_t>())
+        .def("send", &slime::RDMABuffer::send)
+        .def("recv", &slime::RDMABuffer::recv)
+        .def("wait_send", &slime::RDMABuffer::waitSend)
+        .def("wait_recv", &slime::RDMABuffer::waitRecv);
 
     m.def("available_nic", &slime::available_nic);
 

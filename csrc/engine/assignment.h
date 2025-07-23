@@ -40,8 +40,6 @@ typedef struct Assignment {
     uint64_t    target_offset{};
     uint64_t    length{};
 
-    uint32_t slot_id{0};
-
 } assignment_t;
 
 }  // namespace slime

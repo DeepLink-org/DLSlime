@@ -25,7 +25,7 @@ using json = nlohmann::json;
 class RDMAAssignment;
 class RDMASchedulerAssignment;
 
-using callback_fn_t                = std::function<void(int)>;
+using callback_fn_t                = std::function<void(int, int)>;
 using RDMAAssignmentSharedPtr      = std::shared_ptr<RDMAAssignment>;
 using RDMAAssignmentSharedPtrBatch = std::vector<RDMAAssignmentSharedPtr>;
 
@@ -61,7 +61,7 @@ typedef struct callback_info {
         metrics.arrive = std::chrono::steady_clock::now();
     }
 
-    callback_fn_t callback_{[this](int code) {
+    callback_fn_t callback_{[this](int code, int imm_data) {
         std::unique_lock<std::mutex> lock(mutex_);
         finished_.fetch_add(1, std::memory_order_relaxed);
         metrics.done = std::chrono::steady_clock::now();
@@ -103,7 +103,6 @@ public:
     {
         delete[] batch_;
         delete callback_info_;
-        delete callback_info_imm_;
     }
 
     inline size_t batch_size()
@@ -131,7 +130,6 @@ private:
     bool    with_imm_data_{false};
 
     callback_info_t* callback_info_;
-    callback_info_t* callback_info_imm_;
 };
 
 class RDMASchedulerAssignment {

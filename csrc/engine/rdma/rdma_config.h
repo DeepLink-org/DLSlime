@@ -3,13 +3,13 @@
 #include "utils/json.hpp"
 #include "utils/logging.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <infiniband/verbs.h>
 #include <iostream>
 #include <string>
 #include <tuple>
-#include <cstddef>
 #include <unordered_map>
 
 namespace slime {

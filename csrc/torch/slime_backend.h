@@ -8,8 +8,11 @@
 #include <torch/csrc/distributed/c10d/Utils.hpp>
 #include <torch/csrc/distributed/c10d/Work.hpp>
 
+namespace slime {
+namespace c10d {
 // Backend:
 class slimeBackend: public ::c10d::Backend {
+
 public:
     slimeBackend(const c10::intrusive_ptr<::c10d::Store>& store, int rank = -1, int size = -1);
 
@@ -82,6 +85,9 @@ public:
     }
 };
 
-class WorkSlime: public c10d::Work {
+class WorkSlime: public ::c10d::Work {
     friend class slimeBackend;
 };
+
+}  // namespace c10d
+}  // namespace slime

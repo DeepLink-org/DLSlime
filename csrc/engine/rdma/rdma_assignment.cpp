@@ -19,8 +19,7 @@ RDMAAssignment::RDMAAssignment(OpCode opcode, AssignmentBatch& batch, callback_f
         batch_[cnt].length        = assignment.length;
         cnt += 1;
     }
-    callback_info_     = new callback_info_t(opcode, batch_size_, callback);
-    callback_info_imm_ = nullptr;
+    callback_info_ = new callback_info_t(opcode, batch_size_, callback);
 }
 
 void RDMAAssignment::wait()

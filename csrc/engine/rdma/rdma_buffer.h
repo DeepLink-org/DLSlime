@@ -13,35 +13,22 @@
 #include <unordered_map>
 #include <vector>
 
-
 namespace slime {
-
 
 class RDMAEndpoint;
 
 class RDMABuffer {
 
-//
+    //
 
 public:
-
-    // template<typename T>
-    // explicit RDMABuffer(std::shared_ptr<RDMAEndpoint> end_point, std::vector<T> &data) : end_point_(end_point), batch_size_(1)
-    // {
-    //     std::cout<< "Init the RDMA Buffer with only one tensor" << std::endl;
-    //     data_ptrs_.push_back(reinterpret_cast<uintptr_t>(data.data()));
-    //     data_size_.push_back(static_cast<uint32_t>(data.size() * sizeof(T)));
-
-    // }
-
-    explicit RDMABuffer( std::shared_ptr<RDMAEndpoint> end_point,
-                std::vector<uintptr_t> ptrs,
-                std::vector<size_t> data_size,
-                size_t batch_size)
+    RDMABuffer(std::shared_ptr<RDMAEndpoint> end_point,
+               std::vector<uintptr_t>        ptrs,
+               std::vector<size_t>           data_size,
+               size_t                        batch_size)
     {
 
-        for(uint32_t i = 0; i < batch_size; ++i)
-        {
+        for (uint32_t i = 0; i < batch_size; ++i) {
             data_ptrs_.push_back(ptrs[i]);
             data_size_.push_back(data_size[i]);
         }
@@ -52,21 +39,20 @@ public:
 
     ~RDMABuffer() = default;
 
-    void Send();
+    void send();
 
-    void Recv();
+    void recv();
 
-    void WaitSend();
+    void waitSend();
 
-    void WaitRecv();
+    void waitRecv();
 
 private:
-
     std::shared_ptr<RDMAEndpoint> end_point_;
 
     std::vector<uintptr_t> data_ptrs_;
-    std::vector<size_t>  data_size_;
-    uint32_t batch_size_;
+    std::vector<size_t>    data_size_;
+    uint32_t               batch_size_;
 
     bool send_pending_{false};
     bool recv_pending_{false};
@@ -79,8 +65,6 @@ private:
 
     std::mutex send_mutex_;
     std::mutex recv_mutex_;
-
-
 };
 
-}
+}  // namespace slime

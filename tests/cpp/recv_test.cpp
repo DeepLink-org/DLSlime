@@ -36,8 +36,8 @@ int main(int argc, char** argv)
     sock_data.connect("tcp://" + FLAGS_PEER_ADDR + ":" + std::to_string(FLAGS_PORT_DATA));
     sock_mmrg.connect("tcp://" + FLAGS_PEER_ADDR + ":" + std::to_string(FLAGS_PORT_MRCN));
 
-    zmq::message_t local_data_channel_info(end_point->GetDataContextInfo().dump());
-    zmq::message_t local_meta_channel_info(end_point->GetMetaContextInfo().dump());
+    zmq::message_t local_data_channel_info(end_point->getDataContextInfo().dump());
+    zmq::message_t local_meta_channel_info(end_point->getMetaContextInfo().dump());
 
     sock_data.send(local_data_channel_info, zmq::send_flags::none);
     sock_mmrg.send(local_meta_channel_info, zmq::send_flags::none);
@@ -50,7 +50,7 @@ int main(int argc, char** argv)
     auto send_data_result = sock_data.recv(data_channel_info);
     auto recv_data_result = sock_mmrg.recv(meta_channel_info);
 
-    end_point->ContextConnect(json::parse(data_channel_info.to_string()), json::parse(meta_channel_info.to_string()));
+    end_point->contextConnect(json::parse(data_channel_info.to_string()), json::parse(meta_channel_info.to_string()));
     std::cout << "Connect Success..." << std::endl;
     std::cout << "Finish the connection of QP, start to RECV of buf_0 and buf_1... " << std::endl;
 
@@ -70,16 +70,16 @@ int main(int argc, char** argv)
     RDMABuffer buf_1(end_point, ptrs_buf_1, data_sizes_buf_1, batch_size_buf_1);
     std::cout << "Launch EDNPOINT ..." << std::endl;
 
-    buf_1.Recv();
-    buf_0.Recv();
+    buf_1.recv();
+    buf_0.recv();
     std::cout << "Main thread working Test..." << std::endl;
     std::cout << "Main thread working Test..." << std::endl;
     std::cout << "Main thread working Test..." << std::endl;
     std::cout << "Main thread working Test..." << std::endl;
     std::cout << "Main thread working Test..." << std::endl;
     std::cout << "Wait Send Complete..." << std::endl;
-    buf_0.WaitRecv();
-    buf_1.WaitRecv();
+    buf_0.waitRecv();
+    buf_1.waitRecv();
 
     bool data_buf_0_0_correct = std::all_of(data_buf_0_0.begin(), data_buf_0_0.end(), [](char c) { return c == '0'; });
     bool data_buf_1_0_correct = std::all_of(data_buf_1_0.begin(), data_buf_1_0.end(), [](char c) { return c == '1'; });

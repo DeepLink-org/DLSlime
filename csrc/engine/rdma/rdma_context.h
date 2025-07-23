@@ -28,6 +28,9 @@ namespace slime {
 using json = nlohmann::json;
 
 class RDMAContext {
+
+    friend class RDMAEndpoint;  // RDMA Endpoint need to use the register memory pool in context
+
 public:
     /*
       A context of rdma QP.
@@ -37,6 +40,21 @@ public:
         SLIME_LOG_DEBUG("Initializing qp management, num qp: " << SLIME_QP_NUM);
 
         qp_list_len_   = SLIME_QP_NUM;
+        qp_management_ = new qp_management_t*[qp_list_len_];
+        for (int qpi = 0; qpi < qp_list_len_; qpi++) {
+            qp_management_[qpi] = new qp_management_t();
+        }
+
+        /* random initialization for psn configuration */
+        srand48(time(NULL));
+    }
+
+    RDMAContext(size_t qp_num)
+    {
+        SLIME_LOG_DEBUG("Initializing qp management, num qp: " << qp_num);
+
+        qp_list_len_ = qp_num;
+        std::cout << "qp_num: " << qp_num << std::endl;
         qp_management_ = new qp_management_t*[qp_list_len_];
         for (int qpi = 0; qpi < qp_list_len_; qpi++) {
             qp_management_[qpi] = new qp_management_t();
@@ -102,12 +120,12 @@ public:
 
     /* RDMA Link Construction */
     int64_t connect(const json& endpoint_info_json);
-
     /* Submit an assignment */
-    RDMAAssignmentSharedPtr submit(OpCode opcode, AssignmentBatch& assignment, callback_fn_t callback = nullptr);
-
-    RDMAAssignmentSharedPtr
-    submit_with_imm_data(OpCode opcode, AssignmentBatch& batch, int32_t imm_data, callback_fn_t callback);
+    RDMAAssignmentSharedPtr submit(OpCode           opcode,
+                                   AssignmentBatch& assignment,
+                                   callback_fn_t    callback = nullptr,
+                                   int              qpi      = UNDEFINED_QPI,
+                                   int32_t          imm_data = UNDEFINED_IMM_DATA);
 
     void launch_future();
     void stop_future();
@@ -146,6 +164,9 @@ public:
     }
 
 private:
+    inline static constexpr int      UNDEFINED_QPI      = -1;
+    inline static constexpr uint32_t UNDEFINED_IMM_DATA = -1;
+
     std::string device_name_ = "";
 
     /* RDMA Configuration */
@@ -168,8 +189,6 @@ private:
         /* Send Mutex */
         std::mutex rdma_post_send_mutex_;
 
-        std::mutex cq_temp_mutex_;
-
         /* Assignment Queue */
         std::mutex                          assign_queue_mutex_;
         std::queue<RDMAAssignmentSharedPtr> assign_queue_;
@@ -191,8 +210,6 @@ private:
 
     size_t            qp_list_len_{1};
     qp_management_t** qp_management_;
-
-    std::unordered_map<uint32_t, std::deque<callback_info_t>> imm_data_callback_;
 
     int last_qp_selection_ = -1;
     int select_qpi()
@@ -225,10 +242,6 @@ private:
 
     /* Async RDMA Read */
     int64_t post_rc_oneside_batch(int qpi, RDMAAssignmentSharedPtr assign);
-
-    void post_write_batch(int qpi, RDMAAssignmentSharedPtr assign);
-
-    friend class RDMAEndpoint;
 };
 
 }  // namespace slime
