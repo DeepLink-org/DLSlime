@@ -45,10 +45,10 @@ public:
 private:
     std::shared_ptr<RDMAEndpoint> end_point_;
 
-    // <data_ptrs_, data_size_, offset>
-    // data_ptrs: the pointer of the data
-    // data_size: the length of the data
-    // offset: you know
+    // <tensor_ptrs_, tensor_size_, offset>
+    // tensor_ptrs: the pointer of the tensor
+    // tensor_size: the length of the tensor
+    // offset: the offset of the transmitted tensor
     std::vector<std::tuple<uintptr_t, size_t, size_t>> data_info;
 
     size_t batch_size_;

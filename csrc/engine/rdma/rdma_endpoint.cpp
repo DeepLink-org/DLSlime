@@ -34,7 +34,7 @@ void RDMAEndpoint::unregisterMetaMemRegionBatch(std::string str, uint32_t batch_
 }
 
 void RDMAEndpoint::registerRecvMemRegionBatch(std::string                                        str,
-                                              std::vector<std::tuple<uintptr_t, size_t, size_t>> data_info)
+                                              std::vector<buffer_data_info_t> data_info)
 {
     // The mr key is followed by the form: str_ +"i"
     for (size_t i = 0; i < data_info.size(); ++i) {
@@ -44,7 +44,7 @@ void RDMAEndpoint::registerRecvMemRegionBatch(std::string                       
 }
 
 void RDMAEndpoint::registerSendMemRegionBatch(std::string                                        str,
-                                              std::vector<std::tuple<uintptr_t, size_t, size_t>> data_info)
+                                              std::vector<buffer_data_info_t> data_info)
 {
     // The mr key is followed by the form: str_ +"i"
     for (uint32_t i = 0; i < data_info.size(); ++i) {
@@ -88,7 +88,7 @@ void RDMAEndpoint::waitandPopTask(std::chrono::milliseconds timeout)
     }
 }
 
-uint8_t RDMAEndpoint::generateSendAssignmentBatch(std::vector<std::tuple<uintptr_t, size_t, size_t>> data_info)
+uint32_t RDMAEndpoint::generateSendAssignmentBatch(std::vector<buffer_data_info_t> data_info)
 {
     send_slot_id_++;
     std::string cur_key = "SEND_KEY_" + std::to_string(send_slot_id_);
@@ -96,23 +96,21 @@ uint8_t RDMAEndpoint::generateSendAssignmentBatch(std::vector<std::tuple<uintptr
     AssignmentBatch send_data_batch;
     for (size_t i = 0; i < data_info.size(); ++i) {
         std::string KEY = cur_key + "_" + std::to_string(i);
-        send_data_batch.push_back(Assignment(KEY, 0, 0, data_size[i]));
+        send_data_batch.push_back(Assignment(KEY, std::get<2>(data_info[i]), 0, std::get<1>(data_info[i])));
     }
     send_batch_slot_.emplace(send_slot_id_, send_data_batch);
     return send_slot_id_;
 }
 
-uint8_t RDMAEndpoint::generateRecvAssignmentBatch(std::vector<uintptr_t>& ptrs,
-                                                  std::vector<size_t>&    data_size,
-                                                  uint32_t                batch_size)
+uint32_t RDMAEndpoint::generateRecvAssignmentBatch(std::vector<buffer_data_info_t> data_info)
 {
     recv_slot_id_++;
     std::string cur_key = "RECV_KEY_" + std::to_string(recv_slot_id_);
-    registerRecvMemRegionBatch(cur_key, ptrs, data_size, batch_size);
+    registerRecvMemRegionBatch(cur_key, data_info);
     AssignmentBatch recv_data_batch;
-    for (uint32_t i = 0; i < batch_size; ++i) {
+    for (size_t i = 0; i < data_info.size(); ++i) {
         std::string KEY = cur_key + "_" + std::to_string(i);
-        recv_data_batch.push_back(Assignment(KEY, 0, 0, data_size[i]));
+        recv_data_batch.push_back(Assignment(KEY, std::get<2>(data_info[i]), 0, std::get<1>(data_info[i])));
     }
     recv_batch_slot_.emplace(recv_slot_id_, recv_data_batch);
     return recv_slot_id_;
@@ -121,7 +119,7 @@ uint8_t RDMAEndpoint::generateRecvAssignmentBatch(std::vector<uintptr_t>& ptrs,
 void RDMAEndpoint::asyncSendData(RDMA_task_t& task)
 {
     size_t  batch_size    = task.batch_size;
-    uint8_t slot_id       = task.task_id;
+    uint32_t slot_id       = task.task_id;
     auto    task_callback = task.callback;
 
     std::string META_KEY = "SEND_META_" + std::to_string(slot_id);
@@ -162,7 +160,7 @@ void RDMAEndpoint::asyncRecvData(RDMA_task_t& task)
 {
 
     size_t  batch_size    = task.batch_size;
-    uint8_t slot_id       = task.task_id;
+    uint32_t slot_id       = task.task_id;
     auto    task_callback = task.callback;
 
     std::string META_KEY = "RECV_META_" + std::to_string(slot_id);

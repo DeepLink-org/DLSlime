@@ -14,7 +14,7 @@ DEFINE_string(DEVICE_NAME, "rxe_0", "device name");
 DEFINE_uint32(IB_PORT, 1, "device name");
 DEFINE_string(LINK_TYPE, "RoCE", "IB or RoCE");
 
-DEFINE_string(PEER_ADDR, "192.168.254.128", "peer IP address");
+DEFINE_string(PEER_ADDR, "192.168.127.128", "peer IP address");
 DEFINE_int32(PORT_DATA, 5557, "ZMQ control port");
 DEFINE_int32(PORT_MRCN, 5558, "ZMQ control port");
 
@@ -58,6 +58,7 @@ int main(int argc, char** argv)
     std::vector<char>      data_buf_0_0(8192, 'A');
     std::vector<uintptr_t> ptrs_buf_0       = {reinterpret_cast<uintptr_t>(data_buf_0_0.data())};
     std::vector<size_t>    data_sizes_buf_0 = {data_buf_0_0.size()};
+    std::vector<size_t>    offset_buf_0 = {0};
 
     const uint32_t         batch_size_buf_1 = 2;
     std::vector<char>      data_buf_1_0(1024, 'B');
@@ -65,9 +66,10 @@ int main(int argc, char** argv)
     std::vector<uintptr_t> ptrs_buf_1       = {reinterpret_cast<uintptr_t>(data_buf_1_0.data()),
                                                reinterpret_cast<uintptr_t>(data_buf_1_1.data())};
     std::vector<size_t>    data_sizes_buf_1 = {data_buf_1_0.size(), data_buf_1_1.size()};
+    std::vector<size_t>    offset_buf_1 = {0,0};
 
-    RDMABuffer buf_0(end_point, ptrs_buf_0, data_sizes_buf_0, batch_size_buf_0);
-    RDMABuffer buf_1(end_point, ptrs_buf_1, data_sizes_buf_1, batch_size_buf_1);
+    RDMABuffer buf_0(end_point, ptrs_buf_0, data_sizes_buf_0, offset_buf_0);
+    RDMABuffer buf_1(end_point, ptrs_buf_1, data_sizes_buf_1, offset_buf_0);
     std::cout << "Launch EDNPOINT ..." << std::endl;
 
     buf_1.recv();
@@ -92,3 +94,6 @@ int main(int argc, char** argv)
 
     return 0;
 }
+
+
+

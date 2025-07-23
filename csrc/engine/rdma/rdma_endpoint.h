@@ -14,6 +14,7 @@
 
 namespace slime {
 
+using buffer_data_info_t = std::tuple<uintptr_t, size_t, size_t>;
 using callback_t = std::function<void()>;
 
 typedef struct meta_data {
@@ -78,7 +79,7 @@ public:
         meta_ctx_->launch_future();
     }
 
-    void addRecvTask(std::vector<std::tuple<uintptr_t, size_t, size_t>> data_info, callback_t callback)
+    void addRecvTask(std::vector<buffer_data_info_t> data_info, callback_t callback)
     {
 
         RDMA_task_t task;
@@ -93,7 +94,7 @@ public:
         RDMA_tasks_cv_.notify_one();
     }
 
-    void addSendTask(std::vector<std::tuple<uintptr_t, size_t, size_t>> data_info, callback_t callback)
+    void addSendTask(std::vector<buffer_data_info_t> data_info, callback_t callback)
     {
 
         RDMA_task_t task;
@@ -120,10 +121,10 @@ public:
     }
 
 private:
-    void     registerRecvMemRegionBatch(std::string str, std::vector<std::tuple<uintptr_t, size_t, size_t>> data_info);
-    void     registerSendMemRegionBatch(std::string str, std::vector<std::tuple<uintptr_t, size_t, size_t>> data_info);
-    uint32_t generateRecvAssignmentBatch(std::vector<std::tuple<uintptr_t, size_t, size_t>> data_info);
-    uint32_t generateSendAssignmentBatch(std::vector<std::tuple<uintptr_t, size_t, size_t>> data_info);
+    void     registerRecvMemRegionBatch(std::string str, std::vector<buffer_data_info_t> data_info);
+    void     registerSendMemRegionBatch(std::string str, std::vector<buffer_data_info_t> data_info);
+    uint32_t generateRecvAssignmentBatch(std::vector<buffer_data_info_t> data_info);
+    uint32_t generateSendAssignmentBatch(std::vector<buffer_data_info_t> data_info);
 
     void registerRemoteMemoryRegion(std::string mr_key, uintptr_t addr, size_t length, uint32_t rkey);
     void registerDataMemRegion(std::string str, uintptr_t ptr, size_t data_size);
