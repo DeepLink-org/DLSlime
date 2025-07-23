@@ -53,8 +53,7 @@ public:
     {
         SLIME_LOG_DEBUG("Initializing qp management, num qp: " << qp_num);
 
-        qp_list_len_ = qp_num;
-        std::cout << "qp_num: " << qp_num << std::endl;
+        qp_list_len_   = qp_num;
         qp_management_ = new qp_management_t*[qp_list_len_];
         for (int qpi = 0; qpi < qp_list_len_; qpi++) {
             qp_management_[qpi] = new qp_management_t();

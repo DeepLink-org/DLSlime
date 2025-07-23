@@ -11,11 +11,10 @@ from dlslime import _slime_c
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--device', default='rxe_0', help='RDMA device name')
-    parser.add_argument('--ib_port', type=int, default=1, help='IB port number')
-    parser.add_argument('--link_type', default='RoCE', choices=['IB', 'RoCE'])
-    parser.add_argument('--peer_addr', default='192.168.254.128', help='Peer IP address')
-    parser.add_argument('--port_data', type=int, default=5557, help='Data plane port')
-    parser.add_argument('--port_mrcn', type=int, default=5558, help='Metadata port')
+    parser.add_argument('--ib-port', type=int, default=1, help='IB port number')
+    parser.add_argument('--link-type', default='RoCE', choices=['IB', 'RoCE'])
+    parser.add_argument('--addr', default='192.168.254.128', help='IP address')
+    parser.add_argument('--port', type=int, default=5557, help='port')
     return parser.parse_args()
 
 

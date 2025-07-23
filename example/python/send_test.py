@@ -11,10 +11,9 @@ from dlslime import _slime_c
 def parse_args():
     parser = argparse.ArgumentParser(description='RDMA Python SEND Test')
     parser.add_argument('--device', type=str, default='rxe_0', help='RDMA device name')
-    parser.add_argument('--ib_port', type=int, default=1, help='RDMA port number')
-    parser.add_argument('--link_type', type=str, default='RoCE', help='IB or RoCE')
-    parser.add_argument('--port_data', type=int, default=5557, help='ZMQ data port')
-    parser.add_argument('--port_mrcn', type=int, default=5558, help='ZMQ metadata port')
+    parser.add_argument('--ib-port', type=int, default=1, help='RDMA port number')
+    parser.add_argument('--link-type', type=str, default='RoCE', help='IB or RoCE')
+    parser.add_argument('--port', type=int, default=5557, help='port')
     return parser.parse_args()
 
 

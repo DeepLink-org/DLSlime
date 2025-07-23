@@ -20,7 +20,7 @@ int main(int argc, char** argv)
 
     std::cout << "Init the RMDA ENDPOINT OF RECV... " << std::endl;
     // Construct the end_point
-    auto end_point = std::make_shared<RDMAEndpoint>(FLAGS_DEVICE_NAME, FLAGS_IB_PORT, FLAGS_LINK_TYPE, 16);
+    auto end_point = std::make_shared<RDMAEndpoint>(FLAGS_DEVICE_NAME, FLAGS_IB_PORT, FLAGS_LINK_TYPE, 4);
 
     std::cout << "RDMA QP INFO VIA TCP... " << std::endl;
     // RDMA control plane via TCP
