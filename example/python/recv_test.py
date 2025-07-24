@@ -60,8 +60,8 @@ def main():
     ]
     offset_buf_1 = [0, 0]
 
-    buf_0 = _slime_c.rdma_buffer(end_point, ptrs_buf_0, data_sizes_buf_0, offset_buf_0)
-    buf_1 = _slime_c.rdma_buffer(end_point, ptrs_buf_1, data_sizes_buf_1, offset_buf_1)
+    buf_0 = _slime_c.rdma_buffer(end_point, ptrs_buf_0, offset_buf_0, data_sizes_buf_0)
+    buf_1 = _slime_c.rdma_buffer(end_point, ptrs_buf_1, offset_buf_1, data_sizes_buf_1)
 
     buf_0.recv()
     buf_1.recv()

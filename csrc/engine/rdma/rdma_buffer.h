@@ -22,8 +22,8 @@ class RDMABuffer {
 public:
     RDMABuffer(std::shared_ptr<RDMAEndpoint> end_point,
                std::vector<uintptr_t>        ptrs,
-               std::vector<size_t>           data_size,
-               std::vector<size_t>           offset)
+               std::vector<size_t>           offset,
+               std::vector<size_t>           data_size)
     {
         batch_size_ = ptrs.size();
         for (uint32_t i = 0; i < batch_size_; ++i) {
