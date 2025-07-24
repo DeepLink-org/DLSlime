@@ -83,7 +83,10 @@ PYBIND11_MODULE(_slime_c, m)
         .def("get_meta_context_info", &slime::RDMAEndpoint::getMetaContextInfo);
 
     py::class_<slime::RDMABuffer>(m, "rdma_buffer")
-        .def(py::init<std::shared_ptr<slime::RDMAEndpoint>, std::vector<uintptr_t>, std::vector<size_t>, size_t>())
+        .def(py::init<std::shared_ptr<slime::RDMAEndpoint>,
+                      std::vector<uintptr_t>,
+                      std::vector<size_t>,
+                      std::vector<size_t>>())
         .def("send", &slime::RDMABuffer::send)
         .def("recv", &slime::RDMABuffer::recv)
         .def("wait_send", &slime::RDMABuffer::waitSend)

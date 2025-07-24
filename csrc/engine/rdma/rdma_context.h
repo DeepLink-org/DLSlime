@@ -93,12 +93,6 @@ public:
         return 0;
     }
 
-    int64_t register_remote_memory_region(std::string mr_key, uintptr_t addr, size_t length, uint32_t rkey)
-    {
-        memory_pool_->register_remote_memory_region(mr_key, addr, length, rkey);
-        return 0;
-    }
-
     int64_t register_remote_memory_region(std::string mr_key, json mr_info)
     {
         memory_pool_->register_remote_memory_region(mr_key, mr_info);

@@ -15,7 +15,8 @@
 namespace slime {
 
 using buffer_data_info_t = std::tuple<uintptr_t, size_t, size_t>;
-using callback_t = std::function<void()>;
+using callback_t         = std::function<void()>;
+using json               = nlohmann::json;
 
 typedef struct meta_data {
 
@@ -23,7 +24,7 @@ typedef struct meta_data {
     uint32_t mr_rkey;
     uint32_t mr_size;
     uint32_t mr_slot;
-    uint32_t padding;
+    uint32_t mr_qpidx;
 
 } __attribute__((packed)) meta_data_t;
 
