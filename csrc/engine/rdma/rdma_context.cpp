@@ -37,8 +37,8 @@ typedef struct callback_info_with_qpi {
         FAILED                    = 403,
     } CALLBACK_STATUS;
 
-    callback_info_t* callback_info_;
-    int              qpi_;
+    std::shared_ptr<callback_info_t> callback_info_;
+    int                              qpi_;
 } callback_info_with_qpi_t;
 
 int64_t RDMAContext::init(const std::string& dev_name, uint8_t ib_port, const std::string& link_type)
@@ -428,12 +428,7 @@ int64_t RDMAContext::post_send_batch(int qpi, RDMAAssignmentSharedPtr assign)
         sge[i].lkey   = mr->lkey;
         memset(&wr[i], 0, sizeof(ibv_send_wr));
         wr[i].wr_id =
-            (i == batch_size - 1) ?
-                (uintptr_t)(new callback_info_with_qpi_t{new callback_info_t(assign->callback_info_->opcode_,
-                                                                             assign->callback_info_->batch_size_,
-                                                                             assign->callback_info_->callback_),
-                                                         qpi}) :
-                0;
+            (i == batch_size - 1) ? (uintptr_t)(new callback_info_with_qpi_t{assign->callback_info_, qpi}) : 0;
         wr[i].opcode     = IBV_WR_SEND;
         wr[i].sg_list    = &sge[i];
         wr[i].num_sge    = 1;
@@ -472,12 +467,7 @@ int64_t RDMAContext::post_recv_batch(int qpi, RDMAAssignmentSharedPtr assign)
         sge[i].lkey   = mr->lkey;
         memset(&wr[i], 0, sizeof(ibv_recv_wr));
         wr[i].wr_id =
-            (i == batch_size - 1) ?
-                (uintptr_t)(new callback_info_with_qpi_t{new callback_info_t(assign->callback_info_->opcode_,
-                                                                             assign->callback_info_->batch_size_,
-                                                                             assign->callback_info_->callback_),
-                                                         qpi}) :
-                0;
+            (i == batch_size - 1) ? (uintptr_t)(new callback_info_with_qpi_t{assign->callback_info_, qpi}) : 0;
         wr[i].sg_list = &sge[i];
         wr[i].num_sge = 1;
         wr[i].next    = (i == batch_size - 1) ? nullptr : &wr[i + 1];
@@ -516,12 +506,7 @@ int64_t RDMAContext::post_rc_oneside_batch(int qpi, RDMAAssignmentSharedPtr assi
         sge[i].length = subassign.length;
         sge[i].lkey   = mr->lkey;
         wr[i].wr_id =
-            (i == batch_size - 1) ?
-                (uintptr_t)(new callback_info_with_qpi_t{new callback_info_t(assign->callback_info_->opcode_,
-                                                                             assign->callback_info_->batch_size_,
-                                                                             assign->callback_info_->callback_),
-                                                         qpi}) :
-                0;
+            (i == batch_size - 1) ? (uintptr_t)(new callback_info_with_qpi_t{assign->callback_info_, qpi}) : 0;
         wr[i].opcode              = ASSIGN_OP_2_IBV_WR_OP.at(assign->opcode_);
         wr[i].sg_list             = &sge[i];
         wr[i].num_sge             = 1;
@@ -613,8 +598,6 @@ int64_t RDMAContext::cq_poll_handle()
                     size_t batch_size = callback_with_qpi->callback_info_->batch_size_;
                     qp_management_[callback_with_qpi->qpi_]->outstanding_rdma_reads_.fetch_sub(
                         batch_size, std::memory_order_relaxed);
-
-                    delete callback_with_qpi->callback_info_;  // need to free the callback_info_ ptr.
                     delete callback_with_qpi;
                 }
             }

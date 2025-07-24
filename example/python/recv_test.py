@@ -13,7 +13,7 @@ def parse_args():
     parser.add_argument('--device', default='rxe_0', help='RDMA device name')
     parser.add_argument('--rdmaport', type=int, default=1, help='IB port number')
     parser.add_argument('--type', default='RoCE', choices=['IB', 'RoCE'])
-    parser.add_argument('--addr', default='192.168.254.128', help='IP address')
+    parser.add_argument('--addr', default='127.0.0.1', help='IP address')
     parser.add_argument('--port', type=int, default=5557, help='port')
     return parser.parse_args()
 

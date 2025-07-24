@@ -102,7 +102,6 @@ public:
     ~RDMAAssignment()
     {
         delete[] batch_;
-        delete callback_info_;
     }
 
     inline size_t batch_size()
@@ -129,7 +128,7 @@ private:
     int32_t imm_data_{0};
     bool    with_imm_data_{false};
 
-    callback_info_t* callback_info_;
+    std::shared_ptr<callback_info_t> callback_info_;
 };
 
 class RDMASchedulerAssignment {

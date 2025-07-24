@@ -29,7 +29,6 @@ namespace c10d {
 
 constexpr const char* GLOO_BACKEND_NAME = "gloo";
 
-
 class TORCH_API AsyncWork: public ::c10d::Work {
 public:
     explicit AsyncWork(std::vector<std::vector<at::Tensor>> outputTensors, ::c10d::OpType opType, uint64_t seq);
