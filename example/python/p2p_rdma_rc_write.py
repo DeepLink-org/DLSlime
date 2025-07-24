@@ -37,6 +37,7 @@ x = initiator.write_batch(
     [Assignment(mr_key='buffer', target_offset=0, source_offset=8, length=8)],
     async_op=True,
 )
+
 x.wait()
 
 assert torch.all(remote_tensor[:8] == 0)

@@ -20,7 +20,6 @@ python3 bench/python/transfer_bench.py --rank 1 \
 """
 
 import argparse
-import os
 import csv
 
 import numpy as np
@@ -125,14 +124,18 @@ for idx, (rawsize, ttensor) in enumerate(zip(args.size, ttensors)):
         bandwidth = n_runs * size * ttensor.itemsize * 100 / total_time / 1e3
 
         benchmark_data.append([
-            f'{size_bytes:,}', f'{total_transport:,}', str(args.target_affi), str(args.initiator_affi), f'{avg_latency.total_seconds() * 1000:.2f}',
-            f'{bandwidth:.2f}'
+            f'{size_bytes:,}', f'{total_transport:,}',
+            str(args.target_affi),
+            str(args.initiator_affi), f'{avg_latency.total_seconds() * 1000:.2f}', f'{bandwidth:.2f}'
         ])
 
 if rank == 0:
     _ = zmq_recv.recv_pyobj()
 else:
-    headers = ['Message Size (bytes)', 'Total Transport (bytes)', 'Target Affinity', 'Initiator Affinity', 'Avg Latency(ms)', 'Bandwidth(MB/s)']
+    headers = [
+        'Message Size (bytes)', 'Total Transport (bytes)', 'Target Affinity', 'Initiator Affinity', 'Avg Latency(ms)',
+        'Bandwidth(MB/s)'
+    ]
     print('\nBenchmark Results:')
     print(tabulate(benchmark_data, headers=headers, tablefmt='grid'))
     if args.save_csv:
@@ -140,7 +143,7 @@ else:
             writer = csv.writer(f)
             writer.writerow(headers)
             writer.writerows(benchmark_data)
-        print(f"CSV saved to {args.csv_filename}")
+        print(f'CSV saved to {args.csv_filename}')
     zmq_send.send_pyobj('TERMINATE')
 
 zmq_send.close()

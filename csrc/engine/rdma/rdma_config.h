@@ -3,6 +3,7 @@
 #include "utils/json.hpp"
 #include "utils/logging.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <infiniband/verbs.h>

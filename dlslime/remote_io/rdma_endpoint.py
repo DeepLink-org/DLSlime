@@ -110,18 +110,14 @@ class RDMAEndpoint(BaseEndpoint):
         batch: List[Assignment],
         async_op=False,
     ) -> _slime_c.RDMAAssignment:
-        rdma_assignment = self._ctx.submit(
-            _slime_c.OpCode.SEND,
-            [
-                _slime_c.Assignment(
-                    assign.mr_key,
-                    assign.target_offset,
-                    assign.source_offset,
-                    assign.length,
-                ) for assign in batch
-            ],
-            None,
-        )
+        rdma_assignment = self._ctx.submit(_slime_c.OpCode.SEND, [
+            _slime_c.Assignment(
+                assign.mr_key,
+                assign.target_offset,
+                assign.source_offset,
+                assign.length,
+            ) for assign in batch
+        ], None, -1, -1)
         if not async_op:
             return rdma_assignment.wait()
         else:
@@ -132,18 +128,14 @@ class RDMAEndpoint(BaseEndpoint):
         batch: List[Assignment],
         async_op=False,
     ) -> _slime_c.RDMAAssignment:
-        rdma_assignment = self._ctx.submit(
-            _slime_c.OpCode.RECV,
-            [
-                _slime_c.Assignment(
-                    assign.mr_key,
-                    assign.target_offset,
-                    assign.source_offset,
-                    assign.length,
-                ) for assign in batch
-            ],
-            None,
-        )
+        rdma_assignment = self._ctx.submit(_slime_c.OpCode.RECV, [
+            _slime_c.Assignment(
+                assign.mr_key,
+                assign.target_offset,
+                assign.source_offset,
+                assign.length,
+            ) for assign in batch
+        ], None, -1, -1)
         if not async_op:
             return rdma_assignment.wait()
         else:
@@ -152,22 +144,18 @@ class RDMAEndpoint(BaseEndpoint):
     def read_batch_with_callback(self, batch: List[Assignment], callback: Callable[[int], None]):
         callback_obj_id = id(callback)
 
-        def delete_assignment_callback(code: int):
+        def delete_assignment_callback(code: int, _: int):
             callback(code)
             del self.assignment_with_callback[callback_obj_id]
 
-        rdma_assignment = self._ctx.submit(
-            _slime_c.OpCode.READ,
-            [
-                _slime_c.Assignment(
-                    assign.mr_key,
-                    assign.target_offset,
-                    assign.source_offset,
-                    assign.length,
-                ) for assign in batch
-            ],
-            delete_assignment_callback,
-        )
+        rdma_assignment = self._ctx.submit(_slime_c.OpCode.READ, [
+            _slime_c.Assignment(
+                assign.mr_key,
+                assign.target_offset,
+                assign.source_offset,
+                assign.length,
+            ) for assign in batch
+        ], delete_assignment_callback, -1, -1)
         self.assignment_with_callback[callback_obj_id] = rdma_assignment
         return rdma_assignment
 
@@ -187,18 +175,14 @@ class RDMAEndpoint(BaseEndpoint):
         Returns:
             ibv_wc_status code (0 = IBV_WC_SUCCESS)
         """
-        rdma_assignment = self._ctx.submit(
-            _slime_c.OpCode.READ,
-            [
-                _slime_c.Assignment(
-                    assign.mr_key,
-                    assign.target_offset,
-                    assign.source_offset,
-                    assign.length,
-                ) for assign in batch
-            ],
-            None,
-        )
+        rdma_assignment = self._ctx.submit(_slime_c.OpCode.READ, [
+            _slime_c.Assignment(
+                assign.mr_key,
+                assign.target_offset,
+                assign.source_offset,
+                assign.length,
+            ) for assign in batch
+        ], None, -1, -1)
         if async_op:
             return rdma_assignment
         else:
@@ -220,18 +204,14 @@ class RDMAEndpoint(BaseEndpoint):
         Returns:
             ibv_wc_status code (0 = IBV_WC_SUCCESS)
         """
-        rdma_assignment = self._ctx.submit(
-            _slime_c.OpCode.WRITE,
-            [
-                _slime_c.Assignment(
-                    assign.mr_key,
-                    assign.target_offset,
-                    assign.source_offset,
-                    assign.length,
-                ) for assign in batch
-            ],
-            None,
-        )
+        rdma_assignment = self._ctx.submit(_slime_c.OpCode.WRITE, [
+            _slime_c.Assignment(
+                assign.mr_key,
+                assign.target_offset,
+                assign.source_offset,
+                assign.length,
+            ) for assign in batch
+        ], None, -1, -1)
         if async_op:
             return rdma_assignment
         else:

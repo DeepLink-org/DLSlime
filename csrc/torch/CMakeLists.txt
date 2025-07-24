@@ -31,6 +31,8 @@ if (USE_MACA)
     target_compile_definitions(_slime_torch PRIVATE "-DUSE_MACA")
 endif()
 
+
+
 target_link_libraries(
     _slime_torch
     PRIVATE
