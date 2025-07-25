@@ -22,12 +22,10 @@ rank = 0 if args.mode == 'send' else 1
 dist.init_process_group('cuda:dlslime', rank=rank, world_size=2)
 torch.cuda.set_device(rank)
 
-# 准备批量化数据
 device = 'cuda'
 send_batch = [torch.ones(3, device=device) * i for i in range(5)]
 recv_batch = [torch.zeros(3, device=device) for _ in range(5)]
 
-# 创建批量化通信请求
 reqs = []
 for i in range(5):
     dst = (rank + 1) % dist.get_world_size()
@@ -38,7 +36,6 @@ for i in range(5):
 
     reqs.extend([send_op, recv_op])
 
-# 批量执行所有通信操作
 work = distributed_c10d.batch_isend_irecv(reqs)
 print(work)
 [w.wait() for w in work]
