@@ -15,13 +15,13 @@ BUILD_NVLINK=<OFF|ON> BUILD_TORCH_PLUGIN=<OFF|ON> pip install -v --no-build-isol
 ## Usage
 
 - NVLink IPC Read
-  - [example](example/python/p2p_nvlink.py)
+  - example: [example](example/python/p2p_nvlink.py)
 - RDMA RC Read
-  - [example](example/python/p2p_rdma.py)
+  - example: [example](example/python/p2p_rdma.py)
   - bench (single NIC): [cpp](bench/cpp/transfer_bench.cpp), [python](bench/python/transfer_bench.py)
   - bench (Aggregated Transport): [cpp](bench/cpp/scheduler_bench.cpp)
-- RDMA SendRecv (GLOO Wrapper)
-  - [example](example/python/sendrecv.py)
+- RDMA SendRecv (DLSlime TransferEngine or GLOO Wrapper)
+  - example: [torch backend example](example/python/sendrecv.py), [dlslime python interface](example/python/p2p_endpoint_sendrecv.py)
   - bench: [python](bench/python/sendrecv_bench.py)
 
 ## Cross node performance
