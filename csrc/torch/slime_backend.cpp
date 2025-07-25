@@ -3,6 +3,11 @@
 namespace slime {
 namespace c10d {
 
+int mod_positive(int a, int b)
+{
+    int r = a % b;
+    return (r < 0) ? r + b : r;
+}
 void logAndThrow(const std::string& logMessage, const std::string& errorMessage)
 {
     LOG(ERROR) << logMessage;
@@ -88,23 +93,16 @@ c10::intrusive_ptr<::c10d::Work> slimeBackend::send(std::vector<at::Tensor>& ten
     std::vector<size_t>    offset;
     for (size_t i = 0; i < batch_size; ++i) {
         ptrs.push_back(reinterpret_cast<uintptr_t>(tensors[i].data_ptr()));
-        data_size.push_back(static_cast<size_t>(tensors[i].numel()));
         offset.push_back(0);
+        data_size.push_back(static_cast<size_t>(tensors[i].numel() * tensors[i].itemsize()));
     }
 
-    auto it = end_point_set_.find(tag);
+    auto buf =
+        std::make_unique<RDMABuffer>(end_point_set_[mod_positive(dstRank - rank_, size_ - 1)], ptrs, offset, data_size);
+    buf->send();
 
-    if (it != end_point_set_.end()) {
-        auto end_point = it->second;
-        auto buf       = std::make_unique<RDMABuffer>(end_point, ptrs, offset, data_size);
-        buf->send();
-        ++seq_;
-        return c10::make_intrusive<SendWork>(tensors, std::move(buf), seq_);
-    }
-    else {
-        std::cout << "Endpoint not found in send!" << std::endl;
-        throw std::runtime_error("there are some bugs in backend in send function");
-    }
+    ++seq_;
+    return c10::make_intrusive<SendWork>(tensors, std::move(buf), seq_);
 }
 
 c10::intrusive_ptr<::c10d::Work> slimeBackend::recv(std::vector<at::Tensor>& tensors, int srcRank, int tag)
@@ -115,28 +113,20 @@ c10::intrusive_ptr<::c10d::Work> slimeBackend::recv(std::vector<at::Tensor>& ten
     std::vector<size_t>    offset;
     for (size_t i = 0; i < batch_size; ++i) {
         ptrs.push_back(reinterpret_cast<uintptr_t>(tensors[i].data_ptr()));
-        data_size.push_back(static_cast<size_t>(tensors[i].numel()));
         offset.push_back(0);
+        data_size.push_back(static_cast<size_t>(tensors[i].numel() * tensors[i].itemsize()));
     }
-    auto it = end_point_set_.find(tag);
-    if (it != end_point_set_.end()) {
-        auto end_point = it->second;
-        auto buf       = std::make_unique<RDMABuffer>(end_point, ptrs, offset, data_size);
-        buf->recv();
-        ++seq_;
-        return c10::make_intrusive<RecvWork>(tensors, std::move(buf), seq_);
-    }
-    else {
-        std::cout << "Endpoint not found in recv!" << std::endl;
-        throw std::runtime_error("there are some bugs in backend in send function");
-    }
+
+    auto buf = std::make_unique<RDMABuffer>(end_point_set_[mod_positive(srcRank - rank_, size_ - 1)], ptrs, offset, data_size);
+    buf->recv();
+    ++seq_;
+    return c10::make_intrusive<RecvWork>(tensors, std::move(buf), seq_);
 }
 
 slimeBackend::slimeBackend(const c10::intrusive_ptr<::c10d::Store>& store, int rank, int size):
     Backend(rank, size), store_(store)
 {
 
-    // available_nic() is only used to get the device name
     std::vector<std::string> available_devices = available_nic();
     size_t                   idx               = rank_ % available_devices.size();
 
@@ -145,25 +135,24 @@ slimeBackend::slimeBackend(const c10::intrusive_ptr<::c10d::Store>& store, int r
     const std::string link_type = "RoCE";
     uint8_t           ib_port   = 1;
     size_t            qp_num    = 4;
-    auto              end_point = std::make_shared<RDMAEndpoint>(dev_name, ib_port, link_type, qp_num);
 
-    json data_channel_info = end_point->getDataContextInfo();
-    json meta_channel_info = end_point->getMetaContextInfo();
+    for (int i = 0; i < size - 1; ++i) {
 
-    channel_info_["data_channel"] = data_channel_info;
-    channel_info_["meta_channel"] = meta_channel_info;
+        // TODO: the different end_point in the rank can use different RDMA dev to transmit the message.
+        end_point_set_.push_back(std::make_shared<RDMAEndpoint>(dev_name, ib_port, link_type, qp_num));
+
+        json channel_info;
+        channel_info["data_channel"] = end_point_set_[i]->getDataContextInfo();
+        channel_info["meta_channel"] = end_point_set_[i]->getMetaContextInfo();
+        local_channel_info_.push_back(channel_info);
+    }
 
     exchangeChannelInfo();
 
-    // Establish the connection among the RDMA Endpoints
     try {
-
-        for (int i = 0; i < size_; ++i) {
-            if (i == rank_)
-                continue;
-
-            json peer_channel_info = peers_channel_info_[i];
-            end_point->contextConnect(peer_channel_info["data_channel"], peer_channel_info["meta_channel"]);
+        for (int i = 0; i < size_ - 1; ++i) {
+            json cur_channel_info = global_channel_info_[mod_positive(rank_ + i + 1, size_)][size_ - 2 - i];
+            end_point_set_[i]->contextConnect(cur_channel_info["data_channel"], cur_channel_info["meta_channel"]);
         }
     }
     catch (const std::runtime_error& e) {
@@ -171,26 +160,26 @@ slimeBackend::slimeBackend(const c10::intrusive_ptr<::c10d::Store>& store, int r
         auto msg = c10::str("RDMA Endpoint connection is failed with ", err);
         logAndThrow(msg, msg);
     }
-
-    end_point_set_[rank_] = std::move(end_point);
 }
 
 void slimeBackend::exchangeChannelInfo()
 {
-    auto        channel_info = channel_info_.dump();
-    std::string key          = "SLIME_ENDPOINT_" + std::to_string(rank_);
-    store_->set(key, channel_info);
+    json tx_channel_info(local_channel_info_);
 
-    std::vector<std::string> peers_keys;
+    auto        str_channel_info = tx_channel_info.dump();
+    std::string local_key        = "SLIME_ENDPOINT_" + std::to_string(rank_);
+    store_->set(local_key, str_channel_info);
+
+    std::vector<std::string> global_keys;
     for (size_t i = 0; i < size_; ++i) {
-        peers_keys.push_back("SLIME_ENDPOINT_" + std::to_string(i));
+        global_keys.push_back("SLIME_ENDPOINT_" + std::to_string(i));
     }
-    store_->wait(peers_keys);
+    store_->wait(global_keys);
 
-    peers_channel_info_.resize(size_);
+    global_channel_info_.resize(size_);
     for (size_t i = 0; i < size_; ++i) {
-        auto peer_key          = store_->get(peers_keys[i]);
-        peers_channel_info_[i] = json::parse(peer_key);
+        auto recv_channel_info  = store_->get(global_keys[i]);
+        global_channel_info_[i] = json::parse(recv_channel_info);
     }
 }
 c10::intrusive_ptr<::c10d::Backend> slimeBackend::createSlimeBackend(const c10::intrusive_ptr<::c10d::Store>& store,

@@ -166,12 +166,12 @@ public:
     }
 
 private:
-    void                                                        exchangeChannelInfo();
-    c10::intrusive_ptr<::c10d::Store>                           store_;
-    std::unordered_map<uint32_t, std::shared_ptr<RDMAEndpoint>> end_point_set_;
-    json                                                        channel_info_;
-    std::vector<json>                                           peers_channel_info_;
-    uint64_t                                                    seq_{0};
+    void                                       exchangeChannelInfo();
+    c10::intrusive_ptr<::c10d::Store>          store_;
+    std::vector<std::shared_ptr<RDMAEndpoint>> end_point_set_;
+    std::vector<json>                          local_channel_info_;
+    std::vector<json>                          global_channel_info_;
+    uint64_t                                   seq_{0};
 };
 
 }  // namespace c10d
