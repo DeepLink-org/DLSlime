@@ -5,7 +5,7 @@ if (BUILD_PYTHON)
     add_subdirectory(python)
 endif (BUILD_PYTHON)
 
-if (BUILD_GLOO_BACKEND)
+if (USE_GLOO_BACKEND)
     add_subdirectory(gloo)
 endif()
 
