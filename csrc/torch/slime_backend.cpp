@@ -102,7 +102,13 @@ c10::intrusive_ptr<::c10d::Work> slimeBackend::send(std::vector<at::Tensor>& ten
     buf->send();
 
     ++seq_;
-    return c10::make_intrusive<SendWork>(tensors, std::move(buf), seq_);
+    // The work captures the tensor to prevent it being deallocated and
+    // the unbound buffer to synchronize on completion of the recv.
+    auto send_work = c10::make_intrusive<SendWork>(tensors, std::move(buf), seq_);
+    if (group_active_) {
+        grouped_works_.emplace_back(send_work);
+    }
+    return send_work;
 }
 
 c10::intrusive_ptr<::c10d::Work> slimeBackend::recv(std::vector<at::Tensor>& tensors, int srcRank, int tag)
@@ -120,7 +126,14 @@ c10::intrusive_ptr<::c10d::Work> slimeBackend::recv(std::vector<at::Tensor>& ten
     auto buf = std::make_unique<RDMABuffer>(end_point_set_[mod_positive(srcRank - rank_, size_ - 1)], ptrs, offset, data_size);
     buf->recv();
     ++seq_;
-    return c10::make_intrusive<RecvWork>(tensors, std::move(buf), seq_);
+
+    // The work captures the tensor to prevent it being deallocated and
+    // the unbound buffer to synchronize on completion of the send.
+    auto recv_work = c10::make_intrusive<RecvWork>(tensors, std::move(buf), seq_);
+    if (group_active_) {
+        grouped_works_.emplace_back(recv_work);
+    }
+    return recv_work;
 }
 
 slimeBackend::slimeBackend(const c10::intrusive_ptr<::c10d::Store>& store, int rank, int size):

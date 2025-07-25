@@ -16,6 +16,8 @@
 namespace slime {
 namespace c10d {
 
+constexpr const char* SLIME_BACKEND_NAME = "dlslime";
+
 class TORCH_API SendWork: public ::c10d::Work {
     friend class slimeBackend;
 
@@ -52,6 +54,20 @@ protected:
     const uint64_t                       seq_;
 };
 
+class GroupWork: public ::c10d::Work {
+public:
+    GroupWork(std::vector<c10::intrusive_ptr<::c10d::Work>>& grouped_works): grouped_works_(std::move(grouped_works)) {}
+    bool wait(std::chrono::milliseconds timeout = kNoTimeout) override
+    {
+        for (size_t i = 0; i < grouped_works_.size(); ++i)
+            grouped_works_[i]->wait(timeout);
+        return true;
+    }
+
+protected:
+    std::vector<c10::intrusive_ptr<::c10d::Work>> grouped_works_;
+};
+
 // Backend:
 class TORCH_API slimeBackend: public ::c10d::Backend {
 
@@ -59,6 +75,23 @@ public:
     slimeBackend(const c10::intrusive_ptr<::c10d::Store>& store, int rank = -1, int size = -1);
 
     ~slimeBackend() override = default;
+
+    const std::string getBackendName() const override
+    {
+        return std::string(SLIME_BACKEND_NAME);
+    }
+
+    void startCoalescing() override
+    {
+        group_active_ = true;
+    }
+
+    c10::intrusive_ptr<::c10d::Work> endCoalescing() override
+    {
+        group_active_   = false;
+        auto group_work = c10::make_intrusive<GroupWork>(grouped_works_);
+        return group_work;
+    }
 
     c10::intrusive_ptr<::c10d::Work> send(std::vector<at::Tensor>& tensors, int dstRank, int tag) override;
     c10::intrusive_ptr<::c10d::Work> recv(std::vector<at::Tensor>& tensors, int srcRank, int tag) override;
@@ -172,6 +205,10 @@ private:
     std::vector<json>                          local_channel_info_;
     std::vector<json>                          global_channel_info_;
     uint64_t                                   seq_{0};
+
+    // for batched_isend_irecv
+    bool                                          group_active_{false};
+    std::vector<c10::intrusive_ptr<::c10d::Work>> grouped_works_;
 };
 
 }  // namespace c10d
