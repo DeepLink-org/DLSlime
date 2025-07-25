@@ -30,7 +30,8 @@ std::vector<std::string> available_nic()
     return available_devices;
 }
 
-int get_gid_index(std::string dev_name) {
+int get_gid_index(std::string dev_name)
+{
     int                 num_devices;
     struct ibv_device** dev_list;
 
