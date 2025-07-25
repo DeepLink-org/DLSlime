@@ -14,6 +14,7 @@
 #include "gloo/rendezvous/prefix_store.h"
 #include "gloo/transport/ibverbs/device.h"
 
+#include "engine/rdma/rdma_env.h"
 #include "utils/logging.h"
 #include "utils/utils.h"
 
@@ -224,12 +225,15 @@ slimeBackend::slimeBackend(const c10::intrusive_ptr<::c10d::Store>& store, int r
     // context->setTimeout(options_->timeout);
     try {
         ::gloo::transport::ibverbs::attr attr;
-        std::vector<std::string>         available_devices = available_nic();
-        size_t                           idx               = rank_ % available_devices.size();
-        attr.name                                          = available_devices[idx];
-        attr.port                                          = 1;
-        // TODO: find out index definition
-        attr.index                                         = 3;
+
+        std::vector<std::string> available_devices = available_nic();
+        size_t                   idx               = rank_ % available_devices.size();
+        attr.name                                  = available_devices[idx];
+        attr.port                                  = 1;
+
+        attr.index = get_gid_index(available_devices[idx]);
+        SLIME_LOG_INFO("rank: " << rank_ << ", idx: " << idx << ", device: " << available_devices[idx]
+                                << ", gidx: " << attr.index << ".");
 
         auto dev = gloo::transport::ibverbs::CreateDevice(attr);
         context->connectFullMesh(connectStore, dev);
@@ -311,7 +315,11 @@ c10::intrusive_ptr<::c10d::Work> slimeBackend::send(std::vector<at::Tensor>& ten
 
     // The work captures the tensor to prevent it being deallocated and
     // the unbound buffer to synchronize on completion of the send.
-    return c10::make_intrusive<SendWork>(tensor, std::move(buf), seq_);
+    auto send_work = c10::make_intrusive<SendWork>(tensor, std::move(buf), seq_);
+    if (group_active_) {
+        grouped_works_.emplace_back(send_work);
+    }
+    return send_work;
 }
 
 c10::intrusive_ptr<::c10d::Work> slimeBackend::recv(std::vector<at::Tensor>& tensors, int srcRank, int tag)
@@ -329,7 +337,11 @@ c10::intrusive_ptr<::c10d::Work> slimeBackend::recv(std::vector<at::Tensor>& ten
 
     // The work captures the tensor to prevent it being deallocated and
     // the unbound buffer to synchronize on completion of the recv.
-    return c10::make_intrusive<RecvWork>(tensor, std::move(buf), ::c10d::OpType::RECV, seq_);
+    auto recv_work = c10::make_intrusive<RecvWork>(tensor, std::move(buf), ::c10d::OpType::RECV, seq_);
+    if (group_active_) {
+        grouped_works_.emplace_back(recv_work);
+    }
+    return recv_work;
 }
 
 void slimeBackend::runLoop(int workerIndex)
