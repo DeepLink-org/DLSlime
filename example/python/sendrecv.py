@@ -34,10 +34,7 @@ for i in range(5):
     send_op = distributed_c10d.P2POp(dist.isend, send_batch[i], dst, tag=i)
     recv_op = distributed_c10d.P2POp(dist.irecv, recv_batch[i], src, tag=i)
 
-    if rank == 0:
-        reqs.extend([recv_op])
-    else:
-        reqs.extend([send_op])
+    reqs.extend([send_op, recv_op])
 
 work = distributed_c10d.batch_isend_irecv(reqs)
 print(work)
