@@ -141,7 +141,8 @@ else:
     if args.save_csv:
         with open(args.csv_filename, 'w', newline='') as f:
             writer = csv.writer(f)
-            writer.writerow(headers)
+            if f.tell() == 0:
+                writer.writerow(headers)
             writer.writerows(benchmark_data)
         print(f'CSV saved to {args.csv_filename}')
     zmq_send.send_pyobj('TERMINATE')
