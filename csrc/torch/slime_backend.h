@@ -58,7 +58,7 @@ class TORCH_API slimeBackend: public ::c10d::Backend {
 public:
     slimeBackend(const c10::intrusive_ptr<::c10d::Store>& store, int rank = -1, int size = -1);
 
-    virtual ~slimeBackend() override = default;
+    ~slimeBackend() override = default;
 
     c10::intrusive_ptr<::c10d::Work> send(std::vector<at::Tensor>& tensors, int dstRank, int tag) override;
     c10::intrusive_ptr<::c10d::Work> recv(std::vector<at::Tensor>& tensors, int srcRank, int tag) override;

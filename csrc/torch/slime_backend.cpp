@@ -194,9 +194,9 @@ void slimeBackend::exchangeChannelInfo()
     }
 }
 c10::intrusive_ptr<::c10d::Backend> slimeBackend::createSlimeBackend(const c10::intrusive_ptr<::c10d::Store>& store,
-                                                       int                                      rank,
-                                                       int                                      size,
-                                                       const std::chrono::duration<float>&)
+                                                                     int                                      rank,
+                                                                     int                                      size,
+                                                                     const std::chrono::duration<float>&)
 
 {
     return c10::make_intrusive<slimeBackend>(store, rank, size);
