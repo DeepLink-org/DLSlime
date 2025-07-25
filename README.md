@@ -41,9 +41,10 @@ BUILD_NVLINK=<OFF|ON> BUILD_TORCH_PLUGIN=<OFF|ON> pip install -v --no-build-isol
 
 | Device |                       NIC Model | Bandwidth | PCIe Version | PCIe Lanes |
 | :----- | ------------------------------: | --------: | -----------: | ---------: |
-| A      | Mellanox ConnectX-4 Lx (MT4129) |  400 Gbps |     PCIe 5.0 |        x16 |
-| B      | Mellanox ConnectX-4 Lx (MT4129) |  400 Gbps |     PCIe 5.0 |         x8 |
-| C      | Mellanox ConnectX-4 Lx (MT4129) |  200 Gbps |     PCIe 5.0 |        x16 |
+| A      | Mellanox ConnectX-7 Lx (MT4129) |  400 Gbps |     PCIe 5.0 |        x16 |
+| B      | Mellanox ConnectX-7 Lx (MT4129) |  400 Gbps |     PCIe 5.0 |         x8 |
+| C      | Mellanox ConnectX-7 Lx (MT4129) |  200 Gbps |     PCIe 5.0 |        x16 |
+| D      | Mellanox ConnectX-7 Lx (MT4129) |  400 Gbps |     PCIe 5.0 |        x16 |
 
 - experiments configs
 
@@ -54,10 +55,11 @@ BUILD_NVLINK=<OFF|ON> BUILD_TORCH_PLUGIN=<OFF|ON> pip install -v --no-build-isol
 
 - Interconnect bandwidth matrix：(MB/s, demonstrates attainment of the theoretical bound).
 
-| Throughput (MB/s) |        A |        B |        C |
-| :---------------- | -------: | -------: | -------: |
-| A                 | 48967.45 | 28686.29 | 24524.29 |
-| B                 | 28915.72 | 28275.85 | 23472.29 |
-| C                 | 24496.14 | 24496.51 | 24513.57 |
+| Throughput (MB/s) |        A |        B |        C |        D |
+| :---------------- | -------: | -------: | -------: | -------: |
+| A                 | 48967.45 | 28686.29 | 24524.29 | 27676.57 |
+| B                 | 28915.72 | 28275.85 | 23472.29 | 27234.60 |
+| C                 | 24496.14 | 24496.51 | 24513.57 | 24493.89 |
+| D                 | 29317.66 | 28683.25 | 24515.30 | 27491.33 |
 
 detailed results: [bench](bench/results)
