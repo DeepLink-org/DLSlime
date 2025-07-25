@@ -30,8 +30,6 @@ namespace c10d {
 
 constexpr const char* SLIME_BACKEND_NAME = "dlslime";
 
-class TORCH_API P2PCoalescedWork: public ::c10d::Work {};
-
 class TORCH_API AsyncWork: public ::c10d::Work {
 public:
     explicit AsyncWork(std::vector<std::vector<at::Tensor>> outputTensors, ::c10d::OpType opType, uint64_t seq);
@@ -196,7 +194,7 @@ protected:
 
 class GroupWork: public ::c10d::Work {
 public:
-    GroupWork(std::vector<c10::intrusive_ptr<::c10d::Work>> grouped_works) : grouped_works_(std::move(grouped_works)) {}
+    GroupWork(std::vector<c10::intrusive_ptr<::c10d::Work>>& grouped_works) : grouped_works_(std::move(grouped_works)) {}
     bool wait(std::chrono::milliseconds timeout = kNoTimeout) override
     {
         for (size_t i = 0; i < grouped_works_.size(); ++i)
@@ -227,8 +225,7 @@ public:
     c10::intrusive_ptr<::c10d::Work> endCoalescing() override
     {
         group_active_ = false;
-        auto group_work = c10::make_intrusive<GroupWork>(grouped_works_);
-        grouped_works_.clear();
+        auto group_work = c10::make_intrusive<GroupWork>(std::move(grouped_works_));
         return group_work;
     }
 
