@@ -225,7 +225,7 @@ public:
     c10::intrusive_ptr<::c10d::Work> endCoalescing() override
     {
         group_active_ = false;
-        auto group_work = c10::make_intrusive<GroupWork>(std::move(grouped_works_));
+        auto group_work = c10::make_intrusive<GroupWork>(grouped_works_);
         return group_work;
     }
 
