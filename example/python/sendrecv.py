@@ -43,14 +43,3 @@ print(work)
 print(f'rtensor after send: {recv_batch}')
 
 dist.destroy_process_group()
-
-# if args.mode == 'send':
-#     stensor = torch.ones([1600]).cuda()
-#     dist.init_process_group('cuda:dlslime', rank=0, world_size=2)
-#     dist.send(stensor, dst=1)
-# if args.mode == 'recv':
-#     rtensor = torch.zeros([1600]).cuda()
-#     dist.init_process_group('cuda:dlslime', rank=1, world_size=2)
-#     print(f'rtensor befors recv: {rtensor}')
-#     dist.recv(rtensor, src=0)
-#     print(f'rtensor after send: {rtensor}')

@@ -38,9 +38,9 @@ public:
 
     void recv();
 
-    void waitSend();
+    bool waitSend();
 
-    void waitRecv();
+    bool waitRecv();
 
 private:
     std::shared_ptr<RDMAEndpoint> end_point_;

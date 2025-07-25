@@ -28,29 +28,33 @@ void RDMABuffer::recv()
     });
 }
 
-void RDMABuffer::waitSend()
+bool RDMABuffer::waitSend()
 {
     std::unique_lock<std::mutex> lock(send_mutex_);
 
     if (send_completed_)
-        return;
+        return send_completed_;
 
     send_cv_.wait(lock, [this]() { return send_completed_; });
     send_pending_ = false;
     SLIME_LOG_INFO("complete to send the data.");
+
+    return send_completed_;
 }
 
-void RDMABuffer::waitRecv()
+bool RDMABuffer::waitRecv()
 {
     std::unique_lock<std::mutex> lock(recv_mutex_);
 
     if (recv_completed_)
-        return;
+        return recv_completed_;
 
     // waiting for the recv complete...
     recv_cv_.wait(lock, [this]() { return recv_completed_; });
     recv_pending_ = false;
     SLIME_LOG_INFO("complete to recv the data.");
+
+    return recv_completed_;
 }
 
 }  // namespace slime

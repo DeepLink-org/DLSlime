@@ -10,6 +10,7 @@ slime_option(BUILD_BENCH        "Build transfer engine benchmark"  OFF)
 slime_option(BUILD_EXAMPLE      "Build example"                    OFF)
 slime_option(BUILD_PYTHON       "Build python wrapper"             OFF)
 slime_option(BUILD_TEST         "Build test"                       OFF)
+slime_option(USE_GLOO_BACKEND   "Build gloo backend"               OFF)
 slime_option(BUILD_TORCH_PLUGIN "Build torch plugin"               OFF)
 
 set(CMAKE_CXX_STANDARD 17)
