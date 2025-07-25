@@ -8,14 +8,49 @@
 #include <torch/csrc/distributed/c10d/Utils.hpp>
 #include <torch/csrc/distributed/c10d/Work.hpp>
 
+#include <pybind11/chrono.h>
+
 #include "engine/rdma/rdma_endpoint.h"
 #include "utils/utils.h"
 
 namespace slime {
 namespace c10d {
 
+class TORCH_API SendWork: public ::c10d::Work {
+    friend class slimeBackend;
 
+public:
+    explicit SendWork(std::vector<at::Tensor>& tensor, std::unique_ptr<::slime::RDMABuffer> buffer, uint64_t seq);
+    bool wait(std::chrono::milliseconds timeout = kNoTimeout) override;
+    void abort() override
+    {
+        throw std::runtime_error("not supported");
+    }
 
+protected:
+    std::vector<at::Tensor>              tensor_;
+    std::unique_ptr<::slime::RDMABuffer> buffer_;
+    int                                  dstRank_;
+    const uint64_t                       seq_;
+};
+
+class TORCH_API RecvWork: public ::c10d::Work {
+    friend class slimeBackend;
+
+public:
+    explicit RecvWork(std::vector<at::Tensor>& tensor, std::unique_ptr<::slime::RDMABuffer> buffer, uint64_t seq);
+    bool wait(std::chrono::milliseconds timeout = kNoTimeout) override;
+    void abort() override
+    {
+        throw std::runtime_error("not supported");
+    }
+
+protected:
+    std::vector<at::Tensor>              tensor_;
+    std::unique_ptr<::slime::RDMABuffer> buffer_;
+    int                                  srcRank_;
+    const uint64_t                       seq_;
+};
 
 // Backend:
 class slimeBackend: public ::c10d::Backend {
@@ -117,30 +152,26 @@ public:
         throw std::runtime_error("not supported");
     }
 
-    static c10::intrusive_ptr<Backend> createSlimeBackend(const c10::intrusive_ptr<::c10d::Store>& store,
-                                                          int                                      rank,
-                                                          int                                      size,
-                                                          const std::chrono::duration<float>&);
+    static c10::intrusive_ptr<::c10d::Backend> createSlimeBackend(const c10::intrusive_ptr<::c10d::Store>& store,
+                                                                  int                                      rank,
+                                                                  int                                      size,
+                                                                  const std::chrono::duration<float>&);
 
     static void slimeBackendConstructor() __attribute__((constructor))
     {
-        py::object module           = py::module::import("torch.distributed");
-        py::object register_backend = module.attr("Backend").attr("register_backend");
-        register_backend(
+        py::object module          = py::module::import("torch.distributed");
+        py::object registerBackend = module.attr("Backend").attr("register_backend");
+        registerBackend(
             "dlslime", py::cpp_function(createSlimeBackend), false, py::arg("devices") = py::make_tuple("cuda", "cpu"));
     }
 
 private:
-    void exchangeChannelInfo();
-
-    c10::intrusive_ptr<::c10d::Store> store_;
-    json                              channel_info_;
-
-    std::vector<json> peers_channel_info_;
-};
-
-class WorkSlime: public ::c10d::Work {
-    friend class slimeBackend;
+    void                                                        exchangeChannelInfo();
+    c10::intrusive_ptr<::c10d::Store>                           store_;
+    std::unordered_map<uint32_t, std::shared_ptr<RDMAEndpoint>> end_point_set_;
+    json                                                        channel_info_;
+    std::vector<json>                                           peers_channel_info_;
+    uint64_t                                                    seq_{0};
 };
 
 }  // namespace c10d

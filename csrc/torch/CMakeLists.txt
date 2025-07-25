@@ -8,7 +8,7 @@ set(PYTHON_SUPPORTED_VERSIONS "3.8" "3.9" "3.10" "3.11" "3.12")
 
 pybind11_add_module(
     _slime_torch
-    backend.cpp
+    slime_backend.cpp
 )
 
 include_directories(/home/haoliu/miniconda3/envs/dlslime/lib/python3.10/site-packages/torch/include)
