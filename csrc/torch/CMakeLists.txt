@@ -11,8 +11,6 @@ pybind11_add_module(
     slime_backend.cpp
 )
 
-include_directories(/home/haoliu/miniconda3/envs/dlslime/lib/python3.10/site-packages/torch/include)
-
 run_python("Torch_DIR" "import torch; print(torch.__file__.rsplit(\"/\", 1)[0])" "Cannot find torch DIR")
 
 target_include_directories(_slime_torch PRIVATE ${Torch_DIR}/include)
@@ -51,15 +49,16 @@ target_link_libraries(
     ${Torch_DIR}/lib/libtorch_python.so
     ${Torch_DIR}/lib/libc10.so
     ${Torch_DIR}/lib/libc10_cuda.so
-    _slime_gloo
     _slime_utils
+    _slime_engine
+    _slime_rdma
 )
 
 set_target_properties(
     _slime_torch
     PROPERTIES
     BUILD_WITH_INSTALL_RPATH TRUE
-    INSTALL_RPATH "\${ORIGIN};${TORCH_INSTALL_PREFIX}/lib"
+    INSTALL_RPATH "\${ORIGIN};${Torch_DIR}/lib"
 )
 
 install(
@@ -67,4 +66,3 @@ install(
     _slime_torch
     LIBRARY DESTINATION ${DLSLIME_INSTALL_PATH}
 )
-

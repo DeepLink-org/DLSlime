@@ -193,7 +193,7 @@ void slimeBackend::exchangeChannelInfo()
         peers_channel_info_[i] = json::parse(peer_key);
     }
 }
-c10::intrusive_ptr<::c10d::Backend> createSlimeBackend(const c10::intrusive_ptr<::c10d::Store>& store,
+c10::intrusive_ptr<::c10d::Backend> slimeBackend::createSlimeBackend(const c10::intrusive_ptr<::c10d::Store>& store,
                                                        int                                      rank,
                                                        int                                      size,
                                                        const std::chrono::duration<float>&)
