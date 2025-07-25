@@ -11,6 +11,8 @@ pybind11_add_module(
     backend.cpp
 )
 
+include_directories(/home/haoliu/miniconda3/envs/dlslime/lib/python3.10/site-packages/torch/include)
+
 run_python("Torch_DIR" "import torch; print(torch.__file__.rsplit(\"/\", 1)[0])" "Cannot find torch DIR")
 set(LIB_NAMES torch torch_cuda torch_python c10 c10_cuda)
 find_libraries(TORCH_LIBRARIES "${Torch_DIR}/lib" "${LIB_NAMES}")
