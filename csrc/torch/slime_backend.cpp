@@ -1,4 +1,5 @@
 #include "slime_backend.h"
+#include "engine/rdma/rdma_env.h"
 
 namespace slime {
 namespace c10d {
@@ -147,7 +148,7 @@ slimeBackend::slimeBackend(const c10::intrusive_ptr<::c10d::Store>& store, int r
     const std::string dev_name  = available_devices[idx];
     const std::string link_type = "RoCE";
     uint8_t           ib_port   = 1;
-    size_t            qp_num    = 4;
+    size_t            qp_num    = SLIME_QP_NUM;
 
     for (int i = 0; i < size - 1; ++i) {
 
