@@ -35,7 +35,7 @@ BUILD_NVLINK=<OFF|ON> BUILD_TORCH_PLUGIN=<OFF|ON> pip install -v --no-build-isol
 
 ![Throughput](docs/imgs/performance.png)
 
-#### Interconnection between Chip A / Chip B / Chip C
+#### Interconnection between Chip A / Chip B / Chip C / Chip D
 
 - hardware configs
 
