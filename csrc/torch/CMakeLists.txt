@@ -39,6 +39,8 @@ if (USE_MACA)
 endif()
 
 target_link_options(_slime_torch PRIVATE "-Wl,--no-as-needed")
+
+
 target_link_libraries(
     _slime_torch
     PRIVATE

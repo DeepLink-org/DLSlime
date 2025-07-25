@@ -38,6 +38,15 @@ int RDMAMemoryPool::unregister_memory_region(const std::string& mr_key)
     return 0;
 }
 
+int RDMAMemoryPool::register_remote_memory_region(const std::string& mr_key,
+                                                  uintptr_t          addr,
+                                                  size_t             length,
+                                                  uint32_t           rkey)
+{
+    remote_mrs_[mr_key] = remote_mr_t(addr, length, rkey);
+    return 0;
+}
+
 int RDMAMemoryPool::register_remote_memory_region(const std::string& mr_key, const json& mr_info)
 {
     remote_mrs_[mr_key] =

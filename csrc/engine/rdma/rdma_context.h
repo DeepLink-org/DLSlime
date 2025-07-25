@@ -3,8 +3,8 @@
 #include "engine/assignment.h"
 #include "engine/rdma/memory_pool.h"
 #include "engine/rdma/rdma_assignment.h"
-#include "engine/rdma/rdma_env.h"
 #include "engine/rdma/rdma_config.h"
+#include "engine/rdma/rdma_env.h"
 
 #include "utils/json.hpp"
 #include "utils/logging.h"
@@ -28,6 +28,9 @@ namespace slime {
 using json = nlohmann::json;
 
 class RDMAContext {
+
+    friend class RDMAEndpoint;  // RDMA Endpoint need to use the register memory pool in context
+
 public:
     /*
       A context of rdma QP.
@@ -36,7 +39,21 @@ public:
     {
         SLIME_LOG_DEBUG("Initializing qp management, num qp: " << SLIME_QP_NUM);
 
-        qp_list_len_ = SLIME_QP_NUM;
+        qp_list_len_   = SLIME_QP_NUM;
+        qp_management_ = new qp_management_t*[qp_list_len_];
+        for (int qpi = 0; qpi < qp_list_len_; qpi++) {
+            qp_management_[qpi] = new qp_management_t();
+        }
+
+        /* random initialization for psn configuration */
+        srand48(time(NULL));
+    }
+
+    RDMAContext(size_t qp_num)
+    {
+        SLIME_LOG_DEBUG("Initializing qp management, num qp: " << qp_num);
+
+        qp_list_len_   = qp_num;
         qp_management_ = new qp_management_t*[qp_list_len_];
         for (int qpi = 0; qpi < qp_list_len_; qpi++) {
             qp_management_[qpi] = new qp_management_t();
@@ -82,11 +99,26 @@ public:
         return 0;
     }
 
+    int64_t unregister_memory_region(std::string mr_key)
+    {
+        memory_pool_->unregister_memory_region(mr_key);
+        return 0;
+    }
+
+    int64_t reload_memory_pool()
+    {
+        memory_pool_ = std::make_unique<RDMAMemoryPool>(pd_);
+        return 0;
+    }
+
     /* RDMA Link Construction */
     int64_t connect(const json& endpoint_info_json);
-
     /* Submit an assignment */
-    RDMAAssignmentSharedPtr submit(OpCode opcode, AssignmentBatch& assignment, callback_fn_t callback = nullptr);
+    RDMAAssignmentSharedPtr submit(OpCode           opcode,
+                                   AssignmentBatch& assignment,
+                                   callback_fn_t    callback = nullptr,
+                                   int              qpi      = UNDEFINED_QPI,
+                                   int32_t          imm_data = UNDEFINED_IMM_DATA);
 
     void launch_future();
     void stop_future();
@@ -109,7 +141,7 @@ public:
 
     json endpoint_info() const
     {
-        json endpoint_info =  json{{"rdma_info", local_rdma_info()}, {"mr_info", memory_pool_->mr_info()}};
+        json endpoint_info = json{{"rdma_info", local_rdma_info()}, {"mr_info", memory_pool_->mr_info()}};
         return endpoint_info;
     }
 
@@ -125,6 +157,9 @@ public:
     }
 
 private:
+    inline static constexpr int      UNDEFINED_QPI      = -1;
+    inline static constexpr uint32_t UNDEFINED_IMM_DATA = -1;
+
     std::string device_name_ = "";
 
     /* RDMA Configuration */
@@ -159,7 +194,8 @@ private:
         std::future<void> wq_future_;
         std::atomic<bool> stop_wq_future_{false};
 
-        ~qp_management() {
+        ~qp_management()
+        {
             if (qp_)
                 ibv_destroy_qp(qp_);
         }
@@ -199,7 +235,6 @@ private:
 
     /* Async RDMA Read */
     int64_t post_rc_oneside_batch(int qpi, RDMAAssignmentSharedPtr assign);
-
 };
 
 }  // namespace slime

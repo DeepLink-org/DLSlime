@@ -5,21 +5,23 @@
 #include <string>
 #include <vector>
 
-#include "utils/logging.h"
 #include "utils/json.hpp"
+#include "utils/logging.h"
 
 namespace slime {
 
 struct Assignment;
 
-using json = nlohmann::json;
+using json            = nlohmann::json;
 using AssignmentBatch = std::vector<Assignment>;
 
 enum class OpCode : uint8_t {
     READ,
     WRITE,
     SEND,
-    RECV
+    RECV,
+    SEND_WITH_IMM,
+    WRITE_WITH_IMM
 };
 
 typedef struct Assignment {
@@ -37,6 +39,7 @@ typedef struct Assignment {
     uint64_t    source_offset{};
     uint64_t    target_offset{};
     uint64_t    length{};
+
 } assignment_t;
 
 }  // namespace slime

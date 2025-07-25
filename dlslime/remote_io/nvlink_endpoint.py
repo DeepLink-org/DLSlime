@@ -29,6 +29,9 @@ class NVLinkEndpoint(BaseEndpoint):
     def register_remote_memory_region(self, mr_key: str, remote_mr_info: Dict[str, Any]) -> int:
         return self._ctx.register_memory_region(mr_key, remote_mr_info)
 
+    def reload_memory_pool(self):
+        raise NotImplementedError
+
     def connect(self, endpoint_info: Dict[str, Any]) -> int:
         return self._ctx.connect(endpoint_info)
 

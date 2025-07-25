@@ -25,7 +25,7 @@ using json = nlohmann::json;
 class RDMAAssignment;
 class RDMASchedulerAssignment;
 
-using callback_fn_t                = std::function<void(int)>;
+using callback_fn_t                = std::function<void(int, int)>;
 using RDMAAssignmentSharedPtr      = std::shared_ptr<RDMAAssignment>;
 using RDMAAssignmentSharedPtrBatch = std::vector<RDMAAssignmentSharedPtr>;
 
@@ -35,7 +35,9 @@ const std::chrono::milliseconds kNoTimeout = std::chrono::milliseconds::zero();
 static const std::map<OpCode, ibv_wr_opcode> ASSIGN_OP_2_IBV_WR_OP = {
     {OpCode::READ, ibv_wr_opcode::IBV_WR_RDMA_READ},
     {OpCode::WRITE, ibv_wr_opcode::IBV_WR_RDMA_WRITE},
-    {OpCode::SEND, ibv_wr_opcode::IBV_WR_SEND}
+    {OpCode::SEND, ibv_wr_opcode::IBV_WR_SEND},
+    {OpCode::SEND_WITH_IMM, ibv_wr_opcode::IBV_WR_SEND_WITH_IMM},
+    {OpCode::WRITE_WITH_IMM, ibv_wr_opcode::IBV_WR_RDMA_WRITE_WITH_IMM},
 };
 
 typedef struct RDMAMetrics {
@@ -59,7 +61,7 @@ typedef struct callback_info {
         metrics.arrive = std::chrono::steady_clock::now();
     }
 
-    callback_fn_t callback_{[this](int code) {
+    callback_fn_t callback_{[this](int code, int imm_data) {
         std::unique_lock<std::mutex> lock(mutex_);
         finished_.fetch_add(1, std::memory_order_relaxed);
         metrics.done = std::chrono::steady_clock::now();
@@ -95,11 +97,11 @@ class RDMAAssignment {
 
 public:
     RDMAAssignment(OpCode opcode, AssignmentBatch& batch, callback_fn_t callback = nullptr);
+    RDMAAssignment(OpCode opcode, AssignmentBatch& batch, int32_t imm_data, callback_fn_t callback_imm = nullptr);
 
     ~RDMAAssignment()
     {
         delete[] batch_;
-        delete callback_info_;
     }
 
     inline size_t batch_size()
@@ -123,7 +125,10 @@ private:
     Assignment* batch_{nullptr};
     size_t      batch_size_;
 
-    callback_info_t* callback_info_;
+    int32_t imm_data_{0};
+    bool    with_imm_data_{false};
+
+    std::shared_ptr<callback_info_t> callback_info_;
 };
 
 class RDMASchedulerAssignment {
