@@ -22,7 +22,7 @@ class TORCH_API SendWork: public ::c10d::Work {
     friend class slimeBackend;
 
 public:
-    explicit SendWork(std::vector<at::Tensor>& tensor, std::unique_ptr<::slime::RDMABuffer> buffer, uint64_t seq);
+    explicit SendWork(std::vector<at::Tensor>& tensor, std::shared_ptr<::slime::RDMABuffer> buffer, uint64_t seq);
     bool wait(std::chrono::milliseconds timeout = kNoTimeout) override;
     void abort() override
     {
@@ -31,7 +31,7 @@ public:
 
 protected:
     std::vector<at::Tensor>              tensor_;
-    std::unique_ptr<::slime::RDMABuffer> buffer_;
+    std::shared_ptr<::slime::RDMABuffer> buffer_;
     int                                  dstRank_;
     const uint64_t                       seq_;
 };
@@ -40,7 +40,7 @@ class TORCH_API RecvWork: public ::c10d::Work {
     friend class slimeBackend;
 
 public:
-    explicit RecvWork(std::vector<at::Tensor>& tensor, std::unique_ptr<::slime::RDMABuffer> buffer, uint64_t seq);
+    explicit RecvWork(std::vector<at::Tensor>& tensor, std::shared_ptr<::slime::RDMABuffer> buffer, uint64_t seq);
     bool wait(std::chrono::milliseconds timeout = kNoTimeout) override;
     void abort() override
     {
@@ -49,7 +49,7 @@ public:
 
 protected:
     std::vector<at::Tensor>              tensor_;
-    std::unique_ptr<::slime::RDMABuffer> buffer_;
+    std::shared_ptr<::slime::RDMABuffer> buffer_;
     int                                  srcRank_;
     const uint64_t                       seq_;
 };

@@ -83,6 +83,11 @@ public:
         SLIME_LOG_DEBUG("RDMAContext deconstructed")
     }
 
+    struct ibv_mr* get_mr(const std::string& mr_key)
+    {
+        return memory_pool_->get_mr(mr_key);
+    }
+
     /* Initialize */
     int64_t init(const std::string& dev_name, uint8_t ib_port, const std::string& link_type);
 
@@ -204,7 +209,7 @@ private:
     size_t            qp_list_len_{1};
     qp_management_t** qp_management_;
 
-    int last_qp_selection_ = -1;
+    int last_qp_selection_{-1};
     int select_qpi()
     {
         // Simplest round robin, we could enrich it in the future

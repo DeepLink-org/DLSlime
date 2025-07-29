@@ -429,9 +429,10 @@ int64_t RDMAContext::post_send_batch(int qpi, RDMAAssignmentSharedPtr assign)
         memset(&wr[i], 0, sizeof(ibv_send_wr));
         wr[i].wr_id =
             (i == batch_size - 1) ? (uintptr_t)(new callback_info_with_qpi_t{assign->callback_info_, qpi}) : 0;
-        wr[i].opcode     = IBV_WR_SEND;
+        wr[i].opcode     = ASSIGN_OP_2_IBV_WR_OP.at(assign->opcode_);
         wr[i].sg_list    = &sge[i];
         wr[i].num_sge    = 1;
+        wr[i].imm_data   = (i == batch_size - 1) ? assign->imm_data_ : UNDEFINED_IMM_DATA;
         wr[i].send_flags = (i == batch_size - 1) ? IBV_SEND_SIGNALED : 0;
         wr[i].next       = (i == batch_size - 1) ? nullptr : &wr[i + 1];
     }
@@ -584,6 +585,7 @@ int64_t RDMAContext::cq_poll_handle()
                             callback_with_qpi->callback_info_->callback_(status_code, wc[i].imm_data);
                             break;
                         case OpCode::SEND:
+                        case OpCode::SEND_WITH_IMM:
                             callback_with_qpi->callback_info_->callback_(status_code, wc[i].imm_data);
                             break;
                         case OpCode::RECV:

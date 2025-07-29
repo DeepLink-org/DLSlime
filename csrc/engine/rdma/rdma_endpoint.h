@@ -1,6 +1,8 @@
 #pragma once
+#include "engine/assignment.h"
 #include "engine/rdma/rdma_context.h"
 
+#include <atomic>
 #include <condition_variable>
 #include <infiniband/verbs.h>
 #include <map>
@@ -8,18 +10,21 @@
 #include <mutex>
 #include <queue>
 #include <stdexcept>
+#include <string>
 #include <unordered_map>
 #include <vector>
+
+#include "rdma_common.h"
 
 namespace slime {
 
 class RDMABuffer;
+class RDMAEndpoint;
 
-using buffer_data_info_t = std::tuple<uintptr_t, size_t, size_t>;
-using callback_t         = std::function<void()>;
-using json               = nlohmann::json;
+using callback_t = std::function<void()>;
+using json       = nlohmann::json;
 
-typedef struct meta_data {
+typedef struct MetaData {
 
     uint64_t mr_addr;
     uint32_t mr_rkey;
@@ -29,83 +34,50 @@ typedef struct meta_data {
 
 } __attribute__((packed)) meta_data_t;
 
-typedef struct RDMA_task {
+typedef struct RDMATask {
+    explicit RDMATask(std::shared_ptr<RDMAEndpoint> endpoint,
+                      uint32_t                      task_id,
+                      OpCode                        opcode,
+                      std::shared_ptr<RDMABuffer>   buffer);
+    ~RDMATask();
 
-    uint32_t   task_id;
-    uint32_t   batch_size;
-    OpCode     op_code;
-    callback_t callback;
+    std::string getMetaKey();
+    std::string getDataKey(int32_t idx);
 
+    AssignmentBatch getMetaAssignmentBatch();
+    AssignmentBatch getDataAssignmentBatch();
+
+    int registerMetaMemoryRegion();
+    int registerDataMemoryRegion();
+    int registerRemoteDataMemoryRegion();
+
+    void fillBuffer();
+
+    int targetQPI();
+
+    uint32_t                    slot_id_;
+    OpCode                      opcode_;
     std::shared_ptr<RDMABuffer> buffer_;
 
-} RDMA_task_t;
+    meta_data_t* meta_data_buf_{nullptr};
 
-class RDMAEndpoint {
+    std::shared_ptr<RDMAEndpoint> endpoint_;
+} rdma_task_t;
+
+class RDMAEndpoint: public std::enable_shared_from_this<RDMAEndpoint> {
+    friend class RDMABuffer;
 
 public:
-    RDMAEndpoint(const std::string& dev_name, uint8_t ib_port, const std::string& link_type, size_t qp_num)
-    {
-        SLIME_LOG_INFO("Init the Contexts and RDMA Devices...");
-        data_ctx_ = std::make_shared<RDMAContext>(qp_num);
-        meta_ctx_ = std::make_shared<RDMAContext>(1);
+    explicit RDMAEndpoint(const std::string& dev_name, uint8_t ib_port, const std::string& link_type, size_t qp_num);
 
-        data_ctx_->init(dev_name, ib_port, link_type);
-        meta_ctx_->init(dev_name, ib_port, link_type);
+    ~RDMAEndpoint();
 
-        data_ctx_qp_num_ = data_ctx_->qp_list_len_;
-        meta_ctx_qp_num_ = meta_ctx_->qp_list_len_;
-        SLIME_LOG_INFO("The QP number of data plane is: ", data_ctx_qp_num_);
-        SLIME_LOG_INFO("The QP number of control plane is: ", meta_ctx_qp_num_);
-        SLIME_LOG_INFO("RDMA Endpoint Init Success and Launch the RDMA Endpoint Task Threads...");
-        RDMA_tasks_threads_running_ = true;
-        rdma_tasks_threads_         = std::thread([this] { this->waitandPopTask(std::chrono::milliseconds(100)); });
-    }
+    void connect(const json& data_ctx_info, const json& meta_ctx_info);
 
-    ~RDMAEndpoint()
-    {
-        {
-            std::unique_lock<std::mutex> lock(rdma_tasks_mutex_);
-            RDMA_tasks_threads_running_ = false;
-        }
+    std::shared_ptr<RDMABuffer> createRDMABuffer(storage_view_batch_t batch);
 
-        rdma_tasks_cv_.notify_all();
-
-        if (rdma_tasks_threads_.joinable())
-            rdma_tasks_threads_.join();
-    }
-
-    void contextConnect(const json& data_ctx_info, const json& meta_ctx_info)
-    {
-        data_ctx_->connect(data_ctx_info);
-        meta_ctx_->connect(meta_ctx_info);
-
-        data_ctx_->launch_future();
-        meta_ctx_->launch_future();
-    }
-
-    void addRecvTask(std::vector<buffer_data_info_t> data_info, callback_t callback)
-    {
-        std::unique_lock<std::mutex> lock(rdma_tasks_mutex_);
-        RDMA_task_t                  task;
-        task.task_id    = generateRecvAssignmentBatch(data_info);
-        task.batch_size = data_info.size();
-        task.op_code    = OpCode::RECV;
-        task.callback   = callback;
-        rdma_tasks_queue_.push(std::move(task));
-        rdma_tasks_cv_.notify_one();
-    }
-
-    void addSendTask(std::vector<buffer_data_info_t> data_info, callback_t callback)
-    {
-        std::unique_lock<std::mutex> lock(rdma_tasks_mutex_);
-        RDMA_task_t                  task;
-        task.task_id    = generateSendAssignmentBatch(data_info);
-        task.batch_size = data_info.size();
-        task.op_code    = OpCode::SEND;
-        task.callback   = callback;
-        rdma_tasks_queue_.push(std::move(task));
-        rdma_tasks_cv_.notify_one();
-    }
+    void addRecvTask(std::shared_ptr<RDMABuffer> buffer);
+    void addSendTask(std::shared_ptr<RDMABuffer> buffer);
 
     json getDataContextInfo() const
     {
@@ -117,22 +89,26 @@ public:
         return meta_ctx_->endpoint_info();
     }
 
+    std::shared_ptr<RDMAContext> dataCtx()
+    {
+        return data_ctx_;
+    }
+
+    std::shared_ptr<RDMAContext> MetaCtx()
+    {
+        return meta_ctx_;
+    }
+
+    int dataCtxQPNum()
+    {
+        return data_ctx_qp_num_;
+    }
+
 private:
-    void     registerRecvMemRegionBatch(std::string str, std::vector<buffer_data_info_t> data_info);
-    void     registerSendMemRegionBatch(std::string str, std::vector<buffer_data_info_t> data_info);
-    uint32_t generateRecvAssignmentBatch(std::vector<buffer_data_info_t> data_info);
-    uint32_t generateSendAssignmentBatch(std::vector<buffer_data_info_t> data_info);
-
-    void registerRemoteMemoryRegion(std::string mr_key, uintptr_t addr, size_t length, uint32_t rkey);
-    void registerDataMemRegion(std::string str, uintptr_t ptr, size_t data_size);
-    void registerMetaMemRegion(std::string str, uintptr_t ptr, size_t data_size);
-    void unregisterDataMemRegionBatch(std::string str, uint32_t batch_size);
-    void unregisterMetaMemRegionBatch(std::string str, uint32_t batch_size);
-
     void waitandPopTask(std::chrono::milliseconds timeout);
 
-    void asyncRecvData(RDMA_task_t& task);
-    void asyncSendData(RDMA_task_t& task);
+    void asyncRecvData(std::shared_ptr<rdma_task_t> task);
+    void asyncSendData(std::shared_ptr<rdma_task_t> task);
 
     size_t data_ctx_qp_num_;
     size_t meta_ctx_qp_num_;
@@ -142,18 +118,17 @@ private:
 
     uint32_t batch_size_;
 
-    std::map<uint32_t, AssignmentBatch> send_batch_slot_;
-    std::map<uint32_t, AssignmentBatch> recv_batch_slot_;
+    std::map<uint32_t, std::shared_ptr<rdma_task_t>> send_batch_slot_;
+    std::map<uint32_t, std::shared_ptr<rdma_task_t>> recv_batch_slot_;
 
     std::shared_ptr<RDMAContext> data_ctx_;
     std::shared_ptr<RDMAContext> meta_ctx_;
 
-    std::queue<RDMA_task_t> rdma_tasks_queue_;
-    std::thread             rdma_tasks_threads_;
-    std::condition_variable rdma_tasks_cv_;
+    std::queue<std::shared_ptr<rdma_task_t>> rdma_tasks_queue_;
+    std::thread                              rdma_tasks_threads_;
 
-    std::mutex meta_data_mutex;
-    std::mutex rdma_tasks_mutex_;
+    std::condition_variable rdma_tasks_cv_;
+    std::mutex              rdma_tasks_mutex_;
 
     std::map<uint32_t, std::function<void()>> imm_data_callback_;
 
