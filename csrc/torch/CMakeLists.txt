@@ -8,7 +8,7 @@ set(PYTHON_SUPPORTED_VERSIONS "3.8" "3.9" "3.10" "3.11" "3.12")
 
 if (USE_GLOO_BACKEND)
     set(BACKEND_SRC gloo_backend.cpp)
-    set(ENGINE_LIBRARIES _slime_gloo)
+    set(ENGINE_LIBRARIES _slime_gloo _slime_utils)
 else ()
     set(BACKEND_SRC slime_backend.cpp)
     set(ENGINE_LIBRARIES _slime_utils _slime_engine _slime_rdma)
