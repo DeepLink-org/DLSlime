@@ -11,6 +11,7 @@
 namespace slime {
 int RDMAMemoryPool::register_memory_region(const std::string& mr_key, uintptr_t data_ptr, uint64_t length)
 {
+    std::unique_lock<std::mutex> lock(mrs_mutex_);
     if (mrs_.count(mr_key)) {
         SLIME_LOG_DEBUG("mr_key ", mr_key, " has already been registered.");
         ibv_dereg_mr(mrs_[mr_key]);
@@ -33,6 +34,7 @@ int RDMAMemoryPool::register_memory_region(const std::string& mr_key, uintptr_t 
 
 int RDMAMemoryPool::unregister_memory_region(const std::string& mr_key)
 {
+    std::unique_lock<std::mutex> lock(mrs_mutex_);
     ibv_dereg_mr(mrs_[mr_key]);
     mrs_.erase(mr_key);
     return 0;
@@ -43,12 +45,14 @@ int RDMAMemoryPool::register_remote_memory_region(const std::string& mr_key,
                                                   size_t             length,
                                                   uint32_t           rkey)
 {
+    std::unique_lock<std::mutex> lock(remote_mrs_mutex_);
     remote_mrs_[mr_key] = remote_mr_t(addr, length, rkey);
     return 0;
 }
 
 int RDMAMemoryPool::register_remote_memory_region(const std::string& mr_key, const json& mr_info)
 {
+    std::unique_lock<std::mutex> lock(remote_mrs_mutex_);
     remote_mrs_[mr_key] =
         remote_mr_t(mr_info["addr"].get<uintptr_t>(), mr_info["length"].get<size_t>(), mr_info["rkey"].get<uint32_t>());
     return 0;
@@ -56,12 +60,14 @@ int RDMAMemoryPool::register_remote_memory_region(const std::string& mr_key, con
 
 int RDMAMemoryPool::unregister_remote_memory_region(const std::string& mr_key)
 {
+    std::unique_lock<std::mutex> lock(remote_mrs_mutex_);
     remote_mrs_.erase(mr_key);
     return 0;
 }
 
-json RDMAMemoryPool::mr_info() const
+json RDMAMemoryPool::mr_info()
 {
+    std::unique_lock<std::mutex> lock(mrs_mutex_);
     json mr_info;
     for (auto& mr : mrs_) {
         mr_info[mr.first] = {
@@ -73,8 +79,9 @@ json RDMAMemoryPool::mr_info() const
     return mr_info;
 }
 
-json RDMAMemoryPool::remote_mr_info() const
+json RDMAMemoryPool::remote_mr_info()
 {
+    std::unique_lock<std::mutex> lock(remote_mrs_mutex_);
     json mr_info;
     for (auto& mr : remote_mrs_) {
         mr_info[mr.first] = {{"addr", mr.second.addr}, {"rkey", mr.second.rkey}, {"length", mr.second.length}};

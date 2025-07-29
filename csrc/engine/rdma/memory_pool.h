@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <infiniband/verbs.h>
+#include <mutex>
 #include <string>
 #include <sys/types.h>
 #include <unordered_map>
@@ -49,6 +50,7 @@ public:
 
     inline struct ibv_mr* get_mr(const std::string& mr_key)
     {
+        std::unique_lock<std::mutex> lock(mrs_mutex_);
         if (mrs_.find(mr_key) != mrs_.end())
             return mrs_[mr_key];
         SLIME_LOG_ERROR("mr_key: ", mr_key, "not found in mrs_");
@@ -56,17 +58,22 @@ public:
     }
     inline remote_mr_t get_remote_mr(const std::string& mr_key)
     {
+        std::unique_lock<std::mutex> lock(remote_mrs_mutex_);
         if (remote_mrs_.find(mr_key) != remote_mrs_.end())
             return remote_mrs_[mr_key];
         SLIME_LOG_ERROR("mr_key: ", mr_key, " not found in remote_mrs_");
         return remote_mr_t();
     }
 
-    json mr_info() const;
-    json remote_mr_info() const;
+    json mr_info();
+    json remote_mr_info();
 
 private:
-    ibv_pd*                                         pd_;
+    ibv_pd* pd_;
+
+    std::mutex mrs_mutex_;
+    std::mutex remote_mrs_mutex_;
+
     std::unordered_map<std::string, struct ibv_mr*> mrs_;
     std::unordered_map<std::string, remote_mr_t>    remote_mrs_;
 };

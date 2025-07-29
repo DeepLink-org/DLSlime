@@ -44,7 +44,7 @@ except ImportError as e:
 import argparse
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--size', nargs='+', type=int, default=[2 << n for n in range(8, 25)])
+parser.add_argument('--size', nargs='+', type=int, default=[2 << n for n in range(8, 28)])
 parser.add_argument('--num-concurrency', type=int, default=8)
 
 args = parser.parse_args()
@@ -77,6 +77,7 @@ n_runs = args.num_concurrency
 ttensors = [torch.ones([size]).cuda() for size in args.size]
 
 for ttensor, size in zip(ttensors, args.size):
+    print(f"{size=}")
     total_time = 0.0
 
     start_event.record()
@@ -101,7 +102,12 @@ for ttensor, size in zip(ttensors, args.size):
     avg_latency = total_time / n_runs
     bandwidth = n_runs * size * ttensor.itemsize * 100 / total_time / 1e3
 
-    benchmark_data.append([f'{size_bytes:,}', f'{total_transport:,}', f'{avg_latency:.2f} ms', f'{bandwidth:.2f} MB/s'])
+    benchmark_data.append([
+        f'{size_bytes}',
+        f'{total_transport}',
+        f'{avg_latency:.2f} ms',  # noqa: E231
+        f'{bandwidth:.2f} MB/s'  # noqa: E231
+    ])
 
 # Print table
 if rank == 1 and benchmark_data:
