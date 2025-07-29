@@ -44,7 +44,7 @@ except ImportError as e:
 import argparse
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--size', nargs='+', type=int, default=[2 << n for n in range(8, 28)])
+parser.add_argument('--size', nargs='+', type=int, default=[2 << n for n in range(8, 25)])
 parser.add_argument('--num-concurrency', type=int, default=8)
 
 args = parser.parse_args()
