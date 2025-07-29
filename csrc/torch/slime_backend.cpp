@@ -1,4 +1,6 @@
 #include "slime_backend.h"
+#include "engine/rdma/rdma_buffer.h"
+#include "engine/rdma/rdma_endpoint.h"
 #include "engine/rdma/rdma_env.h"
 
 namespace slime {
@@ -124,7 +126,8 @@ c10::intrusive_ptr<::c10d::Work> slimeBackend::recv(std::vector<at::Tensor>& ten
         data_size.push_back(static_cast<size_t>(tensors[i].numel() * tensors[i].itemsize()));
     }
 
-    auto buf = std::make_unique<RDMABuffer>(end_point_set_[mod_positive(srcRank - rank_, size_ - 1)], ptrs, offset, data_size);
+    auto buf =
+        std::make_unique<RDMABuffer>(end_point_set_[mod_positive(srcRank - rank_, size_ - 1)], ptrs, offset, data_size);
     buf->recv();
     ++seq_;
 
