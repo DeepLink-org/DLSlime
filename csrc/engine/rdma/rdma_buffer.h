@@ -17,7 +17,7 @@ namespace slime {
 
 class RDMAEndpoint;
 
-class RDMABuffer {
+class RDMABuffer : public std::enable_shared_from_this<RDMABuffer> {
 
 public:
     RDMABuffer(std::shared_ptr<RDMAEndpoint> end_point,

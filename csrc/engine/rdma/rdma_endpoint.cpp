@@ -1,4 +1,5 @@
 #include "engine/rdma/rdma_endpoint.h"
+#include <mutex>
 
 namespace slime {
 
@@ -60,20 +61,22 @@ void RDMAEndpoint::waitandPopTask(std::chrono::milliseconds timeout)
     while (true) {
         RDMA_task_t task;
         {
-            std::unique_lock<std::mutex> lock(RDMA_tasks_mutex_);
-            bool timeout_occurred = !RDMA_tasks_cv_.wait_for(lock, std::chrono::milliseconds(100), [this] {
-                return !RDMA_tasks_queue_.empty() || !RDMA_tasks_threads_running_;
+            std::unique_lock<std::mutex> lock(rdma_tasks_mutex_);
+            bool timeout_occurred = !rdma_tasks_cv_.wait_for(lock, std::chrono::milliseconds(100), [this] {
+                return !rdma_tasks_queue_.empty() || !RDMA_tasks_threads_running_;
             });
+
             if (timeout_occurred)
                 continue;
 
-            if (!RDMA_tasks_threads_running_ && RDMA_tasks_queue_.empty())
+            if (!RDMA_tasks_threads_running_ && rdma_tasks_queue_.empty())
                 break;
 
-            if (!RDMA_tasks_queue_.empty()) {
-                task = std::move(RDMA_tasks_queue_.front());
-                RDMA_tasks_queue_.pop();
+            if (!rdma_tasks_queue_.empty()) {
+                task = std::move(rdma_tasks_queue_.front());
+                rdma_tasks_queue_.pop();
             }
+
             switch (task.op_code) {
                 case OpCode::SEND:
                     asyncSendData(task);
@@ -128,10 +131,14 @@ void RDMAEndpoint::asyncSendData(RDMA_task_t& task)
     std::string SEND_KEY = "SEND_DATA_" + std::to_string(slot_id);
     auto meta_buf = std::shared_ptr<meta_data_t[]>(new meta_data_t[batch_size], std::default_delete<meta_data_t[]>());
 
-    auto data_callback = [this, SEND_KEY, META_KEY, batch_size, task_callback](int status, int _) { task_callback(); };
+    auto data_callback = [this, SEND_KEY, META_KEY, batch_size, task_callback](int status, int _) mutable {
+        std::unique_lock<std::mutex> lock(rdma_tasks_mutex_);
+        task_callback();
+    };
 
-    auto meta_callback = [this, meta_buf, slot_id, batch_size, data_callback](int status, int _) {
-        auto it = this->send_batch_slot_.find(slot_id);
+    auto meta_callback = [this, meta_buf, slot_id, batch_size, data_callback](int status, int _) mutable {
+        std::unique_lock<std::mutex> lock(this->rdma_tasks_mutex_);
+        auto                         it = this->send_batch_slot_.find(slot_id);
         if (it != this->send_batch_slot_.end()) {
             auto send_data_batch = it->second;
             for (size_t i = 0; i < batch_size; ++i) {
@@ -143,13 +150,13 @@ void RDMAEndpoint::asyncSendData(RDMA_task_t& task)
                 this->data_ctx_->submit(OpCode::WRITE_WITH_IMM, send_data_batch, data_callback, target_qpi, slot_id);
         }
         else {
-            std::cout << "The data in slot " << slot_id << "is not prepared" << std::endl;
+            std::cout << "The data in slot " << slot_id << " is not prepared" << std::endl;
             std::cout << "There must be some bugs..." << std::endl;
         }
     };
 
     {
-        std::lock_guard<std::mutex> lock(meta_data_mutex);
+        std::unique_lock<std::mutex> lock(meta_data_mutex);
         meta_ctx_->register_memory_region(
             META_KEY, reinterpret_cast<uintptr_t>(meta_buf.get()), batch_size * sizeof(meta_data_t));
 
@@ -170,16 +177,18 @@ void RDMAEndpoint::asyncRecvData(RDMA_task_t& task)
     std::string RECV_KEY = "RECV_DATA_" + std::to_string(slot_id);
     auto meta_buf = std::shared_ptr<meta_data_t[]>(new meta_data_t[batch_size], std::default_delete<meta_data_t[]>());
 
-    auto data_callback = [this, RECV_KEY, META_KEY, batch_size, task_callback](int status, int imm_data) {
+    auto data_callback = [this, RECV_KEY, META_KEY, batch_size, task_callback](int status, int imm_data) mutable {
+        std::unique_lock<std::mutex> lock(rdma_tasks_mutex_);
         if (this->imm_data_callback_.find(imm_data) != this->imm_data_callback_.end()) {
             this->imm_data_callback_[imm_data]();
             this->imm_data_callback_.erase(imm_data);
         }
     };
 
-    auto meta_callback = [this, meta_buf, slot_id, batch_size, data_callback](int status, int _) {
-        auto it = this->recv_batch_slot_.find(slot_id);
-        if (it != this->send_batch_slot_.end()) {
+    auto meta_callback = [this, meta_buf, slot_id, batch_size, data_callback](int status, int _) mutable {
+        std::unique_lock<std::mutex> lock(rdma_tasks_mutex_);
+        auto                         it = this->recv_batch_slot_.find(slot_id);
+        if (it != this->recv_batch_slot_.end()) {
             auto     recv_data_batch = it->second;
             uint32_t target_qpi      = meta_buf[0].mr_qpidx;
             auto     data_atx = this->data_ctx_->submit(OpCode::RECV, recv_data_batch, data_callback, target_qpi);
@@ -188,8 +197,8 @@ void RDMAEndpoint::asyncRecvData(RDMA_task_t& task)
 
     {
 
-        std::lock_guard<std::mutex> lock(meta_data_mutex);
-        auto                        recv_data_t = recv_batch_slot_[slot_id];
+        std::unique_lock<std::mutex> lock(meta_data_mutex);
+        auto                         recv_data_t = recv_batch_slot_[slot_id];
         for (size_t i = 0; i < batch_size; ++i) {
             meta_buf[i].mr_addr =
                 reinterpret_cast<uint64_t>(data_ctx_->memory_pool_->get_mr(recv_data_t[i].mr_key)->addr);
