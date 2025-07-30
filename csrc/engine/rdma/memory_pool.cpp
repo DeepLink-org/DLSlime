@@ -22,7 +22,7 @@ int RDMAMemoryPool::register_memory_region(const std::string& mr_key, uintptr_t 
 
     SLIME_ASSERT(mr, " Failed to register memory " << data_ptr);
 
-    SLIME_LOG_DEBUG("Memory region: " << (void*)data_ptr << " -- " << (void*)(data_ptr + length)
+    SLIME_LOG_DEBUG("Memory region: " << mr_key << ", " << (void*)data_ptr << " -- " << (void*)(data_ptr + length)
                                       << ", Device name: " << pd_->context->device->dev_name << ", Length: " << length
                                       << " (" << length / 1024 / 1024 << " MB)"
                                       << ", Permission: " << access_rights << ", LKey: " << mr->lkey
@@ -47,6 +47,7 @@ int RDMAMemoryPool::register_remote_memory_region(const std::string& mr_key,
 {
     std::unique_lock<std::mutex> lock(remote_mrs_mutex_);
     remote_mrs_[mr_key] = remote_mr_t(addr, length, rkey);
+    SLIME_LOG_DEBUG("Remote memory region registered: " << mr_key << ", " << addr << ", " << length << ", " << rkey << ".");
     return 0;
 }
 
@@ -55,6 +56,7 @@ int RDMAMemoryPool::register_remote_memory_region(const std::string& mr_key, con
     std::unique_lock<std::mutex> lock(remote_mrs_mutex_);
     remote_mrs_[mr_key] =
         remote_mr_t(mr_info["addr"].get<uintptr_t>(), mr_info["length"].get<size_t>(), mr_info["rkey"].get<uint32_t>());
+    SLIME_LOG_DEBUG("Remote memory region registered: " << mr_key << ", " << mr_info << ".");
     return 0;
 }
 

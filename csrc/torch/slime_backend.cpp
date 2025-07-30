@@ -2,6 +2,7 @@
 #include "engine/rdma/rdma_buffer.h"
 #include "engine/rdma/rdma_endpoint.h"
 #include "engine/rdma/rdma_env.h"
+#include <memory>
 
 namespace slime {
 namespace c10d {
@@ -38,7 +39,7 @@ static uint32_t checkTag(int32_t tag)
     return (uint32_t)tag;
 }
 
-SendWork::SendWork(std::vector<at::Tensor>& tensor, std::unique_ptr<::slime::RDMABuffer> buffer, uint64_t seq):
+SendWork::SendWork(std::vector<at::Tensor>& tensor, std::shared_ptr<::slime::RDMABuffer> buffer, uint64_t seq):
     Work(-1, ::c10d::OpType::SEND), tensor_(tensor), buffer_(std::move(buffer)), seq_(seq)
 {
 }
@@ -63,7 +64,7 @@ bool SendWork::wait(std::chrono::milliseconds timeout)
     return sendCompleted;
 }
 
-RecvWork::RecvWork(std::vector<at::Tensor>& tensor, std::unique_ptr<::slime::RDMABuffer> buffer, uint64_t seq):
+RecvWork::RecvWork(std::vector<at::Tensor>& tensor, std::shared_ptr<::slime::RDMABuffer> buffer, uint64_t seq):
     Work(-1, ::c10d::OpType::RECV), tensor_(tensor), buffer_(std::move(buffer)), srcRank_(-1), seq_(seq)
 {
 }
@@ -101,7 +102,7 @@ c10::intrusive_ptr<::c10d::Work> slimeBackend::send(std::vector<at::Tensor>& ten
     }
 
     auto buf =
-        std::make_unique<RDMABuffer>(end_point_set_[mod_positive(dstRank - rank_, size_ - 1)], ptrs, offset, data_size);
+        std::make_shared<RDMABuffer>(end_point_set_[mod_positive(dstRank - rank_, size_ - 1)], ptrs, offset, data_size);
     buf->send();
 
     ++seq_;
@@ -127,7 +128,7 @@ c10::intrusive_ptr<::c10d::Work> slimeBackend::recv(std::vector<at::Tensor>& ten
     }
 
     auto buf =
-        std::make_unique<RDMABuffer>(end_point_set_[mod_positive(srcRank - rank_, size_ - 1)], ptrs, offset, data_size);
+        std::make_shared<RDMABuffer>(end_point_set_[mod_positive(srcRank - rank_, size_ - 1)], ptrs, offset, data_size);
     buf->recv();
     ++seq_;
 
@@ -169,7 +170,7 @@ slimeBackend::slimeBackend(const c10::intrusive_ptr<::c10d::Store>& store, int r
     try {
         for (int i = 0; i < size_ - 1; ++i) {
             json cur_channel_info = global_channel_info_[mod_positive(rank_ + i + 1, size_)][size_ - 2 - i];
-            end_point_set_[i]->contextConnect(cur_channel_info["data_channel"], cur_channel_info["meta_channel"]);
+            end_point_set_[i]->connect(cur_channel_info["data_channel"], cur_channel_info["meta_channel"]);
         }
     }
     catch (const std::runtime_error& e) {
