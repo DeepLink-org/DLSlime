@@ -91,14 +91,10 @@ int RDMATask::targetQPI()
 int RDMATask::registerRemoteDataMemoryRegion()
 {
     for (size_t i = 0; i < buffer_->batchSize(); ++i) {
-        json     mr_info;
         uint64_t addr     = meta_data_buf_[i].mr_addr;
         uint32_t length   = meta_data_buf_[i].mr_size;
         uint32_t rkey     = meta_data_buf_[i].mr_rkey;
-        mr_info["addr"]   = addr;
-        mr_info["length"] = length;
-        mr_info["rkey"]   = rkey;
-        endpoint_->dataCtx()->register_remote_memory_region(getDataKey(i), mr_info);
+        endpoint_->dataCtx()->register_remote_memory_region(getDataKey(i), addr, length, rkey);
     }
     return 0;
 }

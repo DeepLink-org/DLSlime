@@ -9,6 +9,9 @@
 #include <iostream>
 #include <string>
 
+#include "utils/utils.h"
+
+namespace slime {
 inline std::string get_env_variable(char const* env_var_name)
 {
     if (!env_var_name) {
@@ -20,10 +23,11 @@ inline std::string get_env_variable(char const* env_var_name)
     return "";
 }
 
+inline const int SLIME_LOG_LEVEL = get_env<int>("SLIME_LOG_LEVEL", 0);
+
 inline int get_log_level()
 {
-    std::string lvl = get_env_variable("SLIME_LOG_LEVEL");
-    return !lvl.empty() ? atoi(lvl.c_str()) : 0;
+    return SLIME_LOG_LEVEL;
 }
 
 #define STREAM_VAR_ARGS1(a) << a
@@ -94,3 +98,4 @@ inline int get_log_level()
 
 // Debug
 #define SLIME_LOG_DEBUG(...) SLIME_LOG_LEVEL("DEBUG", "\033[1;92m", 2, __VA_ARGS__)
+}  // namespace slime

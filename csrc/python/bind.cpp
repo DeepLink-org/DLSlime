@@ -68,7 +68,9 @@ PYBIND11_MODULE(_slime_c, m)
         .def(py::init<>())
         .def("init_rdma_context", &slime::RDMAContext::init)
         .def("register_memory_region", &slime::RDMAContext::register_memory_region)
-        .def("register_remote_memory_region", &slime::RDMAContext::register_remote_memory_region)
+        .def("register_remote_memory_region",
+             static_cast<int64_t (slime::RDMAContext::*)(std::string, json)>(
+                 &slime::RDMAContext::register_remote_memory_region))
         .def("reload_memory_pool", &slime::RDMAContext::reload_memory_pool)
         .def("endpoint_info", &slime::RDMAContext::endpoint_info)
         .def("connect", &slime::RDMAContext::connect)
