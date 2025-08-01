@@ -16,6 +16,9 @@
 
 #include "rdma_common.h"
 
+#define MAX_BATCH_SIZE 8
+#define MAX_META_SIZE 64
+
 namespace slime {
 
 class RDMABuffer;
@@ -26,9 +29,10 @@ using json       = nlohmann::json;
 
 typedef struct MetaData {
 
-    uint64_t mr_addr;
-    uint32_t mr_rkey;
-    uint32_t mr_size;
+    uint64_t mr_addr[MAX_BATCH_SIZE];
+    uint32_t mr_rkey[MAX_BATCH_SIZE];
+    uint32_t mr_size[MAX_BATCH_SIZE];
+
     uint32_t mr_slot;
     uint32_t mr_qpidx;
 
@@ -51,6 +55,7 @@ typedef struct RDMATask {
     int registerDataMemoryRegion();
     int registerRemoteDataMemoryRegion();
 
+    void fillMetaInfo();
     void fillBuffer();
 
     int targetQPI();
@@ -103,6 +108,9 @@ public:
     {
         return data_ctx_qp_num_;
     }
+
+    std::vector<meta_data_t*> send_meta_pool_;
+    std::vector<meta_data_t*> recv_meta_pool_;
 
 private:
     void waitandPopTask(std::chrono::milliseconds timeout);
