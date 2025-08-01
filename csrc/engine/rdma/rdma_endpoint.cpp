@@ -16,8 +16,8 @@ RDMATask::RDMATask(std::shared_ptr<RDMAEndpoint> endpoint,
                    std::shared_ptr<RDMABuffer>   buffer):
     endpoint_(endpoint), slot_id_(task_id), opcode_(opcode), buffer_(buffer)
 {
-    meta_data_buf_ = new meta_data_t[buffer->batchSize()];
-    registerMetaMemoryRegion();
+    // meta_data_buf_ = new meta_data_t[buffer->batchSize()];
+    // registerMetaMemoryRegion();
     registerDataMemoryRegion();
     fillBuffer();
 }
@@ -30,7 +30,7 @@ RDMATask::~RDMATask()
 std::string RDMATask::getMetaKey()
 {
     std::string meta_key = opcode_ == OpCode::SEND ? "META_SEND" : "META_RECV";
-    return meta_key + "@" + std::to_string(slot_id_);
+    return meta_key + "@" + std::to_string(slot_id_ % MAX_META_SIZE);
 }
 
 std::string RDMATask::getDataKey(int32_t idx)
@@ -41,7 +41,7 @@ std::string RDMATask::getDataKey(int32_t idx)
 
 AssignmentBatch RDMATask::getMetaAssignmentBatch()
 {
-    return AssignmentBatch{Assignment(getMetaKey(), 0, 0, sizeof(meta_data_t) * buffer_->batchSize())};
+    return AssignmentBatch{Assignment(getMetaKey(), 0, 0, sizeof(meta_data_t))};
 }
 
 AssignmentBatch RDMATask::getDataAssignmentBatch()
@@ -70,30 +70,35 @@ int RDMATask::registerDataMemoryRegion()
     }
     return 0;
 }
-
+void RDMATask::fillMetaInfo()
+{
+    for (size_t i = 0; i < buffer_->batchSize(); ++i) {
+        auto mr = endpoint_->dataCtx()->get_mr(getDataKey(i));
+    }
+}
 void RDMATask::fillBuffer()
 {
     for (size_t i = 0; i < buffer_->batchSize(); ++i) {
-        auto mr                    = endpoint_->dataCtx()->get_mr(getDataKey(i));
-        meta_data_buf_[i].mr_addr  = reinterpret_cast<uint64_t>(mr->addr);
-        meta_data_buf_[i].mr_rkey  = mr->rkey;
-        meta_data_buf_[i].mr_size  = mr->length;
-        meta_data_buf_[i].mr_slot  = slot_id_;
-        meta_data_buf_[i].mr_qpidx = slot_id_ % endpoint_->dataCtxQPNum();
+        auto mr                                                          = endpoint_->dataCtx()->get_mr(getDataKey(i));
+        endpoint_->recv_meta_pool_[slot_id_ % MAX_META_SIZE]->mr_addr[i] = reinterpret_cast<uint64_t>(mr->addr);
+        endpoint_->recv_meta_pool_[slot_id_ % MAX_META_SIZE]->mr_rkey[i] = mr->rkey;
+        endpoint_->recv_meta_pool_[slot_id_ % MAX_META_SIZE]->mr_size[i] = mr->length;
+        endpoint_->recv_meta_pool_[slot_id_ % MAX_META_SIZE]->mr_slot    = slot_id_;
+        endpoint_->recv_meta_pool_[slot_id_ % MAX_META_SIZE]->mr_qpidx   = slot_id_ % endpoint_->dataCtxQPNum();
     }
 }
 
 int RDMATask::targetQPI()
 {
-    return meta_data_buf_[0].mr_qpidx;
+    return 0;
 }
 
 int RDMATask::registerRemoteDataMemoryRegion()
 {
     for (size_t i = 0; i < buffer_->batchSize(); ++i) {
-        uint64_t addr     = meta_data_buf_[i].mr_addr;
-        uint32_t length   = meta_data_buf_[i].mr_size;
-        uint32_t rkey     = meta_data_buf_[i].mr_rkey;
+        uint64_t addr   = endpoint_->send_meta_pool_[slot_id_ % MAX_META_SIZE]->mr_addr[i];
+        uint32_t length = endpoint_->send_meta_pool_[slot_id_ % MAX_META_SIZE]->mr_size[i];
+        uint32_t rkey   = endpoint_->send_meta_pool_[slot_id_ % MAX_META_SIZE]->mr_rkey[i];
         endpoint_->dataCtx()->register_remote_memory_region(getDataKey(i), addr, length, rkey);
     }
     return 0;
@@ -113,6 +118,18 @@ RDMAEndpoint::RDMAEndpoint(const std::string& dev_name, uint8_t ib_port, const s
     SLIME_LOG_INFO("The QP number of data plane is: ", data_ctx_qp_num_);
     SLIME_LOG_INFO("The QP number of control plane is: ", meta_ctx_qp_num_);
     SLIME_LOG_INFO("RDMA Endpoint Init Success and Launch the RDMA Endpoint Task Threads...");
+
+    for (int i = 0; i < SLIME_MAX_META_SIZE; ++i) {
+        std::string  send_meta_key  = "META_SEND@" + std::to_string(i);
+        meta_data_t* send_meta_buf_ = new meta_data_t;
+        meta_ctx_->register_memory_region(send_meta_key, (uintptr_t)send_meta_buf_, sizeof(meta_data_t));
+        send_meta_pool_.push_back(send_meta_buf_);
+
+        std::string  recv_meta_key  = "META_RECV@" + std::to_string(i);
+        meta_data_t* recv_meta_buf_ = new meta_data_t;
+        meta_ctx_->register_memory_region(recv_meta_key, (uintptr_t)recv_meta_buf_, sizeof(meta_data_t));
+        recv_meta_pool_.push_back(recv_meta_buf_);
+    }
 }
 
 RDMAEndpoint::~RDMAEndpoint()

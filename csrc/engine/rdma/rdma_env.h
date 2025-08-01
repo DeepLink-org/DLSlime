@@ -18,5 +18,6 @@ inline const int SLIME_GID_INDEX                 = get_env<int>("SLIME_GID_INDEX
 inline const int SLIME_QP_NUM                    = get_env<int>("SLIME_QP_NUM", 8);
 inline const int SLIME_CQ_NUM                    = get_env<int>("SLIME_CQ_NUM", 1);
 inline const int SLIME_MAX_CQ_DEPTH              = get_env<int>("SLIME_MAX_CQ_DEPTH", 8192);
-
+inline const int SLIME_MAX_BATCH_SIZE            = get_env<int>("SLIME_MAX_BATCH_SIZE", 8);
+inline const int SLIME_MAX_META_SIZE             = get_env<int>("SLIME_MAX_BATCH_SIZE", 64);
 }  // namespace slime

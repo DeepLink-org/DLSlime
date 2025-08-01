@@ -25,9 +25,9 @@ DEFINE_string(OUTPUT_FILE, "rdma_test_results.csv", "output file for performance
 DEFINE_bool(send, false, "Run in send mode");
 DEFINE_bool(recv, false, "Run in recv mode");
 
-DEFINE_int32(num_qp, 2, "Number of QPs");
+DEFINE_int32(num_qp, 1, "Number of QPs");
 DEFINE_int32(num_packets, 100, "Number of packets");
-DEFINE_int32(min_packet_size, 12, "Minimum size of packet size (2^(min_packet_size) bytes)");
+DEFINE_int32(min_packet_size, 16, "Minimum size of packet size (2^(min_packet_size) bytes)");
 DEFINE_int32(max_packet_size, 16, "Maximum size of packet size (2^(max_packet_size) bytes)");
 
 typedef struct Result {
@@ -146,7 +146,7 @@ int singleTest(std::shared_ptr<RDMAEndpoint> end_point,
     std::chrono::duration<double> duration = end - start;
 
     double total_bytes = packet_size * iterations;
-    latency            = (duration.count() * 1000) / FLAGS_num_packets;
+    latency            = (duration.count() * 1000);
     bandwidth          = (total_bytes / duration.count()) / (1024 * 1024);
     return completed;
 }
@@ -183,9 +183,9 @@ void runTest(std::shared_ptr<RDMAEndpoint> end_point, size_t packet_size, size_t
 
     auto [min_bw, max_bw] = std::minmax_element(bandwidths.begin(), bandwidths.end());
     double sum_bw         = std::accumulate(bandwidths.begin(), bandwidths.end(), 0.0);
-    double mean_bw        = sum_bw / FLAGS_num_packets;
+    double mean_bw        = sum_bw / num_tests;
     double sq_sum_bw      = std::inner_product(bandwidths.begin(), bandwidths.end(), bandwidths.begin(), 0.0);
-    double stdev_bw       = std::sqrt(sq_sum_bw / FLAGS_num_packets - mean_bw * mean_bw);
+    double stdev_bw       = std::sqrt(sq_sum_bw / num_tests - mean_bw * mean_bw);
 
     double avg_success = std::accumulate(success_rates.begin(), success_rates.end(), 0.0) / FLAGS_num_packets;
 
