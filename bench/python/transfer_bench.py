@@ -21,6 +21,7 @@ python3 bench/python/transfer_bench.py --rank 1 \
 
 import argparse
 import csv
+import os
 
 import numpy as np
 import torch
@@ -41,8 +42,17 @@ parser.add_argument('--num-concurrency', type=int, default=16)
 parser.add_argument('--opcode', type=str, choices=['read', 'write'], default='read')
 parser.add_argument('--save-csv', action='store_true', help='Save benchmark results to CSV file')
 parser.add_argument('--csv-filename', type=str, default='./output.csv', help='Filename for CSV output')
+parser.add_argument('--qp-num', type=int, default=None, help='Queue Pair number for RDMA operations')
+parser.add_argument('--with-imm-data',
+                    action='store_true',
+                    help='Use immediate data for write operations (only applicable for write operations)')
 
 args = parser.parse_args()
+
+if args.with_imm_data and args.opcode != 'write':
+    raise ValueError('Immediate data can only be used with write operations.')
+
+qp_num = args.qp_num if args.qp_num is not None else int(os.getenv('SLIME_QP_NUM', 1))
 
 print(f'mode: RDMA RC {args.opcode}')
 print(f'num concurrency: {args.num_concurrency}')
@@ -53,7 +63,7 @@ world_size = args.world_size
 assert world_size == 2
 
 rdma_devices = available_nic()
-rdma_endpoint = RDMAEndpoint(rdma_devices[rank % len(rdma_devices)], ib_port=1, link_type='RoCE')
+rdma_endpoint = RDMAEndpoint(rdma_devices[rank % len(rdma_devices)], ib_port=1, link_type='RoCE', qp_num=qp_num)
 zmq_ctx = zmq.Context(2)
 
 zmq_recv = zmq_ctx.socket(zmq.PULL)
@@ -61,12 +71,12 @@ zmq_send = zmq_ctx.socket(zmq.PUSH)
 
 if rank == 0:
     # target endpoint
-    zmq_send.bind(f'tcp://{args.target_endpoint}')
-    zmq_recv.connect(f'tcp://{args.initiator_endpoint}')
+    zmq_send.bind(f'tcp://{args.target_endpoint}')  # noqa: E231
+    zmq_recv.connect(f'tcp://{args.initiator_endpoint}')  # noqa: E231
 else:
     # initiator endpoint
-    zmq_send.bind(f'tcp://{args.initiator_endpoint}')
-    zmq_recv.connect(f'tcp://{args.target_endpoint}')
+    zmq_send.bind(f'tcp://{args.initiator_endpoint}')  # noqa: E231
+    zmq_recv.connect(f'tcp://{args.target_endpoint}')  # noqa: E231
 
 if rank == 0:
     target_device = args.target_affi
@@ -92,6 +102,8 @@ n_runs = args.num_concurrency
 
 if args.opcode == 'read':
     fn = rdma_endpoint.read_batch
+elif args.opcode == 'write' and args.with_imm_data:
+    fn = rdma_endpoint.write_batch_with_imm_data
 elif args.opcode == 'write':
     fn = rdma_endpoint.write_batch
 else:
@@ -103,33 +115,66 @@ for idx, (rawsize, ttensor) in enumerate(zip(args.size, ttensors)):
     start_event.record()
     for _ in range(100):
         assigns = []
-        for _ in range(n_runs):
-            if rank == 1:
-                assign = fn([
-                    Assignment(
-                        mr_key=str(idx), target_offset=0, source_offset=0, length=ttensor.numel() * ttensor.itemsize)
-                ],
-                            async_op=True)
+        for assign_id in range(n_runs):
+            if rank == 0:
+                if args.with_imm_data:
+                    assign = fn(batch=[
+                        Assignment(
+                            mr_key=str(idx),
+                            target_offset=0,
+                            source_offset=0,
+                            length=ttensor.numel() * ttensor.itemsize,
+                        )
+                    ],
+                                qpi=assign_id % qp_num,
+                                imm_data=1,
+                                async_op=True)
+                else:
+                    assign = fn(batch=[
+                        Assignment(
+                            mr_key=str(idx),
+                            target_offset=0,
+                            source_offset=0,
+                            length=ttensor.numel() * ttensor.itemsize,
+                        )
+                    ],
+                                async_op=True)
                 assigns.append(assign)
+            else:
+                if args.with_imm_data:
+                    assign = rdma_endpoint.recv_batch(batch=[
+                        Assignment(
+                            mr_key=str(idx),
+                            target_offset=0,
+                            source_offset=0,
+                            length=ttensor.numel() * ttensor.itemsize,
+                        )
+                    ],
+                                                      qpi=assign_id % qp_num,
+                                                      async_op=True)
+                    assigns.append(assign)
         [assign.wait() for assign in assigns]
     end_event.record()
     torch.cuda.synchronize()
     elapsed_time = start_event.elapsed_time(end_event)
     total_time += elapsed_time
 
-    if rank == 1:
+    if rank == 0:
         size_bytes = ttensor.numel() * ttensor.itemsize
         total_transport = n_runs * size * ttensor.itemsize
         avg_latency = np.mean([assign.latency() for assign in assigns])
         bandwidth = n_runs * size * ttensor.itemsize * 100 / total_time / 1e3
 
         benchmark_data.append([
-            f'{size_bytes:,}', f'{total_transport:,}',
+            f'{size_bytes:,}',  # noqa: E231
+            f'{total_transport:,}',  # noqa: E231
             str(args.target_affi),
-            str(args.initiator_affi), f'{avg_latency.total_seconds() * 1000:.2f}', f'{bandwidth:.2f}'
+            str(args.initiator_affi),
+            f'{avg_latency.total_seconds() * 1000:.2f}',  # noqa: E231
+            f'{bandwidth:.2f}'  # noqa: E231
         ])
 
-if rank == 0:
+if rank == 1:
     _ = zmq_recv.recv_pyobj()
 else:
     headers = [
