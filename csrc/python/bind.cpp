@@ -6,16 +6,12 @@
 #include "engine/rdma/rdma_endpoint.h"
 #include "engine/rdma/rdma_scheduler.h"
 
-#include "gloo/rendezvous/context.h"
-#include "gloo/rendezvous/file_store.h"
-#include "gloo/rendezvous/prefix_store.h"
-#include "gloo/rendezvous/store.h"
-#include "gloo/transport/device.h"
-#include "gloo/transport/ibverbs/device.h"
+#include "ops/ep_m2n.h"
 
 #include <functional>
 #include <pybind11/cast.h>
 #include <pybind11/pytypes.h>
+#include <string>
 
 #ifdef BUILD_NVLINK
 #include "engine/nvlink/memory_pool.h"
@@ -47,9 +43,14 @@ PYBIND11_MODULE(_slime_c, m)
         .value("SEND", slime::OpCode::SEND)
         .value("RECV", slime::OpCode::RECV);
 
-    py::class_<slime::Assignment>(m, "Assignment").def(py::init<std::string, uint64_t, uint64_t, uint64_t>());
+    py::class_<slime::Assignment>(m, "Assignment")
+        .def(py::init<std::string, uint64_t, uint64_t, uint64_t>())
+        .def(py::init<std::string, std::string, uint64_t, uint64_t, uint64_t>())
+        .def("dump", &slime::Assignment::dump);
 
     py::class_<slime::RDMAAssignment, slime::RDMAAssignmentSharedPtr>(m, "RDMAAssignment")
+        .def(py::init<slime::OpCode, slime::AssignmentBatch&, slime::callback_fn_t>())
+        .def(py::init<slime::OpCode, slime::AssignmentBatch&, int32_t, slime::callback_fn_t>())
         .def("wait", &slime::RDMAAssignment::wait, py::call_guard<py::gil_scoped_release>())
         .def("latency", &slime::RDMAAssignment::latency, py::call_guard<py::gil_scoped_release>());
 
@@ -66,6 +67,8 @@ PYBIND11_MODULE(_slime_c, m)
 
     py::class_<slime::RDMAContext>(m, "rdma_context")
         .def(py::init<>())
+        .def(py::init<size_t>())
+        .def(py::init<size_t, bool>())
         .def("init_rdma_context", &slime::RDMAContext::init)
         .def("register_memory_region", &slime::RDMAContext::register_memory_region)
         .def("register_remote_memory_region",
@@ -74,9 +77,13 @@ PYBIND11_MODULE(_slime_c, m)
         .def("reload_memory_pool", &slime::RDMAContext::reload_memory_pool)
         .def("endpoint_info", &slime::RDMAContext::endpoint_info)
         .def("connect", &slime::RDMAContext::connect)
-        .def("launch_future", &slime::RDMAContext::launch_future)
-        .def("stop_future", &slime::RDMAContext::stop_future)
-        .def("submit", &slime::RDMAContext::submit, py::call_guard<py::gil_scoped_release>());
+        .def("launch_future", &slime::RDMAContext::launch_future, py::call_guard<py::gil_scoped_release>())
+        .def("stop_future", &slime::RDMAContext::stop_future, py::call_guard<py::gil_scoped_release>())
+        .def("submit", &slime::RDMAContext::submit, py::call_guard<py::gil_scoped_release>())
+        .def("post_send_batch", &slime::RDMAContext::post_send_batch, py::call_guard<py::gil_scoped_release>())
+        .def("post_recv_batch", &slime::RDMAContext::post_recv_batch, py::call_guard<py::gil_scoped_release>())
+        .def("post_rc_oneside_batch", &slime::RDMAContext::post_rc_oneside_batch, py::call_guard<py::gil_scoped_release>())
+        .def("is_disable_submit", &slime::RDMAContext::is_disable_submit, py::call_guard<py::gil_scoped_release>());
 
     py::class_<slime::RDMAEndpoint, std::shared_ptr<slime::RDMAEndpoint>>(m, "rdma_endpoint")
         .def(py::init<const std::string&, uint8_t, const std::string&, size_t>())
@@ -95,6 +102,20 @@ PYBIND11_MODULE(_slime_c, m)
         .def("wait_recv", &slime::RDMABuffer::waitRecv);
 
     m.def("available_nic", &slime::available_nic);
+
+    py::enum_<slime::EPM2N::EPM2NRole>(m, "EPM2NRole")
+        .value("M", slime::EPM2N::EPM2NRole::M)
+        .value("N", slime::EPM2N::EPM2NRole::N);
+
+#ifdef BUILD_OPS
+    py::class_<slime::EPM2N, std::shared_ptr<slime::EPM2N>>(m, "ep_m2n")
+        .def(py::init<slime::EPM2N::EPM2NRole, int, size_t, size_t, size_t, size_t, size_t, std::string, std::string>())
+        .def("register_buffer", &slime::EPM2N::registerBuffer, py::call_guard<py::gil_scoped_release>())
+        .def("endpoint_info", &slime::EPM2N::endpoint_info, py::call_guard<py::gil_scoped_release>())
+        .def("connect", &slime::EPM2N::connect, py::call_guard<py::gil_scoped_release>())
+        .def("m2n_send", &slime::EPM2N::m2nSend, py::call_guard<py::gil_scoped_release>())
+        .def("m2n_recv", &slime::EPM2N::m2nRecv, py::call_guard<py::gil_scoped_release>());
+#endif
 
 #ifdef BUILD_NVLINK
     py::class_<slime::NVLinkContext>(m, "nvlink_context")

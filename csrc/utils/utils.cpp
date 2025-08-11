@@ -54,4 +54,22 @@ int get_gid_index(std::string dev_name)
     return -1;
 }
 
+bool set_thread_affinity(std::thread& thread, int core_id) {
+    // 获取线程的底层 pthread 句柄
+    pthread_t pthread_handle = thread.native_handle();
+
+    // 创建 CPU 亲和性掩码
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    CPU_SET(core_id, &cpuset);
+
+    int rc = pthread_setaffinity_np(pthread_handle, sizeof(cpu_set_t), &cpuset);
+    if (rc != 0) {
+        SLIME_LOG_ERROR("设置线程亲和性失败，错误码：" << rc);
+        return false;
+    }
+
+    return true;
+}
+
 }  // namespace slime

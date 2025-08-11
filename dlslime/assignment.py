@@ -6,3 +6,5 @@ class Assignment(BaseModel):
     target_offset: int
     source_offset: int
     length: int
+
+    remote_mr_key: str = None

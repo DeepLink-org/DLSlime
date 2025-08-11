@@ -1,4 +1,9 @@
 add_subdirectory(engine)
+
+if (BUILD_OPS)
+    add_subdirectory(ops)
+endif (BUILD_OPS)
+
 add_subdirectory(utils)
 
 if (BUILD_PYTHON)

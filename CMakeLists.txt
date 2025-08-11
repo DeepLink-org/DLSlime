@@ -6,6 +6,7 @@ include(${CMAKE_CURRENT_LIST_DIR}/cmake/utils.cmake)
 
 slime_option(BUILD_RDMA         "Build RDMA"                        ON)
 slime_option(BUILD_NVLINK       "Build NVLINK"                     OFF)
+slime_option(BUILD_OPS          "Build collective comm ops"         ON)
 slime_option(BUILD_BENCH        "Build transfer engine benchmark"  OFF)
 slime_option(BUILD_EXAMPLE      "Build example"                    OFF)
 slime_option(BUILD_PYTHON       "Build python wrapper"             OFF)

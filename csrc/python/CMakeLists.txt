@@ -17,6 +17,11 @@ if (BUILD_NVLINK)
     list(APPEND _slime_c_link_libraries _slime_nvlink CUDA::cudart)
 endif()
 
+if (BUILD_OPS)
+    target_compile_definitions(_slime_c PRIVATE -DBUILD_OPS)
+    list(APPEND _slime_c_link_libraries _slime_ops)
+endif()
+
 target_link_libraries(_slime_c PRIVATE ${_slime_c_link_libraries})
 
 set_target_properties(

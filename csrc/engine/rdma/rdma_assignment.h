@@ -97,7 +97,10 @@ class RDMAAssignment {
 
 public:
     RDMAAssignment(OpCode opcode, AssignmentBatch& batch, callback_fn_t callback = nullptr);
-    RDMAAssignment(OpCode opcode, AssignmentBatch& batch, int32_t imm_data, callback_fn_t callback_imm = nullptr);
+    RDMAAssignment(OpCode opcode, AssignmentBatch& batch, int32_t imm_data, callback_fn_t callback_imm = nullptr) : RDMAAssignment(opcode, batch, callback_imm) {
+        with_imm_data_ = true;
+        imm_data_ = imm_data;
+    };
 
     ~RDMAAssignment()
     {

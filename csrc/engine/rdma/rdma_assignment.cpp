@@ -14,6 +14,7 @@ RDMAAssignment::RDMAAssignment(OpCode opcode, AssignmentBatch& batch, callback_f
     size_t cnt = 0;
     for (const Assignment& assignment : batch) {
         batch_[cnt].mr_key        = assignment.mr_key;
+        batch_[cnt].remote_mr_key = assignment.remote_mr_key;
         batch_[cnt].source_offset = assignment.source_offset;
         batch_[cnt].target_offset = assignment.target_offset;
         batch_[cnt].length        = assignment.length;

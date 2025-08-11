@@ -163,15 +163,20 @@ int64_t RDMAContext::init(const std::string& dev_name, uint8_t ib_port, const st
 
     /* Alloc Complete Queue (CQ) */
     SLIME_ASSERT(ib_ctx_, "init rdma context first");
-    comp_channel_ = ibv_create_comp_channel(ib_ctx_);
-    cq_           = ibv_create_cq(ib_ctx_, SLIME_MAX_CQ_DEPTH, NULL, comp_channel_, 0);
-    SLIME_ASSERT(cq_, "create CQ failed");
 
     for (int qpi = 0; qpi < qp_list_len_; ++qpi) {
+        /* Initialize CQ */
+        cq_management_t* cq_man = cq_management_[qpi % cq_list_len_];
+        if (!cq_man->initialized_) {
+            cq_man->initialized_  = true;
+            cq_man->comp_channel_ = ibv_create_comp_channel(ib_ctx_);
+            cq_man->cq_           = ibv_create_cq(ib_ctx_, SLIME_MAX_CQ_DEPTH, NULL, cq_man->comp_channel_, 0);
+            SLIME_ASSERT(cq_man->cq_, "create CQ failed");
+        }
         /* Create Queue Pair (QP) */
         struct ibv_qp_init_attr qp_init_attr = {};
-        qp_init_attr.send_cq                 = cq_;
-        qp_init_attr.recv_cq                 = cq_;
+        qp_init_attr.send_cq                 = cq_man->cq_;
+        qp_init_attr.recv_cq                 = cq_man->cq_;
         qp_init_attr.qp_type                 = IBV_QPT_RC;  // Reliable Connection
         qp_init_attr.cap.max_send_wr         = SLIME_MAX_SEND_WR;
         qp_init_attr.cap.max_recv_wr         = SLIME_MAX_RECV_WR;
@@ -302,61 +307,78 @@ int64_t RDMAContext::connect(const json& endpoint_info_json)
             SLIME_ABORT("Failed to modify QP to RTS");
         }
         SLIME_LOG_INFO("RDMA exchange done");
-        connected_ = true;
 
-        if (ibv_req_notify_cq(cq_, 0)) {
+        if (ibv_req_notify_cq(cq_management_[qpi % cq_list_len_]->cq_, 0)) {
             SLIME_ABORT("Failed to request notify for CQ");
         }
     }
+    connected_ = true;
     return 0;
 }
 
 void RDMAContext::launch_future()
 {
-    cq_future_ = std::async(std::launch::async, [this]() -> void { cq_poll_handle(); });
-    for (int qpi = 0; qpi < qp_list_len_; qpi++)
-        qp_management_[qpi]->wq_future_ =
-            std::async(std::launch::async, [this, qpi]() -> void { wq_dispatch_handle(qpi); });
+    auto affinity = get_env<std::vector<std::string>>("SLIME_CPU_AFFINITY", {});
+
+    for (int qpi = 0; qpi < std::min(cq_list_len_, qp_list_len_); qpi++) {
+        cq_management_[qpi]->cq_future_ = std::thread(&RDMAContext::cq_poll_handle, this, qpi);
+        if (!affinity.empty()) {
+            set_thread_affinity(cq_management_[qpi]->cq_future_, std::stoi(affinity[affinity.size() - qpi - 1]));
+        }
+    }
+
+    if (!disable_submit_) {
+        for (int qpi = 0; qpi < qp_list_len_; qpi++) {
+            qp_management_[qpi]->wq_future_ = std::thread(&RDMAContext::wq_dispatch_handle, this, qpi);
+            if (!affinity.empty()) {
+                set_thread_affinity(qp_management_[qpi]->wq_future_, std::stoi(affinity[qpi]));
+            }
+        }
+    }
 }
 
 void RDMAContext::stop_future()
 {
     // Stop work queue dispatch
-    for (int qpi = 0; qpi < qp_list_len_; ++qpi) {
-        if (!qp_management_[qpi]->stop_wq_future_ && qp_management_[qpi]->wq_future_.valid()) {
-            qp_management_[qpi]->stop_wq_future_ = true;
-            qp_management_[qpi]->has_runnable_event_.notify_one();
-            qp_management_[qpi]->wq_future_.get();
+    if (!disable_submit_) {
+        for (int qpi = 0; qpi < qp_list_len_; ++qpi) {
+            if (!qp_management_[qpi]->stop_wq_future_ && qp_management_[qpi]->wq_future_.joinable()) {
+                qp_management_[qpi]->stop_wq_future_ = true;
+                qp_management_[qpi]->has_runnable_event_.notify_one();
+                qp_management_[qpi]->wq_future_.join();
+            }
         }
     }
 
-    if (!stop_cq_future_ && cq_future_.valid()) {
-        stop_cq_future_ = true;
+    for (int qpi = 0; qpi < cq_list_len_; ++qpi) {
+        if (!cq_management_[qpi]->stop_cq_future_ && cq_management_[qpi]->cq_future_.joinable()) {
+            cq_management_[qpi]->stop_cq_future_ = true;
 
-        // create fake wr to wake up cq thread
-        ibv_req_notify_cq(cq_, 0);
-        struct ibv_sge sge;
-        memset(&sge, 0, sizeof(sge));
-        sge.addr   = (uintptr_t)this;
-        sge.length = sizeof(*this);
-        sge.lkey   = 0;
+            // create fake wr to wake up cq thread
+            ibv_req_notify_cq(cq_management_[qpi]->cq_, 0);
+            struct ibv_sge sge;
+            memset(&sge, 0, sizeof(sge));
+            sge.addr   = (uintptr_t)this;
+            sge.length = sizeof(*this);
+            sge.lkey   = 0;
 
-        struct ibv_send_wr send_wr;
-        memset(&send_wr, 0, sizeof(send_wr));
-        // send_wr.wr_id      = (uintptr_t)this;
-        send_wr.wr_id      = 0;
-        send_wr.sg_list    = &sge;
-        send_wr.num_sge    = 1;
-        send_wr.opcode     = IBV_WR_SEND;
-        send_wr.send_flags = IBV_SEND_SIGNALED;
+            struct ibv_send_wr send_wr;
+            memset(&send_wr, 0, sizeof(send_wr));
+            // send_wr.wr_id      = (uintptr_t)this;
+            send_wr.wr_id      = 0;
+            send_wr.sg_list    = &sge;
+            send_wr.num_sge    = 1;
+            send_wr.opcode     = IBV_WR_SEND;
+            send_wr.send_flags = IBV_SEND_SIGNALED;
 
-        struct ibv_send_wr* bad_send_wr;
-        {
-            std::unique_lock<std::mutex> lock(qp_management_[0]->rdma_post_send_mutex_);
-            ibv_post_send(qp_management_[0]->qp_, &send_wr, &bad_send_wr);
+            struct ibv_send_wr* bad_send_wr;
+            {
+                std::unique_lock<std::mutex> lock(qp_management_[0]->rdma_post_send_mutex_);
+                ibv_post_send(qp_management_[qpi]->qp_, &send_wr, &bad_send_wr);
+            }
+            // wait thread done
+            cq_management_[qpi]->cq_future_.join();
         }
-        // wait thread done
-        cq_future_.get();
     }
 }
 
@@ -371,6 +393,7 @@ RDMAContext::submit(OpCode opcode, AssignmentBatch& batch, callback_fn_t callbac
             for (size_t j = 0; j < batch[i].length; j += SLIME_MAX_LENGTH_PER_ASSIGNMENT) {
                 batch_split_after_max_length.push_back(
                     Assignment(batch[i].mr_key,
+                               batch[i].remote_mr_key,
                                batch[i].target_offset + j,
                                batch[i].source_offset + j,
                                std::min(static_cast<size_t>(SLIME_MAX_LENGTH_PER_ASSIGNMENT), batch[i].length - j)));
@@ -443,7 +466,8 @@ int64_t RDMAContext::post_send_batch(int qpi, RDMAAssignmentSharedPtr assign)
     }
     if (ret) {
         SLIME_LOG_ERROR("Failed to post RDMA send : " << strerror(ret));
-        qp_management_[qpi]->outstanding_rdma_reads_.fetch_sub(batch_size, std::memory_order_relaxed);
+        if (!disable_submit_)
+            qp_management_[qpi]->outstanding_rdma_reads_.fetch_sub(batch_size, std::memory_order_relaxed);
         return -1;
     }
     delete[] wr;
@@ -459,7 +483,6 @@ int64_t RDMAContext::post_recv_batch(int qpi, RDMAAssignmentSharedPtr assign)
     struct ibv_recv_wr* wr         = new ibv_recv_wr[batch_size];
     struct ibv_sge*     sge        = new ibv_sge[batch_size];
     for (size_t i = 0; i < batch_size; ++i) {
-
         Assignment&    subassign = assign->batch_[i];
         struct ibv_mr* mr        = memory_pool_->get_mr(subassign.mr_key);
         memset(&sge[i], 0, sizeof(ibv_sge));
@@ -475,12 +498,14 @@ int64_t RDMAContext::post_recv_batch(int qpi, RDMAAssignmentSharedPtr assign)
     }
     {
         std::unique_lock<std::mutex> lock(qp_management_[qpi]->rdma_post_send_mutex_);
-        qp_management_[qpi]->outstanding_rdma_reads_.fetch_add(batch_size, std::memory_order_relaxed);
+        if (!disable_submit_)
+            qp_management_[qpi]->outstanding_rdma_reads_.fetch_add(batch_size, std::memory_order_relaxed);
         ret = ibv_post_recv(qp_management_[qpi]->qp_, wr, &bad_wr);
     }
     if (ret) {
         SLIME_LOG_ERROR("Failed to post RDMA send : " << strerror(ret));
-        qp_management_[qpi]->outstanding_rdma_reads_.fetch_sub(batch_size, std::memory_order_relaxed);
+        if (!disable_submit_)
+            qp_management_[qpi]->outstanding_rdma_reads_.fetch_sub(batch_size, std::memory_order_relaxed);
         return -1;
     }
 
@@ -499,7 +524,7 @@ int64_t RDMAContext::post_rc_oneside_batch(int qpi, RDMAAssignmentSharedPtr assi
     for (size_t i = 0; i < batch_size; ++i) {
         Assignment     subassign   = assign->batch_[i];
         struct ibv_mr* mr          = memory_pool_->get_mr(subassign.mr_key);
-        remote_mr_t    remote_mr   = memory_pool_->get_remote_mr(subassign.mr_key);
+        remote_mr_t    remote_mr   = memory_pool_->get_remote_mr(subassign.remote_mr_key);
         uint64_t       remote_addr = remote_mr.addr;
         uint32_t       remote_rkey = remote_mr.rkey;
         memset(&sge[i], 0, sizeof(ibv_sge));
@@ -512,7 +537,7 @@ int64_t RDMAContext::post_rc_oneside_batch(int qpi, RDMAAssignmentSharedPtr assi
         wr[i].sg_list             = &sge[i];
         wr[i].num_sge             = 1;
         wr[i].imm_data            = (i == batch_size - 1) ? assign->imm_data_ : UNDEFINED_IMM_DATA;
-        wr[i].send_flags          = (i == batch_size - 1) ? IBV_SEND_SIGNALED : 0;
+        wr[i].send_flags          = subassign.length == 0? IBV_SEND_INLINE : ((i == batch_size - 1) ? IBV_SEND_SIGNALED : 0);
         wr[i].wr.rdma.remote_addr = remote_addr + assign->batch_[i].target_offset;
         wr[i].wr.rdma.rkey        = remote_rkey;
         wr[i].next                = (i == batch_size - 1) ? NULL : &wr[i + 1];
@@ -520,7 +545,8 @@ int64_t RDMAContext::post_rc_oneside_batch(int qpi, RDMAAssignmentSharedPtr assi
     int ret = 0;
     {
         std::unique_lock<std::mutex> lock(qp_management_[qpi]->rdma_post_send_mutex_);
-        qp_management_[qpi]->outstanding_rdma_reads_.fetch_add(assign->batch_size(), std::memory_order_relaxed);
+        if (!disable_submit_)
+            qp_management_[qpi]->outstanding_rdma_reads_.fetch_add(assign->batch_size(), std::memory_order_relaxed);
         ret = ibv_post_send(qp_management_[qpi]->qp_, wr, &bad_wr);
     }
 
@@ -534,7 +560,7 @@ int64_t RDMAContext::post_rc_oneside_batch(int qpi, RDMAAssignmentSharedPtr assi
     return 0;
 }
 
-int64_t RDMAContext::cq_poll_handle()
+int64_t RDMAContext::cq_poll_handle(int qpi)
 {
     SLIME_LOG_INFO("Polling CQ");
 
@@ -542,24 +568,24 @@ int64_t RDMAContext::cq_poll_handle()
         SLIME_LOG_ERROR("Start CQ handle before connected, please construct first");
         return -1;
     }
-    if (comp_channel_ == NULL)
+    if (cq_management_[qpi]->comp_channel_ == NULL)
         SLIME_LOG_ERROR("comp_channel_ should be constructed");
-    while (!stop_cq_future_) {
-        struct ibv_cq* ev_cq;
-        void*          cq_context;
-        if (ibv_get_cq_event(comp_channel_, &ev_cq, &cq_context) != 0) {
-            SLIME_LOG_ERROR("Failed to get CQ event");
-            return -1;
-        }
-        ibv_ack_cq_events(ev_cq, 1);
-        if (ibv_req_notify_cq(ev_cq, 0) != 0) {
-            SLIME_LOG_ERROR("Failed to request CQ notification");
-            return -1;
-        }
+    while (!cq_management_[qpi]->stop_cq_future_) {
+        // struct ibv_cq* ev_cq;
+        // void*          cq_context;
+        // if (ibv_get_cq_event(cq_management_[qpi]->comp_channel_, &ev_cq, &cq_context) != 0) {
+        //     SLIME_LOG_ERROR("Failed to get CQ event");
+        //     return -1;
+        // }
+        // ibv_ack_cq_events(ev_cq, 1);
+        // if (ibv_req_notify_cq(ev_cq, 0) != 0) {
+        //     SLIME_LOG_ERROR("Failed to request CQ notification");
+        //     return -1;
+        // }
         struct ibv_wc wc[SLIME_POLL_COUNT];
 
-        while (size_t nr_poll = ibv_poll_cq(cq_, SLIME_POLL_COUNT, wc)) {
-            if (stop_cq_future_)
+        while (size_t nr_poll = ibv_poll_cq(cq_management_[qpi]->cq_, SLIME_POLL_COUNT, wc)) {
+            if (cq_management_[qpi]->stop_cq_future_)
                 return 0;
             if (nr_poll < 0) {
                 SLIME_LOG_WARN("Worker: Failed to poll completion queues");
@@ -617,7 +643,7 @@ int64_t RDMAContext::wq_dispatch_handle(int qpi)
         return -1;
     }
 
-    if (comp_channel_ == NULL)
+    if (cq_management_[qpi % cq_list_len_]->comp_channel_ == NULL)
         SLIME_LOG_ERROR("comp_channel_ should be constructed");
 
     while (!qp_management_[qpi]->stop_wq_future_) {

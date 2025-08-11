@@ -40,7 +40,7 @@ repos:
     rev: v2.1.0
     hooks:
       - id: codespell
-        args: ["--skip=csrc/utils/json.hpp,csrc/python/pybind_json/pybind_json.hpp"]
+        args: ["--skip=csrc/utils/json.hpp,csrc/python/pybind_json/pybind_json.hpp,csrc/utils/dlpack.h"]
 
 
   # - repo: https://github.com/myint/docformatter

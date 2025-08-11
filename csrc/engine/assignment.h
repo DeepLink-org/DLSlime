@@ -27,8 +27,21 @@ enum class OpCode : uint8_t {
 typedef struct Assignment {
     friend std::ostream& operator<<(std::ostream& os, const Assignment& assignment);
     Assignment() = default;
+    Assignment(
+        std::string mr_key, std::string remote_mr_key, uint64_t target_offset, uint64_t source_offset, uint64_t length):
+        mr_key(mr_key),
+        remote_mr_key(remote_mr_key),
+        source_offset(source_offset),
+        target_offset(target_offset),
+        length(length)
+    {
+    }
     Assignment(std::string mr_key, uint64_t target_offset, uint64_t source_offset, uint64_t length):
-        mr_key(mr_key), target_offset(target_offset), source_offset(source_offset), length(length)
+        mr_key(mr_key),
+        remote_mr_key(mr_key),
+        source_offset(source_offset),
+        target_offset(target_offset),
+        length(length)
     {
     }
 
@@ -36,6 +49,7 @@ typedef struct Assignment {
     json dump() const;
 
     std::string mr_key{};
+    std::string remote_mr_key{};
     uint64_t    source_offset{};
     uint64_t    target_offset{};
     uint64_t    length{};

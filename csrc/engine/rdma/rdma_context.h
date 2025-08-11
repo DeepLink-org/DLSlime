@@ -35,28 +35,27 @@ public:
     /*
       A context of rdma QP.
     */
-    RDMAContext()
+    RDMAContext(): RDMAContext(0) {}
+
+    RDMAContext(size_t qp_num): RDMAContext(qp_num, false) {}
+
+    RDMAContext(size_t qp_num, bool diable_submit): disable_submit_(diable_submit)
     {
-        SLIME_LOG_DEBUG("Initializing qp management, num qp: " << SLIME_QP_NUM);
-
-        qp_list_len_   = SLIME_QP_NUM;
-        qp_management_ = new qp_management_t*[qp_list_len_];
-        for (int qpi = 0; qpi < qp_list_len_; qpi++) {
-            qp_management_[qpi] = new qp_management_t();
-        }
-
-        /* random initialization for psn configuration */
-        srand48(time(NULL));
-    }
-
-    RDMAContext(size_t qp_num)
-    {
+        if (!qp_num)
+            qp_num = SLIME_QP_NUM;
         SLIME_LOG_DEBUG("Initializing qp management, num qp: " << qp_num);
 
         qp_list_len_   = qp_num;
         qp_management_ = new qp_management_t*[qp_list_len_];
         for (int qpi = 0; qpi < qp_list_len_; qpi++) {
-            qp_management_[qpi] = new qp_management_t();
+            qp_management_[qpi]                  = new qp_management_t();
+            qp_management_[qpi]->disable_submit_ = diable_submit;
+        }
+
+        cq_list_len_   = SLIME_CQ_NUM;
+        cq_management_ = new cq_management_t*[cq_list_len_];
+        for (int qpi = 0; qpi < cq_list_len_; qpi++) {
+            cq_management_[qpi] = new cq_management_t();
         }
 
         /* random initialization for psn configuration */
@@ -71,8 +70,10 @@ public:
         }
         delete[] qp_management_;
 
-        if (cq_)
-            ibv_destroy_cq(cq_);
+        for (int qpi = 0; qpi < cq_list_len_; qpi++) {
+            delete cq_management_[qpi];
+        }
+        delete[] cq_management_;
 
         if (pd_)
             ibv_dealloc_pd(pd_);
@@ -122,6 +123,11 @@ public:
         return 0;
     }
 
+    bool is_disable_submit()
+    {
+        return disable_submit_;
+    }
+
     /* RDMA Link Construction */
     int64_t connect(const json& endpoint_info_json);
     /* Submit an assignment */
@@ -167,6 +173,13 @@ public:
         return true;
     }
 
+    /* Async RDMA SendRecv */
+    int64_t post_send_batch(int qpi, RDMAAssignmentSharedPtr assign);
+    int64_t post_recv_batch(int qpi, RDMAAssignmentSharedPtr assign);
+
+    /* Async RDMA Read */
+    int64_t post_rc_oneside_batch(int qpi, RDMAAssignmentSharedPtr assign);
+
 private:
     inline static constexpr int      UNDEFINED_QPI      = -1;
     inline static constexpr uint32_t UNDEFINED_IMM_DATA = -1;
@@ -174,11 +187,9 @@ private:
     std::string device_name_ = "";
 
     /* RDMA Configuration */
-    struct ibv_context*      ib_ctx_       = nullptr;
-    struct ibv_pd*           pd_           = nullptr;
-    struct ibv_comp_channel* comp_channel_ = nullptr;
-    struct ibv_cq*           cq_           = nullptr;
-    uint8_t                  ib_port_      = -1;
+    struct ibv_context* ib_ctx_  = nullptr;
+    struct ibv_pd*      pd_      = nullptr;
+    uint8_t             ib_port_ = -1;
 
     std::unique_ptr<RDMAMemoryPool> memory_pool_;
 
@@ -198,11 +209,13 @@ private:
         std::queue<RDMAAssignmentSharedPtr> assign_queue_;
         std::atomic<int>                    outstanding_rdma_reads_{0};
 
+        bool disable_submit_{false};
+
         /* Has Runnable Assignment */
         std::condition_variable has_runnable_event_;
 
         /* async wq handler */
-        std::future<void> wq_future_;
+        std::thread       wq_future_;
         std::atomic<bool> stop_wq_future_{false};
 
         ~qp_management()
@@ -224,28 +237,35 @@ private:
     }
 
     typedef struct cq_management {
-        // TODO: multi cq handlers.
+        struct ibv_cq* cq_ = nullptr;
+        /* async cq handler */
+        std::thread              cq_future_;
+        std::atomic<bool>        stop_cq_future_{false};
+        struct ibv_comp_channel* comp_channel_ = nullptr;
+
+        bool initialized_ = false;
+
+        ~cq_management()
+        {
+            if (cq_)
+                ibv_destroy_cq(cq_);
+        }
     } cq_management_t;
 
-    /* State Management */
-    bool initialized_ = false;
-    bool connected_   = false;
+    size_t            cq_list_len_{1};
+    cq_management_t** cq_management_;
 
-    /* async cq handler */
-    std::future<void> cq_future_;
-    std::atomic<bool> stop_cq_future_{false};
+    /* Use raw api of RDMA */
+    bool disable_submit_{false};
+
+    /* State Management */
+    bool initialized_{false};
+    bool connected_{false};
 
     /* Completion Queue Polling */
-    int64_t cq_poll_handle();
+    int64_t cq_poll_handle(int qpi);
     /* Working Queue Dispatch */
     int64_t wq_dispatch_handle(int qpi);
-
-    /* Async RDMA SendRecv */
-    int64_t post_send_batch(int qpi, RDMAAssignmentSharedPtr assign);
-    int64_t post_recv_batch(int qpi, RDMAAssignmentSharedPtr assign);
-
-    /* Async RDMA Read */
-    int64_t post_rc_oneside_batch(int qpi, RDMAAssignmentSharedPtr assign);
 };
 
 }  // namespace slime

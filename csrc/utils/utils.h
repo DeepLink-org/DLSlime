@@ -1,5 +1,6 @@
 #pragma once
 
+#include <thread>
 #include <cstdlib>
 #include <sstream>
 #include <string>
@@ -34,5 +35,8 @@ T get_env(const char* name, T default_value)
 std::vector<std::string> available_nic();
 
 int get_gid_index(std::string dev_name);
+
+// 设置线程亲和性：将线程绑定到指定的 CPU 核心（core_id 从 0 开始）
+bool set_thread_affinity(std::thread& thread, int core_id);
 
 }  // namespace slime
