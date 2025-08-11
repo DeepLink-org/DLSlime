@@ -215,7 +215,11 @@ class RDMAEndpoint(BaseEndpoint):
             read_size: Data size in bytes
 
         Returns:
-            ibv_wc_status code (0 = IBV_WC_SUCCESS)
+            (AsyncOp=False) ibv_wc_status code (0 = IBV_WC_SUCCESS)
+            (AsyncOp=True) RDMAAssignment object for tracking the operation status.
+
+        Warning:
+            This method is not thread-safe and should not be called concurrently.
         """
         batch = [
             _slime_c.Assignment(
