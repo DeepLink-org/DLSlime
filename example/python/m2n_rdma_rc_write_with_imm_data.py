@@ -8,6 +8,7 @@ import time
 
 import torch
 import torch.distributed as dist
+from torch.distributed import batch_isend_irecv
 
 import dlslime
 from dlslime import _slime_c, available_nic
@@ -20,11 +21,12 @@ parser.add_argument('--hidden-size', type=int, default=4096, help='hidden size')
 parser.add_argument('--num-experts', type=int, default=128, help='number of experts')
 parser.add_argument('--topk', type=int, default=8, help='top k for dispatch')
 parser.add_argument('--qp-per-rank', type=int, default=2, help='number of QPs per rank')
+parser.add_argument('--comm-backend', choices=['dlslime', 'nccl'], default='dlslime')
 
 args = parser.parse_args()
 
 print('initializing torch.dist ...')
-dist.init_process_group(backend='gloo')
+dist.init_process_group(backend='cpu:gloo,cuda:nccl')
 rank = dist.get_rank()
 print(f"torch.dist initialized, {rank=} ...")
 
@@ -79,14 +81,27 @@ if __name__ == '__main__':
         def m2n():
             with torch.cuda.nvtx.range(f"m2n_rank_{rank}"):
                 futures = []
+                op_list = []
                 if rank < args.m_size:
-                    # M to N Send
-                    endpoint.m2n_send([max_bs * args.hidden_size for _ in range(args.n_size)]).wait()
+                    if args.comm_backend == 'dlslime':
+                        futures.append(endpoint.m2n_send([args.max_bs * args.hidden_size for _ in range(args.n_size)]))
+                    elif args.comm_backend == 'nccl':
+                        for dst in range(args.n_size):
+                            op_list.append(dist.P2POp(dist.isend, send_buffer[dst], dst + args.m_size))
+                        futures.extend(batch_isend_irecv(op_list))
                 else:
-                    # M to N Recv
-                    endpoint.m2n_recv().wait()
+                    if args.comm_backend == 'dlslime':
+                        futures.append(endpoint.m2n_recv())
+                    elif args.comm_backend == 'nccl':
+                        for i, src in enumerate(range(args.m_size)):
+                            op_list.append(dist.P2POp(
+                                dist.irecv,
+                                recv_buffer[i],
+                                src,
+                            ))
+                        futures.extend(batch_isend_irecv(op_list))
                 [future.wait() for future in futures]
-            dist.barrier()
+                dist.barrier()
 
         def n2m(x: torch.Tensor):
             pass
@@ -121,3 +136,4 @@ if __name__ == '__main__':
             print(f"recv bw = {args.m_size * max_bs * args.hidden_size * 10 / (total_recv_time) / 1024 / 1024} MiB/s")
 
         time.sleep(1)
+    dist.destroy_process_group()
