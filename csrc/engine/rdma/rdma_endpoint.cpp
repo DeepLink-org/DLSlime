@@ -24,11 +24,12 @@ RDMATask::RDMATask(std::shared_ptr<RDMAEndpoint> endpoint,
 
 RDMATask::~RDMATask()
 {
-    delete[] meta_data_buf_;
+    // delete[] meta_data_buf_;
 }
 
 std::string RDMATask::getMetaKey()
 {
+
     std::string meta_key = opcode_ == OpCode::SEND ? "META_SEND" : "META_RECV";
     return meta_key + "@" + std::to_string(slot_id_ % MAX_META_SIZE);
 }
@@ -41,7 +42,7 @@ std::string RDMATask::getDataKey(int32_t idx)
 
 AssignmentBatch RDMATask::getMetaAssignmentBatch()
 {
-    return AssignmentBatch{Assignment(getMetaKey(), 0, 0, sizeof(meta_data_t))};
+    // return AssignmentBatch{Assignment(getMetaKey(), 0, 0, sizeof(meta_data_t))};
 }
 
 AssignmentBatch RDMATask::getDataAssignmentBatch()
@@ -56,8 +57,8 @@ AssignmentBatch RDMATask::getDataAssignmentBatch()
 
 int RDMATask::registerMetaMemoryRegion()
 {
-    endpoint_->MetaCtx()->register_memory_region(
-        getMetaKey(), (uintptr_t)meta_data_buf_, buffer_->batchSize() * sizeof(meta_data_t));
+    // endpoint_->MetaCtx()->register_memory_region(
+    //     getMetaKey(), (uintptr_t)meta_data_buf_, buffer_->batchSize() * sizeof(meta_data_t));
     return 0;
 }
 
@@ -78,14 +79,14 @@ void RDMATask::fillMetaInfo()
 }
 void RDMATask::fillBuffer()
 {
-    for (size_t i = 0; i < buffer_->batchSize(); ++i) {
-        auto mr                                                          = endpoint_->dataCtx()->get_mr(getDataKey(i));
-        endpoint_->recv_meta_pool_[slot_id_ % MAX_META_SIZE]->mr_addr[i] = reinterpret_cast<uint64_t>(mr->addr);
-        endpoint_->recv_meta_pool_[slot_id_ % MAX_META_SIZE]->mr_rkey[i] = mr->rkey;
-        endpoint_->recv_meta_pool_[slot_id_ % MAX_META_SIZE]->mr_size[i] = mr->length;
-        endpoint_->recv_meta_pool_[slot_id_ % MAX_META_SIZE]->mr_slot    = slot_id_;
-        endpoint_->recv_meta_pool_[slot_id_ % MAX_META_SIZE]->mr_qpidx   = slot_id_ % endpoint_->dataCtxQPNum();
-    }
+    // for (size_t i = 0; i < buffer_->batchSize(); ++i) {
+    //     auto mr                                                          =
+    //     endpoint_->dataCtx()->get_mr(getDataKey(i)); endpoint_->recv_meta_pool_[slot_id_ % MAX_META_SIZE]->mr_addr[i]
+    //     = reinterpret_cast<uint64_t>(mr->addr); endpoint_->recv_meta_pool_[slot_id_ % MAX_META_SIZE]->mr_rkey[i] =
+    //     mr->rkey; endpoint_->recv_meta_pool_[slot_id_ % MAX_META_SIZE]->mr_size[i] = mr->length;
+    //     endpoint_->recv_meta_pool_[slot_id_ % MAX_META_SIZE]->mr_slot    = slot_id_;
+    //     endpoint_->recv_meta_pool_[slot_id_ % MAX_META_SIZE]->mr_qpidx   = slot_id_ % endpoint_->dataCtxQPNum();
+    // }
 }
 
 int RDMATask::targetQPI()
@@ -95,12 +96,12 @@ int RDMATask::targetQPI()
 
 int RDMATask::registerRemoteDataMemoryRegion()
 {
-    for (size_t i = 0; i < buffer_->batchSize(); ++i) {
-        uint64_t addr   = endpoint_->send_meta_pool_[slot_id_ % MAX_META_SIZE]->mr_addr[i];
-        uint32_t length = endpoint_->send_meta_pool_[slot_id_ % MAX_META_SIZE]->mr_size[i];
-        uint32_t rkey   = endpoint_->send_meta_pool_[slot_id_ % MAX_META_SIZE]->mr_rkey[i];
-        endpoint_->dataCtx()->register_remote_memory_region(getDataKey(i), addr, length, rkey);
-    }
+    // for (size_t i = 0; i < buffer_->batchSize(); ++i) {
+    //     uint64_t addr   = endpoint_->send_meta_pool_[slot_id_ % MAX_META_SIZE]->mr_addr[i];
+    //     uint32_t length = endpoint_->send_meta_pool_[slot_id_ % MAX_META_SIZE]->mr_size[i];
+    //     uint32_t rkey   = endpoint_->send_meta_pool_[slot_id_ % MAX_META_SIZE]->mr_rkey[i];
+    //     endpoint_->dataCtx()->register_remote_memory_region(getDataKey(i), addr, length, rkey);
+    // }
     return 0;
 }
 
@@ -119,17 +120,55 @@ RDMAEndpoint::RDMAEndpoint(const std::string& dev_name, uint8_t ib_port, const s
     SLIME_LOG_INFO("The QP number of control plane is: ", meta_ctx_qp_num_);
     SLIME_LOG_INFO("RDMA Endpoint Init Success and Launch the RDMA Endpoint Task Threads...");
 
-    for (int i = 0; i < SLIME_MAX_META_SIZE; ++i) {
-        std::string  send_meta_key  = "META_SEND@" + std::to_string(i);
-        meta_data_t* send_meta_buf_ = new meta_data_t;
-        meta_ctx_->register_memory_region(send_meta_key, (uintptr_t)send_meta_buf_, sizeof(meta_data_t));
-        send_meta_pool_.push_back(send_meta_buf_);
+    // for debug
+    const size_t max_buffer_size       = 16;
+    const size_t max_element_size      = 8192;
+    const size_t max_buffer_batch_size = 8;
 
-        std::string  recv_meta_key  = "META_RECV@" + std::to_string(i);
-        meta_data_t* recv_meta_buf_ = new meta_data_t;
-        meta_ctx_->register_memory_region(recv_meta_key, (uintptr_t)recv_meta_buf_, sizeof(meta_data_t));
-        recv_meta_pool_.push_back(recv_meta_buf_);
+    s_send_buffer_ =
+        std::make_unique<SimpleBuffer>(max_buffer_size, max_element_size, max_buffer_batch_size, shared_from_this());
+    s_recv_buffer_ =
+        std::make_unique<SimpleBuffer>(max_buffer_size, max_element_size, max_buffer_batch_size, shared_from_this());
+
+    // for debug
+    const size_t max_meta_buffer_size = 64;
+    meta_buffer_manager_ = std::make_unique<RDMAMetaBufferManager>(max_meta_buffer_size, shared_from_this());
+
+    // 进行一次send/recv交换相关信息
+    remote_buffer_info_ = (remoteBufferInfo*)malloc(sizeof(remoteBufferInfo));
+    local_buffer_info_  = (remoteBufferInfo*)malloc(sizeof(remoteBufferInfo));
+    memset(remote_buffer_info_, 0, sizeof(remoteBufferInfo));
+    memset(local_buffer_info_, 0, sizeof(remoteBufferInfo));
+
+    local_buffer_info_->buffer_addr[0] = (uint64_t)s_recv_buffer_->getIdxBufferPtr(0);
+    local_buffer_info_->buffer_addr[1] = (uint64_t)meta_buffer_manager_->getRecvMetaBufferAddr();
+
+    local_buffer_info_->buffer_rkey[0] = (uint32_t)s_recv_buffer_->getSimpleBufferRkey();
+    local_buffer_info_->buffer_rkey[1] = (uint32_t)meta_buffer_manager_->getRecvMetaBufferRkey();
+
+    local_buffer_info_->buffer_size[0] = (uint32_t)(max_buffer_size * max_element_size * max_buffer_batch_size);
+    local_buffer_info_->buffer_size[1] = (uint32_t)(max_meta_buffer_size * sizeof(metaBuffer));
+
+    meta_ctx_->register_memory_region("LOCAL_BUFFER_INFO", (uintptr_t)local_buffer_info_, sizeof(remoteBufferInfo));
+
+    AssignmentBatch buffer_assignment(1);
+    for (size_t i = 0; i < buffer_assignment.size(); ++i) {
+        buffer_assignment[i] = Assignment("BUFFER_INFO", 0, 0, sizeof(remoteBufferInfo));
     }
+    auto meta_atx_send = meta_ctx_->submit(OpCode::SEND, buffer_assignment);
+
+    data_ctx_->register_memory_region("REMOTE_BUFFER_INFO", (uintptr_t)remote_buffer_info_, sizeof(remoteBufferInfo));
+    AssignmentBatch assignment(1);
+    for (size_t i = 0; i < assignment.size(); ++i) {
+        assignment[i] = Assignment("REMOTE_BUFFER_INFO", 0, 0, sizeof(remoteBufferInfo));
+    }
+    auto data_atx_recv = data_ctx_->submit(OpCode::RECV, assignment);
+
+    meta_atx_send->wait();
+    data_atx_recv->wait();
+
+    std::cout << "Remote Recv Buffer Addr: " << std::hex << remote_buffer_info_->buffer_addr[0] << std::dec
+              << std::endl;
 }
 
 RDMAEndpoint::~RDMAEndpoint()
@@ -154,7 +193,7 @@ void RDMAEndpoint::connect(const json& data_ctx_info, const json& meta_ctx_info)
     meta_ctx_->launch_future();
 
     RDMA_tasks_threads_running_ = true;
-    rdma_tasks_threads_         = std::thread([this] { this->waitandPopTask(std::chrono::milliseconds(100)); });
+    rdma_tasks_threads_         = std::thread([this] { this->endPointQueue(std::chrono::milliseconds(100)); });
 }
 
 std::shared_ptr<RDMABuffer> RDMAEndpoint::createRDMABuffer(storage_view_batch_t batch)
@@ -183,7 +222,7 @@ void RDMAEndpoint::addRecvTask(std::shared_ptr<RDMABuffer> buffer)
     rdma_tasks_cv_.notify_one();
 }
 
-void RDMAEndpoint::waitandPopTask(std::chrono::milliseconds timeout)
+void RDMAEndpoint::endPointQueue(std::chrono::milliseconds timeout)
 {
     while (true) {
         std::shared_ptr<rdma_task_t> task;
@@ -207,7 +246,7 @@ void RDMAEndpoint::waitandPopTask(std::chrono::milliseconds timeout)
                     asyncRecvData(task);
                     break;
                 default:
-                    SLIME_LOG_ERROR("Unknown OpCode in WaitandPopTask");
+                    SLIME_LOG_ERROR("Unknown OpCode in endPointQueue");
                     break;
             }
         }
