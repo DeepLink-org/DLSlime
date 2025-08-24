@@ -1,5 +1,4 @@
-# NOTES: this CMake is only for debugging; for setup, please use Torch extension
-# cmake_minimum_required(VERSION 3.10)
+# Adapted from: https://github.com/deepseek-ai/DeepEP.git
 set(CMAKE_VERBOSE_MAKEFILE ON)
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3 -fPIC")

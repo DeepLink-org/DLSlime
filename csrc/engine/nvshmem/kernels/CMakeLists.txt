@@ -1,3 +1,4 @@
+# Adapted from: https://github.com/deepseek-ai/DeepEP.git
 function(add_deep_ep_library target_name source_file)
     add_library(${target_name} STATIC ${source_file})
     set_target_properties(${target_name} PROPERTIES
