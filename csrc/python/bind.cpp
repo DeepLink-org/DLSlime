@@ -1,39 +1,39 @@
 #include "engine/assignment.h"
-#include "engine/rdma/rdma_assignment.h"
-#include "engine/rdma/rdma_buffer.h"
-#include "engine/rdma/rdma_config.h"
-#include "engine/rdma/rdma_context.h"
-#include "engine/rdma/rdma_endpoint.h"
-#include "engine/rdma/rdma_scheduler.h"
-
-#include "gloo/rendezvous/context.h"
-#include "gloo/rendezvous/file_store.h"
-#include "gloo/rendezvous/prefix_store.h"
-#include "gloo/rendezvous/store.h"
-#include "gloo/transport/device.h"
-#include "gloo/transport/ibverbs/device.h"
-
-#include <functional>
-#include <pybind11/cast.h>
-#include <pybind11/pytypes.h>
 
 #ifdef BUILD_NVLINK
 #include "engine/nvlink/memory_pool.h"
 #include "engine/nvlink/nvlink_transport.h"
 #endif
 
+#ifdef BUILD_NVSHMEM
+#include "engine/nvshmem/nvshmem_context.h"
+#endif
+
+#ifdef BUILD_RDMA
+#include "engine/rdma/rdma_assignment.h"
+#include "engine/rdma/rdma_buffer.h"
+#include "engine/rdma/rdma_config.h"
+#include "engine/rdma/rdma_context.h"
+#include "engine/rdma/rdma_endpoint.h"
+#include "engine/rdma/rdma_scheduler.h"
+#endif
+
 #include "utils/json.hpp"
 #include "utils/logging.h"
 #include "utils/utils.h"
 
-#include "pybind_json/pybind_json.hpp"
-
 #include <cstdint>
+#include <functional>
 #include <memory>
+
+#include <pybind11/cast.h>
 #include <pybind11/chrono.h>
 #include <pybind11/functional.h>
 #include <pybind11/pybind11.h>
+#include <pybind11/pytypes.h>
 #include <pybind11/stl.h>
+
+#include "pybind_json/pybind_json.hpp"
 
 using json = nlohmann::json;
 
@@ -49,6 +49,7 @@ PYBIND11_MODULE(_slime_c, m)
 
     py::class_<slime::Assignment>(m, "Assignment").def(py::init<std::string, uint64_t, uint64_t, uint64_t>());
 
+#ifdef BUILD_RDMA
     py::class_<slime::RDMAAssignment, slime::RDMAAssignmentSharedPtr>(m, "RDMAAssignment")
         .def("wait", &slime::RDMAAssignment::wait, py::call_guard<py::gil_scoped_release>())
         .def("latency", &slime::RDMAAssignment::latency, py::call_guard<py::gil_scoped_release>());
@@ -95,6 +96,14 @@ PYBIND11_MODULE(_slime_c, m)
         .def("wait_recv", &slime::RDMABuffer::waitRecv);
 
     m.def("available_nic", &slime::available_nic);
+#endif
+
+#ifdef BUILD_NVSHMEM
+    py::class_<slime::NVShmemContext, std::shared_ptr<slime::NVShmemContext>>(m, "NVShmemContext")
+        .def(py::init<const int, const int, const int>())
+        .def("connect_full_mesh", &slime::NVShmemContext::connectFullMesh)
+        .def("get_local_nvshmem_unique_id", &slime::NVShmemContext::getLocalNVShmemUniqueId);
+#endif
 
 #ifdef BUILD_NVLINK
     py::class_<slime::NVLinkContext>(m, "nvlink_context")
