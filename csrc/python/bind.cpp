@@ -44,6 +44,7 @@ PYBIND11_MODULE(_slime_c, m)
     py::enum_<slime::OpCode>(m, "OpCode")
         .value("READ", slime::OpCode::READ)
         .value("WRITE", slime::OpCode::WRITE)
+        .value("WRITE_WITH_IMM_DATA", slime::OpCode::WRITE_WITH_IMM)
         .value("SEND", slime::OpCode::SEND)
         .value("RECV", slime::OpCode::RECV);
 
@@ -65,8 +66,9 @@ PYBIND11_MODULE(_slime_c, m)
         .def("submit_assignment", &slime::RDMAScheduler::submitAssignment)
         .def("scheduler_info", &slime::RDMAScheduler::scheduler_info);
 
-    py::class_<slime::RDMAContext>(m, "rdma_context")
+    py::class_<slime::RDMAContext, std::shared_ptr<slime::RDMAContext>>(m, "rdma_context")
         .def(py::init<>())
+        .def(py::init<size_t>())
         .def("init_rdma_context", &slime::RDMAContext::init)
         .def("register_memory_region", &slime::RDMAContext::register_memory_region)
         .def("register_remote_memory_region",
