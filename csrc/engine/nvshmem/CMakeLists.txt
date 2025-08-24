@@ -59,7 +59,7 @@ set_target_properties(
     _slime_nvshmem
     PROPERTIES
     BUILD_WITH_INSTALL_RPATH TRUE
-    INSTALL_RPATH "\${ORIGIN}"
+    INSTALL_RPATH "\${ORIGIN};${CUDA_TOOLKIT_ROOT_DIR}/lib;${NVSHMEM_LIB_DIR}"
 )
 
 install(
