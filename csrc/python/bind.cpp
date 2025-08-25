@@ -104,7 +104,10 @@ PYBIND11_MODULE(_slime_c, m)
     py::class_<slime::NVShmemContext, std::shared_ptr<slime::NVShmemContext>>(m, "NVShmemContext")
         .def(py::init<const int, const int, const int>())
         .def("connect_full_mesh", &slime::NVShmemContext::connectFullMesh)
-        .def("get_local_nvshmem_unique_id", &slime::NVShmemContext::getLocalNVShmemUniqueId);
+        .def("get_local_nvshmem_unique_id", &slime::NVShmemContext::getLocalNVShmemUniqueId)
+        .def("register_memory_region", &slime::NVShmemContext::registerMemoryRegion)
+        .def("send", &slime::NVShmemContext::send)
+        .def("recv", &slime::NVShmemContext::recv);
 #endif
 
 #ifdef BUILD_NVLINK
