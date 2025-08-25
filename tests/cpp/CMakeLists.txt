@@ -24,3 +24,17 @@ target_link_libraries(
     PUBLIC
     _slime_engine _slime_rdma gflags zmq
 )
+
+
+add_executable(
+    sendrecv
+    sendrecv.cpp
+)
+
+target_include_directories(sendrecv PUBLIC ${ZeroMQ_INCLUDE_DIRS})
+
+target_link_libraries(
+    sendrecv
+    PUBLIC
+    _slime_engine _slime_rdma gflags zmq
+)

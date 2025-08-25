@@ -5,18 +5,11 @@ namespace slime {
 
 void RDMABuffer::send()
 {
-    std::cout << "SENDTest" << std::endl;
-    if (auto self = weak_from_this().lock()) {
-        endpoint_->addSendTask(self);
-    }
-    else {
-        throw std::runtime_error("RDMABuffer not managed by shared_ptr");
-    }
+    endpoint_->addSendTask(shared_from_this());
 }
 
 void RDMABuffer::recv()
 {
-    std::cout << "RECVTest" << std::endl;
     endpoint_->addRecvTask(shared_from_this());
 }
 
