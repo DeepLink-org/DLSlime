@@ -392,7 +392,7 @@ RDMAContext::submit(OpCode opcode, AssignmentBatch& batch, callback_fn_t callbac
     if (qpi == UNDEFINED_QPI) {
         qpi = select_qpi();
     }
-
+    std::cout << "qpi: " << qpi << std::endl;
     int split_size = batch_split_after_cq_depth.size();
 
     {
@@ -407,6 +407,7 @@ RDMAContext::submit(OpCode opcode, AssignmentBatch& batch, callback_fn_t callbac
         }
 
         qp_management_[qpi]->has_runnable_event_.notify_one();
+        std::cout << "rdma_assignment" << qpi << std::endl;
         return rdma_assignment;
     }
 }
@@ -462,6 +463,7 @@ int64_t RDMAContext::post_recv_batch(int qpi, RDMAAssignmentSharedPtr assign)
 
         Assignment&    subassign = assign->batch_[i];
         struct ibv_mr* mr        = memory_pool_->get_mr(subassign.mr_key);
+        std::cout << "subassign.mr_key:" << subassign.mr_key << std::endl;
         memset(&sge[i], 0, sizeof(ibv_sge));
         sge[i].addr   = (uintptr_t)mr->addr + subassign.source_offset;
         sge[i].length = subassign.length;
@@ -497,11 +499,14 @@ int64_t RDMAContext::post_rc_oneside_batch(int qpi, RDMAAssignmentSharedPtr assi
     struct ibv_sge*     sge        = new ibv_sge[batch_size];
 
     for (size_t i = 0; i < batch_size; ++i) {
-        Assignment     subassign   = assign->batch_[i];
-        struct ibv_mr* mr          = memory_pool_->get_mr(subassign.mr_key);
-        remote_mr_t    remote_mr   = memory_pool_->get_remote_mr(subassign.mr_key);
-        uint64_t       remote_addr = remote_mr.addr;
-        uint32_t       remote_rkey = remote_mr.rkey;
+        Assignment     subassign = assign->batch_[i];
+        struct ibv_mr* mr        = memory_pool_->get_mr(subassign.mr_key);
+        remote_mr_t    remote_mr = memory_pool_->get_remote_mr(subassign.mr_key);
+        std::cout << "subassign.mr_key:" << subassign.mr_key << std::endl;
+        uint64_t remote_addr = remote_mr.addr;
+        std::cout << "remote_addr:" << remote_addr << std::endl;
+        uint32_t remote_rkey = remote_mr.rkey;
+        std::cout << "remote_rkey:" << remote_rkey << std::endl;
         memset(&sge[i], 0, sizeof(ibv_sge));
         sge[i].addr   = (uint64_t)mr->addr + subassign.source_offset;
         sge[i].length = subassign.length;
@@ -589,9 +594,11 @@ int64_t RDMAContext::cq_poll_handle()
                             callback_with_qpi->callback_info_->callback_(status_code, wc[i].imm_data);
                             break;
                         case OpCode::RECV:
+                            std::cout << "RECV" << std::endl;
                             callback_with_qpi->callback_info_->callback_(status_code, wc[i].imm_data);
                             break;
                         case OpCode::WRITE_WITH_IMM:
+                            std::cout << "WRITE_WITH_IMM" << std::endl;
                             callback_with_qpi->callback_info_->callback_(status_code, wc[i].imm_data);
                             break;
                         default:
@@ -646,6 +653,7 @@ int64_t RDMAContext::wq_dispatch_handle(int qpi)
                         post_send_batch(qpi, front_assign);
                         break;
                     case OpCode::RECV:
+                        std::cout << "POST RECV" << std::endl;
                         post_recv_batch(qpi, front_assign);
                         break;
                     case OpCode::READ:
@@ -658,6 +666,7 @@ int64_t RDMAContext::wq_dispatch_handle(int qpi)
                         post_send_batch(qpi, front_assign);
                         break;
                     case OpCode::WRITE_WITH_IMM:
+                        std::cout << "POST WRITE_WITH_IMM" << std::endl;
                         post_rc_oneside_batch(qpi, front_assign);
                         break;
                     default:

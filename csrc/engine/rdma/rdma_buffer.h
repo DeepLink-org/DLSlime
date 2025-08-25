@@ -42,6 +42,7 @@ public:
     }
 
     ~RDMABuffer() = default;
+    
 
     const size_t batchSize()
     {

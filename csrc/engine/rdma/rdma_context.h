@@ -88,6 +88,16 @@ public:
         return memory_pool_->get_mr(mr_key);
     }
 
+    struct ibv_mr* get_mr_for_endpoint(const std::string& mr_key)
+    {
+        return memory_pool_->get_mr_no_log(mr_key);
+    }
+
+    int get_remote_mr_for_endpoint(const std::string& mr_key)
+    {
+        return memory_pool_->get_remote_mr_no_log(mr_key);
+    }
+
     /* Initialize */
     int64_t init(const std::string& dev_name, uint8_t ib_port, const std::string& link_type);
 

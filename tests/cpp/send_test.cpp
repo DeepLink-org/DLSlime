@@ -45,7 +45,7 @@ int main(int argc, char** argv)
     sock_data.send(local_data_channel_info, zmq::send_flags::none);
     sock_mmrg.send(local_meta_channel_info, zmq::send_flags::none);
 
-    end_point->contextConnect(json::parse(data_channel_info.to_string()), json::parse(mmrg_channel_info.to_string()));
+    end_point->connect(json::parse(data_channel_info.to_string()), json::parse(mmrg_channel_info.to_string()));
     std::cout << "Connect Success..." << std::endl;
     std::cout << "Finish the connection of QP, start to SEND of buf_0 and buf_1..." << std::endl;
 
@@ -54,7 +54,7 @@ int main(int argc, char** argv)
 
     std::vector<uintptr_t> ptrs_buf_0       = {reinterpret_cast<uintptr_t>(data_buf_0.data())};
     std::vector<size_t>    data_sizes_buf_0 = {data_buf_0.size()};
-    std::vector<size_t>    offset_buf_0 = {0};
+    std::vector<size_t>    offset_buf_0     = {0};
 
     const uint32_t    batch_size_buf_1 = 2;
     std::vector<char> data_buf_1_0(1024, '1');
@@ -63,22 +63,22 @@ int main(int argc, char** argv)
     std::vector<uintptr_t> ptrs_buf_1       = {reinterpret_cast<uintptr_t>(data_buf_1_0.data()),
                                                reinterpret_cast<uintptr_t>(data_buf_1_1.data())};
     std::vector<size_t>    data_sizes_buf_1 = {data_buf_1_0.size(), data_buf_1_1.size()};
-    std::vector<size_t>    offset_buf_1 = {0,0};
+    std::vector<size_t>    offset_buf_1     = {0, 0};
 
-    RDMABuffer buf_0(end_point, ptrs_buf_0, data_sizes_buf_0, offset_buf_0);
-    RDMABuffer buf_1(end_point, ptrs_buf_1, data_sizes_buf_1, offset_buf_1);
+    auto buf_0 = std::make_shared<RDMABuffer>(end_point, ptrs_buf_0, data_sizes_buf_0, offset_buf_0);
+    auto buf_1 = std::make_shared<RDMABuffer>(end_point, ptrs_buf_0, data_sizes_buf_0, offset_buf_0);
     std::cout << "Launch EDNPOINT ..." << std::endl;
 
-    buf_1.send();
-    buf_0.send();
+    // buf_1->send();
+    buf_0->send();
     std::cout << "Main thread working Test..." << std::endl;
     std::cout << "Main thread working Test..." << std::endl;
     std::cout << "Main thread working Test..." << std::endl;
     std::cout << "Main thread working Test..." << std::endl;
     std::cout << "Main thread working Test..." << std::endl;
     std::cout << "Wait SEND Complete..." << std::endl;
-    buf_0.waitSend();
-    buf_1.waitSend();
+    buf_0->waitSend();
+    // buf_1->waitSend();
 
     std::cout << "The SEND test completed." << std::endl;
 
