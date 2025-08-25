@@ -232,7 +232,7 @@ int64_t RDMAContext::connect(const json& endpoint_info_json)
     for (auto& item : endpoint_info_json["mr_info"].items()) {
         register_remote_memory_region(item.key(), item.value());
     }
-
+    std::cout << "connectconnectconnect" << std::endl;
     SLIME_ASSERT(!connected_, "Already connected!");
     SLIME_ASSERT_EQ(qp_list_len_, endpoint_info_json["rdma_info"].size(), "Peer must have same QP Size.");
 
@@ -314,9 +314,12 @@ int64_t RDMAContext::connect(const json& endpoint_info_json)
 void RDMAContext::launch_future()
 {
     cq_future_ = std::async(std::launch::async, [this]() -> void { cq_poll_handle(); });
-    for (int qpi = 0; qpi < qp_list_len_; qpi++)
+    for (int qpi = 0; qpi < qp_list_len_; qpi++) {
         qp_management_[qpi]->wq_future_ =
             std::async(std::launch::async, [this, qpi]() -> void { wq_dispatch_handle(qpi); });
+
+        std::cout << "launch_futurelaunch_futurelaunch_future" << std::endl;
+    }
 }
 
 void RDMAContext::stop_future()
@@ -366,48 +369,55 @@ RDMAContext::submit(OpCode opcode, AssignmentBatch& batch, callback_fn_t callbac
     AssignmentBatch              batch_split_after_max_length;
     std::vector<AssignmentBatch> batch_split_after_cq_depth;
 
-    auto split_by_max_length = [&]() {
-        for (size_t i = 0; i < batch.size(); ++i) {
-            for (size_t j = 0; j < batch[i].length; j += SLIME_MAX_LENGTH_PER_ASSIGNMENT) {
-                batch_split_after_max_length.push_back(
-                    Assignment(batch[i].mr_key,
-                               batch[i].target_offset + j,
-                               batch[i].source_offset + j,
-                               std::min(static_cast<size_t>(SLIME_MAX_LENGTH_PER_ASSIGNMENT), batch[i].length - j)));
-            }
-        }
-    };
+    // auto split_by_max_length = [&]() {
+    //     for (size_t i = 0; i < batch.size(); ++i) {
+    //         for (size_t j = 0; j < batch[i].length; j += SLIME_MAX_LENGTH_PER_ASSIGNMENT) {
+    //             batch_split_after_max_length.push_back(
+    //                 Assignment(batch[i].mr_key,
+    //                            batch[i].target_offset + j,
+    //                            batch[i].source_offset + j,
+    //                            std::min(static_cast<size_t>(SLIME_MAX_LENGTH_PER_ASSIGNMENT), batch[i].length - j)));
+    //         }
+    //     }
+    // };
 
-    auto split_by_max_cq_depth = [&]() {
-        int split_step = SLIME_MAX_CQ_DEPTH / 2;
-        for (int i = 0; i < batch_split_after_max_length.size(); i += split_step) {
-            batch_split_after_cq_depth.push_back(AssignmentBatch(
-                batch_split_after_max_length.begin() + i,
-                std::min(batch_split_after_max_length.end(), batch_split_after_max_length.begin() + i + split_step)));
-        }
-    };
+    // auto split_by_max_cq_depth = [&]() {
+    //     int split_step = SLIME_MAX_CQ_DEPTH / 2;
+    //     for (int i = 0; i < batch_split_after_max_length.size(); i += split_step) {
+    //         batch_split_after_cq_depth.push_back(AssignmentBatch(
+    //             batch_split_after_max_length.begin() + i,
+    //             std::min(batch_split_after_max_length.end(), batch_split_after_max_length.begin() + i +
+    //             split_step)));
+    //     }
+    // };
 
-    split_by_max_length();
-    split_by_max_cq_depth();
+    // split_by_max_length();
+    // split_by_max_cq_depth();
     if (qpi == UNDEFINED_QPI) {
         qpi = select_qpi();
     }
-    std::cout << "qpi: " << qpi << std::endl;
-    int split_size = batch_split_after_cq_depth.size();
+    std::cout << "qpiqpiqpi" << std::endl;
+    int split_size = batch.size();
+    for (int i = 0; i < split_size; i++) {
+        batch_split_after_cq_depth.push_back(AssignmentBatch{batch[i]});
+    }
 
     {
         std::unique_lock<std::mutex> lock(qp_management_[qpi]->assign_queue_mutex_);
         RDMAAssignmentSharedPtr      rdma_assignment;
+        std::cout << "split_size" << split_size << std::endl;
         for (int i = 0; i < split_size; ++i) {
+            std::cout << "split_size" << split_size << std::endl;
             callback_fn_t split_callback = (i == split_size - 1 ? callback : [](int, int) { return 0; });
             rdma_assignment = std::make_shared<RDMAAssignment>(opcode, batch_split_after_cq_depth[i], split_callback);
             qp_management_[qpi]->assign_queue_.push(rdma_assignment);
+            std::cout << "qp_management_" << std::endl;
             rdma_assignment->with_imm_data_ = (i == split_size - 1) ? (imm_data != UNDEFINED_IMM_DATA) : false;
             rdma_assignment->imm_data_      = (i == split_size - 1) ? imm_data : UNDEFINED_IMM_DATA;
         }
 
         qp_management_[qpi]->has_runnable_event_.notify_one();
-        std::cout << "rdma_assignment" << qpi << std::endl;
+        std::cout << "qpiqpiqpi" << qpi << std::endl;
         return rdma_assignment;
     }
 }
@@ -463,7 +473,6 @@ int64_t RDMAContext::post_recv_batch(int qpi, RDMAAssignmentSharedPtr assign)
 
         Assignment&    subassign = assign->batch_[i];
         struct ibv_mr* mr        = memory_pool_->get_mr(subassign.mr_key);
-        std::cout << "subassign.mr_key:" << subassign.mr_key << std::endl;
         memset(&sge[i], 0, sizeof(ibv_sge));
         sge[i].addr   = (uintptr_t)mr->addr + subassign.source_offset;
         sge[i].length = subassign.length;
@@ -499,14 +508,11 @@ int64_t RDMAContext::post_rc_oneside_batch(int qpi, RDMAAssignmentSharedPtr assi
     struct ibv_sge*     sge        = new ibv_sge[batch_size];
 
     for (size_t i = 0; i < batch_size; ++i) {
-        Assignment     subassign = assign->batch_[i];
-        struct ibv_mr* mr        = memory_pool_->get_mr(subassign.mr_key);
-        remote_mr_t    remote_mr = memory_pool_->get_remote_mr(subassign.mr_key);
-        std::cout << "subassign.mr_key:" << subassign.mr_key << std::endl;
-        uint64_t remote_addr = remote_mr.addr;
-        std::cout << "remote_addr:" << remote_addr << std::endl;
-        uint32_t remote_rkey = remote_mr.rkey;
-        std::cout << "remote_rkey:" << remote_rkey << std::endl;
+        Assignment     subassign   = assign->batch_[i];
+        struct ibv_mr* mr          = memory_pool_->get_mr(subassign.mr_key);
+        remote_mr_t    remote_mr   = memory_pool_->get_remote_mr(subassign.mr_key);
+        uint64_t       remote_addr = remote_mr.addr;
+        uint32_t       remote_rkey = remote_mr.rkey;
         memset(&sge[i], 0, sizeof(ibv_sge));
         sge[i].addr   = (uint64_t)mr->addr + subassign.source_offset;
         sge[i].length = subassign.length;
@@ -594,11 +600,9 @@ int64_t RDMAContext::cq_poll_handle()
                             callback_with_qpi->callback_info_->callback_(status_code, wc[i].imm_data);
                             break;
                         case OpCode::RECV:
-                            std::cout << "RECV" << std::endl;
                             callback_with_qpi->callback_info_->callback_(status_code, wc[i].imm_data);
                             break;
                         case OpCode::WRITE_WITH_IMM:
-                            std::cout << "WRITE_WITH_IMM" << std::endl;
                             callback_with_qpi->callback_info_->callback_(status_code, wc[i].imm_data);
                             break;
                         default:
@@ -653,7 +657,7 @@ int64_t RDMAContext::wq_dispatch_handle(int qpi)
                         post_send_batch(qpi, front_assign);
                         break;
                     case OpCode::RECV:
-                        std::cout << "POST RECV" << std::endl;
+                        std::cout << "RECVRECVRECVRECVRECV" << std::endl;
                         post_recv_batch(qpi, front_assign);
                         break;
                     case OpCode::READ:
@@ -666,7 +670,7 @@ int64_t RDMAContext::wq_dispatch_handle(int qpi)
                         post_send_batch(qpi, front_assign);
                         break;
                     case OpCode::WRITE_WITH_IMM:
-                        std::cout << "POST WRITE_WITH_IMM" << std::endl;
+                        std::cout << "WRITE_WITH_IMMWRITE_WITH_IMMWRITE_WITH_IMM" << std::endl;
                         post_rc_oneside_batch(qpi, front_assign);
                         break;
                     default:

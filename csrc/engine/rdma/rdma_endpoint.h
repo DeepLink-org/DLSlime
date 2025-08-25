@@ -105,14 +105,9 @@ public:
         return data_ctx_qp_num_;
     }
 
-    std::vector<meta_data_t>& getSendMetaBuffer()
+    std::vector<meta_data_t>& getMetaBuffer()
     {
-        return meta_send_data_buf_;
-    }
-
-    std::vector<meta_data_t>& getRecvMetaBuffer()
-    {
-        return meta_recv_data_buf_;
+        return meta_buffer_;
     }
 
 private:
@@ -127,8 +122,7 @@ private:
     std::atomic<uint32_t> send_slot_id_{RDMAContext::UNDEFINED_IMM_DATA};
     std::atomic<uint32_t> recv_slot_id_{RDMAContext::UNDEFINED_IMM_DATA};
 
-    std::vector<meta_data_t> meta_send_data_buf_;
-    std::vector<meta_data_t> meta_recv_data_buf_;
+    std::vector<meta_data_t> meta_buffer_;
 
     uint32_t batch_size_;
 
