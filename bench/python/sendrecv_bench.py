@@ -89,7 +89,6 @@ for ttensor, size in zip(ttensors, args.size):
             elif rank == 1:
                 future = dist.irecv(ttensor, src=0, group=slime_group)
             futures.append(future)
-
         [future.wait() for future in futures]
     end_event.record()
     torch.cuda.synchronize()
