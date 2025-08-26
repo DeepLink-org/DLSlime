@@ -65,21 +65,30 @@ int main(int argc, char** argv)
     std::vector<size_t>    data_sizes_buf_1 = {data_buf_1_0.size(), data_buf_1_1.size()};
     std::vector<size_t>    offset_buf_1     = {0, 0};
 
-    auto buf_0 = std::make_shared<RDMABuffer>(end_point, ptrs_buf_0, offset_buf_0, data_sizes_buf_0);
-    auto buf_1 = std::make_shared<RDMABuffer>(end_point, ptrs_buf_0, offset_buf_0, data_sizes_buf_0);
-    std::cout << "Launch EDNPOINT ..." << std::endl;
+    const int                                NUM_BUFFERS = 128;
+    std::vector<std::shared_ptr<RDMABuffer>> buffers;
+    for (int i = 0; i < NUM_BUFFERS; ++i) {
+        auto buf = std::make_shared<RDMABuffer>(end_point, ptrs_buf_0, offset_buf_0, data_sizes_buf_0);
+        buffers.push_back(buf);
+    }
+    for (auto& buf : buffers) {
+        buf->send();
+    }
 
-    buf_1->send();
+    std::cout << "启动端点 ..." << std::endl;
 
-    buf_0->send();
-    std::cout << "Main thread working Test..." << std::endl;
-    std::cout << "Main thread working Test..." << std::endl;
-    std::cout << "Main thread working Test..." << std::endl;
-    std::cout << "Main thread working Test..." << std::endl;
-    std::cout << "Main thread working Test..." << std::endl;
-    std::cout << "Wait SEND Complete..." << std::endl;
-    buf_0->waitSend();
-    buf_1->waitSend();
+    // 等待所有缓冲区发送完成
+    for (auto& buf : buffers) {
+        buf->waitSend();
+    }
+    // auto buf_0 = std::make_shared<RDMABuffer>(end_point, ptrs_buf_0, offset_buf_0, data_sizes_buf_0);
+    // auto buf_1 = std::make_shared<RDMABuffer>(end_point, ptrs_buf_0, offset_buf_0, data_sizes_buf_0);
+    // buf_1->send();
+    // buf_0->send();
+    // std::cout << "Launch EDNPOINT ..." << std::endl;
+
+    // buf_0->waitSend();
+    // buf_1->waitSend();
 
     std::cout << "The SEND test completed." << std::endl;
 

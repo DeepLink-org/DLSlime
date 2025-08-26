@@ -72,16 +72,22 @@ int main(int argc, char** argv)
     auto buf_1 = std::make_shared<RDMABuffer>(end_point, ptrs_buf_0, offset_buf_0, data_sizes_buf_0);
     std::cout << "Launch EDNPOINT ..." << std::endl;
 
-    buf_1->recv();
-    buf_0->recv();
-    std::cout << "Main thread working Test..." << std::endl;
-    std::cout << "Main thread working Test..." << std::endl;
-    std::cout << "Main thread working Test..." << std::endl;
-    std::cout << "Main thread working Test..." << std::endl;
-    std::cout << "Main thread working Test..." << std::endl;
-    std::cout << "Wait RECV Complete..." << std::endl;
-    buf_0->waitRecv();
-    buf_1->waitRecv();
+    const int                                NUM_BUFFERS = 128;
+    std::vector<std::shared_ptr<RDMABuffer>> buffers;
+    for (int i = 0; i < NUM_BUFFERS; ++i) {
+        auto buf = std::make_shared<RDMABuffer>(end_point, ptrs_buf_0, offset_buf_0, data_sizes_buf_0);
+        buffers.push_back(buf);
+    }
+    for (auto& buf : buffers) {
+        buf->recv();
+    }
+
+    std::cout << "启动端点 ..." << std::endl;
+
+    // 等待所有缓冲区发送完成
+    for (auto& buf : buffers) {
+        buf->waitRecv();
+    }
 
     bool data_buf_0_0_correct = std::all_of(data_buf_0_0.begin(), data_buf_0_0.end(), [](char c) { return c == '0'; });
     // bool data_buf_1_0_correct = std::all_of(data_buf_1_0.begin(), data_buf_1_0.end(), [](char c) { return c == '1';

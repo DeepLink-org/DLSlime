@@ -24,8 +24,6 @@ namespace slime {
 class RDMABuffer;
 class RDMAEndpoint;
 
-using callback_t = std::function<void()>;
-using json       = nlohmann::json;
 
 typedef struct MetaData {
 

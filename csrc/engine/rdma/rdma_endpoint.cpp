@@ -35,7 +35,10 @@ std::string RDMATask::getDataKey(int32_t idx)
 AssignmentBatch RDMATask::getMetaAssignmentBatch()
 {
     size_t meta_buffer_idx = slot_id_ % MAX_META_BUFFER_SIZE;
-    return AssignmentBatch{Assignment("meta_buffer", 0, meta_buffer_idx * sizeof(meta_data_t), sizeof(meta_data_t))};
+    return AssignmentBatch{Assignment("meta_buffer",
+                                      meta_buffer_idx * sizeof(meta_data_t),
+                                      meta_buffer_idx * sizeof(meta_data_t),
+                                      sizeof(meta_data_t))};
 }
 
 AssignmentBatch RDMATask::getDataAssignmentBatch()
@@ -50,7 +53,7 @@ AssignmentBatch RDMATask::getDataAssignmentBatch()
 
 int RDMATask::registerDataMemoryRegion()
 {
-    std::cout << getDataKey(0) << std::endl;
+    // std::cout << getDataKey(0) << std::endl;
     auto mr_is_exist = endpoint_->dataCtx()->get_mr_for_endpoint(getDataKey(0));
 
     if (mr_is_exist != nullptr) {
@@ -61,6 +64,7 @@ int RDMATask::registerDataMemoryRegion()
     else {
         //未注册
         std::cout << "未注册" << std::endl;
+        std::cout << getDataKey(0) << std::endl;
         storage_view_batch_t storage_view_batch = buffer_->storageViewBatch();
         for (int i = 0; i < buffer_->batchSize(); ++i) {
             endpoint_->dataCtx()->register_memory_region(
@@ -74,7 +78,7 @@ void RDMATask::fillBuffer()
 {
     if (opcode_ == OpCode::SEND) {
         std::vector<meta_data_t>& meta_buf = endpoint_->getMetaBuffer();
-        memset(meta_buf.data() + (slot_id_ % MAX_META_BUFFER_SIZE) * sizeof(meta_data_t), 0, sizeof(meta_data_t));
+        // memset(meta_buf.data() + (slot_id_ % MAX_META_BUFFER_SIZE) * sizeof(meta_data_t), 0, sizeof(meta_data_t));
     }
     else if (opcode_ == OpCode::RECV) {
         std::vector<meta_data_t>& meta_buf = endpoint_->getMetaBuffer();
@@ -107,6 +111,7 @@ int RDMATask::registerRemoteDataMemoryRegion()
             uint64_t addr   = meta_buf[slot_id_ % MAX_META_BUFFER_SIZE].mr_addr[i];
             uint32_t length = meta_buf[slot_id_ % MAX_META_BUFFER_SIZE].mr_size[i];
             uint32_t rkey   = meta_buf[slot_id_ % MAX_META_BUFFER_SIZE].mr_rkey[i];
+            std::cout << slot_id_ << "slot_id_" << std::endl;
             std::cout << getDataKey(i) << std::endl;
             std::cout << addr << " " << length << " " << rkey << std::endl;
             endpoint_->dataCtx()->register_remote_memory_region(getDataKey(i), addr, length, rkey);
@@ -229,7 +234,6 @@ void RDMAEndpoint::asyncSendData(std::shared_ptr<rdma_task_t> task)
 
     auto data_callback = [this, task](int status, int _) mutable {
         std::unique_lock<std::mutex> lock(rdma_tasks_mutex_);
-        std::cout << "SEND DATA CB" << std::endl;
         this->send_batch_slot_[task->slot_id_]->buffer_->send_done_callback();
     };
 
@@ -237,8 +241,8 @@ void RDMAEndpoint::asyncSendData(std::shared_ptr<rdma_task_t> task)
         std::unique_lock<std::mutex> lock(this->rdma_tasks_mutex_);
         task->registerRemoteDataMemoryRegion();
         AssignmentBatch data_assign_batch = task->getDataAssignmentBatch();
-        std::cout << "meta_buffer_[0].mr_addr[0]: " << (uintptr_t)meta_buffer_[0].mr_addr[0]
-                  << " rkey: " << meta_buffer_[0].mr_rkey[0] << std::endl;
+        std::cout << task->slot_id_ << "mr_addr: " << (uintptr_t)meta_buffer_[task->slot_id_].mr_addr[0]
+                  << " rkey: " << meta_buffer_[task->slot_id_].mr_rkey[0] << std::endl;
         auto data_atx = this->data_ctx_->submit(
             OpCode::WRITE_WITH_IMM, data_assign_batch, data_callback, RDMAContext::UNDEFINED_QPI, slot_id);
     };
@@ -253,7 +257,6 @@ void RDMAEndpoint::asyncRecvData(std::shared_ptr<rdma_task_t> task)
 {
     auto data_callback = [this, task](int status, int slot_id) mutable {
         std::unique_lock<std::mutex> lock(rdma_tasks_mutex_);
-        std::cout << "RECV DATA CB" << std::endl;
         recv_batch_slot_[slot_id]->buffer_->recv_done_callback();
     };
 
@@ -265,8 +268,8 @@ void RDMAEndpoint::asyncRecvData(std::shared_ptr<rdma_task_t> task)
 
     {
         AssignmentBatch meta_data = task->getMetaAssignmentBatch();
-        std::cout << "meta_buffer_[0].mr_addr[0]: " << (uintptr_t)meta_buffer_[0].mr_addr[0]
-                  << " rkey: " << meta_buffer_[0].mr_rkey[0] << std::endl;
+        std::cout << ".mr_addr[0]: " << (uintptr_t)meta_buffer_[task->slot_id_].mr_addr[0]
+                  << " rkey: " << meta_buffer_[task->slot_id_].mr_rkey[0] << std::endl;
         meta_ctx_->submit(OpCode::WRITE_WITH_IMM, meta_data, meta_callback, RDMAContext::UNDEFINED_QPI, task->slot_id_);
     }
 }
