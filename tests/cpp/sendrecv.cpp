@@ -26,7 +26,7 @@ DEFINE_bool(send, false, "Run in send mode");
 DEFINE_bool(recv, false, "Run in recv mode");
 
 DEFINE_int32(num_qp, 1, "Number of QPs");
-DEFINE_int32(num_packets, 5, "Number of packets");
+DEFINE_int32(num_packets, 1, "Number of packets");
 DEFINE_int32(min_packet_size, 11, "Minimum size of packet size (2^(min_packet_size) bytes)");
 DEFINE_int32(max_packet_size, 12, "Maximum size of packet size (2^(max_packet_size) bytes)");
 

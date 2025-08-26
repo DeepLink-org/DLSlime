@@ -53,18 +53,18 @@ AssignmentBatch RDMATask::getDataAssignmentBatch()
 
 int RDMATask::registerDataMemoryRegion()
 {
-    // std::cout << getDataKey(0) << std::endl;
+    // //std::cout << getDataKey(0) << std::endl;
     auto mr_is_exist = endpoint_->dataCtx()->get_mr_for_endpoint(getDataKey(0));
 
     if (mr_is_exist != nullptr) {
-        //已经注册过, 直接使用
+        // 已经注册过, 直接使用
         std::cout << "已经注册过, 直接使用" << std::endl;
         return 0;
     }
     else {
         //未注册
-        std::cout << "未注册" << std::endl;
-        std::cout << getDataKey(0) << std::endl;
+        //std::cout << "未注册" << std::endl;
+        //std::cout << getDataKey(0) << std::endl;
         storage_view_batch_t storage_view_batch = buffer_->storageViewBatch();
         for (int i = 0; i < buffer_->batchSize(); ++i) {
             endpoint_->dataCtx()->register_memory_region(
@@ -111,9 +111,9 @@ int RDMATask::registerRemoteDataMemoryRegion()
             uint64_t addr   = meta_buf[slot_id_ % MAX_META_BUFFER_SIZE].mr_addr[i];
             uint32_t length = meta_buf[slot_id_ % MAX_META_BUFFER_SIZE].mr_size[i];
             uint32_t rkey   = meta_buf[slot_id_ % MAX_META_BUFFER_SIZE].mr_rkey[i];
-            std::cout << slot_id_ << "slot_id_" << std::endl;
-            std::cout << getDataKey(i) << std::endl;
-            std::cout << addr << " " << length << " " << rkey << std::endl;
+            ////std::cout << slot_id_ << "slot_id_" << std::endl;
+            //std::cout << getDataKey(i) << std::endl;
+            //std::cout << addr << " " << length << " " << rkey << std::endl;
             endpoint_->dataCtx()->register_remote_memory_region(getDataKey(i), addr, length, rkey);
         }
         return 0;
@@ -126,8 +126,8 @@ int RDMATask::registerRemoteDataMemoryRegion()
 RDMAEndpoint::RDMAEndpoint(const std::string& dev_name, uint8_t ib_port, const std::string& link_type, size_t qp_num)
 {
     SLIME_LOG_INFO("Init the Contexts and RDMA Devices...");
-    data_ctx_ = std::make_shared<RDMAContext>(qp_num);
-    meta_ctx_ = std::make_shared<RDMAContext>(1);
+    data_ctx_ = std::make_shared<RDMAContext>(qp_num, 0);
+    meta_ctx_ = std::make_shared<RDMAContext>(1, 1);
 
     data_ctx_->init(dev_name, ib_port, link_type);
     meta_ctx_->init(dev_name, ib_port, link_type);
@@ -183,6 +183,7 @@ void RDMAEndpoint::addSendTask(std::shared_ptr<RDMABuffer> buffer)
     auto task = std::make_shared<rdma_task_t>(shared_from_this(), send_slot_id_, OpCode::SEND, buffer);
     send_batch_slot_[send_slot_id_] = task;
     rdma_tasks_queue_.push(task);
+    buffer->metrics_->add_tasks = std::chrono::steady_clock::now();
     rdma_tasks_cv_.notify_one();
 }
 
@@ -193,6 +194,7 @@ void RDMAEndpoint::addRecvTask(std::shared_ptr<RDMABuffer> buffer)
     auto task = std::make_shared<rdma_task_t>(shared_from_this(), recv_slot_id_, OpCode::RECV, buffer);
     recv_batch_slot_[recv_slot_id_] = task;
     rdma_tasks_queue_.push(task);
+    buffer->metrics_->add_tasks = std::chrono::steady_clock::now();
     rdma_tasks_cv_.notify_one();
 }
 
@@ -215,9 +217,11 @@ void RDMAEndpoint::waitandPopTask(std::chrono::milliseconds timeout)
             switch (task->opcode_) {
                 case OpCode::SEND:
                     asyncSendData(task);
+                    task->buffer_->metrics_->endpoint_queue_done = std::chrono::steady_clock::now();
                     break;
                 case OpCode::RECV:
                     asyncRecvData(task);
+                    task->buffer_->metrics_->endpoint_queue_done = std::chrono::steady_clock::now();
                     break;
                 default:
                     SLIME_LOG_ERROR("Unknown OpCode in WaitandPopTask");
@@ -241,15 +245,17 @@ void RDMAEndpoint::asyncSendData(std::shared_ptr<rdma_task_t> task)
         std::unique_lock<std::mutex> lock(this->rdma_tasks_mutex_);
         task->registerRemoteDataMemoryRegion();
         AssignmentBatch data_assign_batch = task->getDataAssignmentBatch();
-        std::cout << task->slot_id_ << "mr_addr: " << (uintptr_t)meta_buffer_[task->slot_id_].mr_addr[0]
-                  << " rkey: " << meta_buffer_[task->slot_id_].mr_rkey[0] << std::endl;
+        //std::cout << task->slot_id_ << "mr_addr: " << (uintptr_t)meta_buffer_[task->slot_id_].mr_addr[0]
+        //          << " rkey: " << meta_buffer_[task->slot_id_].mr_rkey[0] << std::endl;
+        task->buffer_->metrics_->endpoint_meta_done =  std::chrono::steady_clock::now();
         auto data_atx = this->data_ctx_->submit(
-            OpCode::WRITE_WITH_IMM, data_assign_batch, data_callback, RDMAContext::UNDEFINED_QPI, slot_id);
+            OpCode::WRITE_WITH_IMM, data_assign_batch, task->buffer_->data_metrics_, data_callback, RDMAContext::UNDEFINED_QPI, slot_id);
     };
 
     {
         AssignmentBatch meta_data = task->getMetaAssignmentBatch();
-        meta_ctx_->submit(OpCode::RECV, meta_data, meta_callback);
+        task->buffer_->metrics_->endpoint_meta_start =  std::chrono::steady_clock::now();
+        meta_ctx_->submit(OpCode::RECV, meta_data, task->buffer_->meta_metrics_, meta_callback);
     }
 }
 
@@ -263,14 +269,17 @@ void RDMAEndpoint::asyncRecvData(std::shared_ptr<rdma_task_t> task)
     auto meta_callback = [this, task, data_callback](int status, int _) mutable {
         std::unique_lock<std::mutex> lock(this->rdma_tasks_mutex_);
         AssignmentBatch              assign_batch = task->getDataAssignmentBatch();
-        auto data_atx = this->data_ctx_->submit(OpCode::RECV, assign_batch, data_callback, RDMAContext::UNDEFINED_QPI);
+        task->buffer_->metrics_->endpoint_meta_done =  std::chrono::steady_clock::now();
+        auto data_atx = this->data_ctx_->submit(OpCode::RECV, assign_batch, task->buffer_->data_metrics_, data_callback, RDMAContext::UNDEFINED_QPI);
     };
 
     {
         AssignmentBatch meta_data = task->getMetaAssignmentBatch();
-        std::cout << ".mr_addr[0]: " << (uintptr_t)meta_buffer_[task->slot_id_].mr_addr[0]
-                  << " rkey: " << meta_buffer_[task->slot_id_].mr_rkey[0] << std::endl;
-        meta_ctx_->submit(OpCode::WRITE_WITH_IMM, meta_data, meta_callback, RDMAContext::UNDEFINED_QPI, task->slot_id_);
+        //std::cout << ".mr_addr[0]: " << (uintptr_t)meta_buffer_[task->slot_id_].mr_addr[0]
+        //          << " rkey: " << meta_buffer_[task->slot_id_].mr_rkey[0] << std::endl;
+        
+        task->buffer_->metrics_->endpoint_meta_start =  std::chrono::steady_clock::now();
+        meta_ctx_->submit(OpCode::WRITE_WITH_IMM, meta_data, task->buffer_->meta_metrics_, meta_callback, RDMAContext::UNDEFINED_QPI, task->slot_id_);
     }
 }
 

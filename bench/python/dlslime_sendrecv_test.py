@@ -2,6 +2,7 @@ import argparse
 import os
 import time
 from tabulate import tabulate
+import cProfile
 
 import torch
 import torch.distributed as dist
@@ -16,14 +17,14 @@ except ImportError as e:
     print(e, "please install dlslime backend first")
     exit()
 
-
 def benchmark_send_recv(args):
     # Initialize process group
     print("Initialize process group")
     rank = 0 if args.mode == "send" else 1
-    backend = "cuda:dlslime" if args.use_gpu else "cpu:dlslime"
-    dist.init_process_group(backend, rank=rank, world_size=2)
-    print(backend)
+    backend_S = "cuda:dlslime" if args.use_gpu else "cpu:dlslime"
+    dist.init_process_group(backend_S, rank=rank, world_size=2)
+    slime_group = dist.new_group(ranks=[0, 1], backend=backend_S)
+    print(backend_S)
     print("rank: ", rank)
     if args.use_gpu:
         torch.cuda.set_device(rank)
@@ -37,11 +38,11 @@ def benchmark_send_recv(args):
     if args.sizes:
         sizes = [int(s) for s in args.sizes]
     else:
-        sizes = [2**n for n in range(11, 12)]  # 256B to 256MB
+        sizes = [2**n for n in range(13, 14)]  # 256B to 256MB
 
     print("Prepare data sizes: ", sizes)
     benchmark_data = []
-    num = 2
+    num = 1
     print("Start to test the bench")
     for size in sizes:
         num_elements = max(1, size // 4)
@@ -55,14 +56,14 @@ def benchmark_send_recv(args):
         ]
 
         all_work = []
-        for _ in range(args.iterations):
+        for _ in range(100):
             reqs = []
             for i in range(num):
                 if rank == 0:
-                    send_op = dist.isend(send_batch[i], dst=1)
+                    send_op = dist.isend(send_batch[i], dst=1, group=slime_group)
                     reqs.extend([send_op])
                 else:
-                    recv_op = dist.irecv(recv_batch[i], src=0)
+                    recv_op = dist.irecv(recv_batch[i], src=0, group=slime_group)
                     reqs.extend([recv_op])
             work = reqs
             all_work.extend(work)
@@ -78,10 +79,10 @@ def benchmark_send_recv(args):
             reqs = []
             for i in range(num):
                 if rank == 0:
-                    send_op = dist.isend(send_batch[i], dst=1)
+                    send_op = dist.isend(send_batch[i], dst=1, group=slime_group)
                     reqs.extend([send_op])
                 else:
-                    recv_op = dist.irecv(recv_batch[i], src=0)
+                    recv_op = dist.irecv(recv_batch[i], src=0 ,group=slime_group)
                     reqs.extend([recv_op])
             work = reqs
             all_work.extend(work)
@@ -133,7 +134,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--master-port",
         type=str,
-        default="6006",
+        default="6008",
         help="Master port for distributed training",
     )
     parser.add_argument(
@@ -145,7 +146,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--iterations",
         type=int,
-        default=2,
+        default=1,
         help="Number of iterations for benchmarking",
     )
 

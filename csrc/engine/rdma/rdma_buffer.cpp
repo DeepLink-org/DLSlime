@@ -6,17 +6,20 @@ namespace slime {
 void RDMABuffer::send()
 {
     endpoint_->addSendTask(shared_from_this());
+    metrics_->add_tasks = std::chrono::steady_clock::now();
 }
 
 void RDMABuffer::recv()
 {
     endpoint_->addRecvTask(shared_from_this());
+    metrics_->add_tasks = std::chrono::steady_clock::now();
 }
 
 void RDMABuffer::send_done_callback()
 {
     std::unique_lock<std::mutex> lock(send_mutex_);
     ++send_completed_;
+    metrics_->buffer_callback_done = std::chrono::steady_clock::now();
     send_cv_.notify_all();
 }
 
@@ -24,6 +27,7 @@ void RDMABuffer::recv_done_callback()
 {
     std::unique_lock<std::mutex> lock(recv_mutex_);
     ++recv_completed_;
+    metrics_->buffer_callback_done = std::chrono::steady_clock::now();
     recv_cv_.notify_all();
 }
 
@@ -37,6 +41,8 @@ bool RDMABuffer::waitSend()
     send_cv_.wait(lock, [this]() { return send_completed_ > 0; });
     send_pending_ = false;
     SLIME_LOG_INFO("complete to send the data.");
+    metrics_->buffer_wait_done = std::chrono::steady_clock::now();
+    print_time();
     return send_completed_;
 }
 
@@ -51,7 +57,9 @@ bool RDMABuffer::waitRecv()
     recv_cv_.wait(lock, [this]() { return recv_completed_ > 0; });
     recv_pending_ = false;
     SLIME_LOG_INFO("complete to recv the data.");
+    metrics_->buffer_wait_done = std::chrono::steady_clock::now();
 
+    print_time();
     return recv_completed_;
 }
 

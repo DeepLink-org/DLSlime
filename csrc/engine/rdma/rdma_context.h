@@ -6,6 +6,8 @@
 #include "engine/rdma/rdma_config.h"
 #include "engine/rdma/rdma_env.h"
 
+#include "engine/metrics.h"
+
 #include "utils/json.hpp"
 #include "utils/logging.h"
 
@@ -63,6 +65,20 @@ public:
         srand48(time(NULL));
     }
 
+    RDMAContext(size_t qp_num, int64_t service_level): service_level_(service_level)
+    {
+        SLIME_LOG_DEBUG("Initializing qp management, num qp: " << qp_num);
+
+        qp_list_len_   = qp_num;
+        qp_management_ = new qp_management_t*[qp_list_len_];
+        for (int qpi = 0; qpi < qp_list_len_; qpi++) {
+            qp_management_[qpi] = new qp_management_t();
+        }
+
+        /* random initialization for psn configuration */
+        srand48(time(NULL));
+    }
+
     ~RDMAContext()
     {
         stop_future();
@@ -104,6 +120,7 @@ public:
     /* Memory Allocation */
     inline int64_t register_memory_region(std::string mr_key, uintptr_t data_ptr, size_t length)
     {
+        std::cout << "register memory region" << std::endl;
         memory_pool_->register_memory_region(mr_key, data_ptr, length);
         return 0;
     }
@@ -137,6 +154,7 @@ public:
     /* Submit an assignment */
     RDMAAssignmentSharedPtr submit(OpCode           opcode,
                                    AssignmentBatch& assignment,
+                                   std::shared_ptr<rdma_metrics_t> metrics = nullptr,
                                    callback_fn_t    callback = nullptr,
                                    int              qpi      = UNDEFINED_QPI,
                                    int32_t          imm_data = UNDEFINED_IMM_DATA);
@@ -256,6 +274,8 @@ private:
 
     /* Async RDMA Read */
     int64_t post_rc_oneside_batch(int qpi, RDMAAssignmentSharedPtr assign);
+
+    int64_t service_level_{0};
 };
 
 }  // namespace slime
