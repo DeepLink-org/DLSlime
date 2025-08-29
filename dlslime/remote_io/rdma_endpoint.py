@@ -281,7 +281,7 @@ class RDMAEndpoint(BaseEndpoint):
                 assign.source_offset,
                 assign.length,
             ) for assign in batch
-        ], None, -1, -1)
+        ], None, None, -1, -1)
         if async_op:
             return rdma_assignment
         else:

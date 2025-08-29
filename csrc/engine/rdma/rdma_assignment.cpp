@@ -4,7 +4,7 @@
 
 namespace slime {
 
-RDMAAssignment::RDMAAssignment(OpCode opcode, AssignmentBatch& batch, callback_fn_t callback)
+RDMAAssignment::RDMAAssignment(OpCode opcode, AssignmentBatch& batch, std::shared_ptr<rdma_metrics_t> metrics, callback_fn_t callback)
 {
     opcode_ = opcode;
 
@@ -19,7 +19,8 @@ RDMAAssignment::RDMAAssignment(OpCode opcode, AssignmentBatch& batch, callback_f
         batch_[cnt].length        = assignment.length;
         cnt += 1;
     }
-    callback_info_ = std::make_shared<callback_info_t>(opcode, batch_size_, callback);
+    metrics_ = metrics;
+    callback_info_ = std::make_shared<callback_info_t>(opcode, batch_size_, metrics, callback);
 }
 
 void RDMAAssignment::wait()

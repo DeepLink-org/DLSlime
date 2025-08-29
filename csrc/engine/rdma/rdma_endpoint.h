@@ -16,19 +16,20 @@
 
 #include "rdma_common.h"
 
+#define MAX_META_BATCH_SIZE 8
+#define MAX_META_BUFFER_SIZE 64
+
 namespace slime {
 
 class RDMABuffer;
 class RDMAEndpoint;
 
-using callback_t = std::function<void()>;
-using json       = nlohmann::json;
 
 typedef struct MetaData {
 
-    uint64_t mr_addr;
-    uint32_t mr_rkey;
-    uint32_t mr_size;
+    uint64_t mr_addr[MAX_META_BATCH_SIZE];
+    uint32_t mr_rkey[MAX_META_BATCH_SIZE];
+    uint32_t mr_size[MAX_META_BATCH_SIZE];
     uint32_t mr_slot;
     uint32_t mr_qpidx;
 
@@ -58,8 +59,6 @@ typedef struct RDMATask {
     uint32_t                    slot_id_;
     OpCode                      opcode_;
     std::shared_ptr<RDMABuffer> buffer_;
-
-    meta_data_t* meta_data_buf_{nullptr};
 
     std::shared_ptr<RDMAEndpoint> endpoint_;
 } rdma_task_t;
@@ -104,6 +103,11 @@ public:
         return data_ctx_qp_num_;
     }
 
+    std::vector<meta_data_t>& getMetaBuffer()
+    {
+        return meta_buffer_;
+    }
+
 private:
     void waitandPopTask(std::chrono::milliseconds timeout);
 
@@ -115,6 +119,8 @@ private:
 
     std::atomic<uint32_t> send_slot_id_{RDMAContext::UNDEFINED_IMM_DATA};
     std::atomic<uint32_t> recv_slot_id_{RDMAContext::UNDEFINED_IMM_DATA};
+
+    std::vector<meta_data_t> meta_buffer_;
 
     uint32_t batch_size_;
 
@@ -131,7 +137,6 @@ private:
     std::mutex              rdma_tasks_mutex_;
 
     std::map<uint32_t, std::function<void()>> imm_data_callback_;
-
     bool RDMA_tasks_threads_running_;
 };
 

@@ -56,6 +56,16 @@ public:
         SLIME_LOG_ERROR("mr_key: ", mr_key, "not found in mrs_");
         return nullptr;
     }
+
+    inline struct ibv_mr* get_mr_no_log(const std::string& mr_key)
+    {
+        std::unique_lock<std::mutex> lock(mrs_mutex_);
+        if (mrs_.find(mr_key) != mrs_.end())
+            return mrs_[mr_key];
+        // SLIME_LOG_ERROR("mr_key: ", mr_key, "not found in mrs_");
+        return nullptr;
+    }
+
     inline remote_mr_t get_remote_mr(const std::string& mr_key)
     {
         std::unique_lock<std::mutex> lock(remote_mrs_mutex_);
@@ -63,6 +73,15 @@ public:
             return remote_mrs_[mr_key];
         SLIME_LOG_ERROR("mr_key: ", mr_key, " not found in remote_mrs_");
         return remote_mr_t();
+    }
+
+    inline int get_remote_mr_no_log(const std::string& mr_key)
+    {
+        std::unique_lock<std::mutex> lock(remote_mrs_mutex_);
+        if (remote_mrs_.find(mr_key) != remote_mrs_.end())
+            return 1;
+        // SLIME_LOG_ERROR("mr_key: ", mr_key, " not found in remote_mrs_");
+        return 0;
     }
 
     json mr_info();

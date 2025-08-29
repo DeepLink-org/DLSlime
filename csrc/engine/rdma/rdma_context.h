@@ -6,6 +6,8 @@
 #include "engine/rdma/rdma_config.h"
 #include "engine/rdma/rdma_env.h"
 
+#include "engine/metrics.h"
+
 #include "utils/json.hpp"
 #include "utils/logging.h"
 
@@ -63,6 +65,20 @@ public:
         srand48(time(NULL));
     }
 
+    RDMAContext(size_t qp_num, int64_t service_level): service_level_(service_level)
+    {
+        SLIME_LOG_DEBUG("Initializing qp management, num qp: " << qp_num);
+
+        qp_list_len_   = qp_num;
+        qp_management_ = new qp_management_t*[qp_list_len_];
+        for (int qpi = 0; qpi < qp_list_len_; qpi++) {
+            qp_management_[qpi] = new qp_management_t();
+        }
+
+        /* random initialization for psn configuration */
+        srand48(time(NULL));
+    }
+
     ~RDMAContext()
     {
         stop_future();
@@ -86,6 +102,16 @@ public:
     struct ibv_mr* get_mr(const std::string& mr_key)
     {
         return memory_pool_->get_mr(mr_key);
+    }
+
+    struct ibv_mr* get_mr_for_endpoint(const std::string& mr_key)
+    {
+        return memory_pool_->get_mr_no_log(mr_key);
+    }
+
+    int get_remote_mr_for_endpoint(const std::string& mr_key)
+    {
+        return memory_pool_->get_remote_mr_no_log(mr_key);
     }
 
     /* Initialize */
@@ -127,6 +153,7 @@ public:
     /* Submit an assignment */
     RDMAAssignmentSharedPtr submit(OpCode           opcode,
                                    AssignmentBatch& assignment,
+                                   std::shared_ptr<rdma_metrics_t> metrics = nullptr,
                                    callback_fn_t    callback = nullptr,
                                    int              qpi      = UNDEFINED_QPI,
                                    int32_t          imm_data = UNDEFINED_IMM_DATA);
@@ -235,6 +262,11 @@ private:
     std::future<void> cq_future_;
     std::atomic<bool> stop_cq_future_{false};
 
+
+    std::thread cq_thread_;
+    std::vector<std::thread> wq_threads_;
+
+    
     /* Completion Queue Polling */
     int64_t cq_poll_handle();
     /* Working Queue Dispatch */
@@ -246,6 +278,8 @@ private:
 
     /* Async RDMA Read */
     int64_t post_rc_oneside_batch(int qpi, RDMAAssignmentSharedPtr assign);
+
+    int64_t service_level_{0};
 };
 
 }  // namespace slime

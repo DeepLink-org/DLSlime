@@ -232,7 +232,6 @@ int64_t RDMAContext::connect(const json& endpoint_info_json)
     for (auto& item : endpoint_info_json["mr_info"].items()) {
         register_remote_memory_region(item.key(), item.value());
     }
-
     SLIME_ASSERT(!connected_, "Already connected!");
     SLIME_ASSERT_EQ(qp_list_len_, endpoint_info_json["rdma_info"].size(), "Peer must have same QP Size.");
 
@@ -256,7 +255,7 @@ int64_t RDMAContext::connect(const json& endpoint_info_json)
         attr.max_dest_rd_atomic = SLIME_MAX_DEST_RD_ATOMIC;
         attr.min_rnr_timer      = 0x12;
         attr.ah_attr.dlid       = remote_rdma_info.lid;
-        attr.ah_attr.sl         = SLIME_SERVICE_LEVEL;
+        attr.ah_attr.sl         = service_level_;
         attr.ah_attr.src_path_bits = 0;
         attr.ah_attr.port_num      = ib_port_;
 
@@ -314,9 +313,16 @@ int64_t RDMAContext::connect(const json& endpoint_info_json)
 void RDMAContext::launch_future()
 {
     cq_future_ = std::async(std::launch::async, [this]() -> void { cq_poll_handle(); });
-    for (int qpi = 0; qpi < qp_list_len_; qpi++)
+    for (int qpi = 0; qpi < qp_list_len_; qpi++) {
         qp_management_[qpi]->wq_future_ =
             std::async(std::launch::async, [this, qpi]() -> void { wq_dispatch_handle(qpi); });
+    }
+
+    // cq_thread_ = std::thread([this]() { this->cq_poll_handle(); });
+    // wq_threads_.reserve(qp_list_len_);
+    // for (int qpi = 0; qpi < qp_list_len_; qpi++) {
+    //     wq_threads_.emplace_back([this, qpi]() { this->wq_dispatch_handle(qpi); });
+    // }
 }
 
 void RDMAContext::stop_future()
@@ -361,7 +367,7 @@ void RDMAContext::stop_future()
 }
 
 RDMAAssignmentSharedPtr
-RDMAContext::submit(OpCode opcode, AssignmentBatch& batch, callback_fn_t callback, int qpi, int32_t imm_data)
+RDMAContext::submit(OpCode opcode, AssignmentBatch& batch, std::shared_ptr<rdma_metrics_t> metrics, callback_fn_t callback, int qpi, int32_t imm_data)
 {
     AssignmentBatch              batch_split_after_max_length;
     std::vector<AssignmentBatch> batch_split_after_cq_depth;
@@ -392,7 +398,6 @@ RDMAContext::submit(OpCode opcode, AssignmentBatch& batch, callback_fn_t callbac
     if (qpi == UNDEFINED_QPI) {
         qpi = select_qpi();
     }
-
     int split_size = batch_split_after_cq_depth.size();
 
     {
@@ -400,12 +405,12 @@ RDMAContext::submit(OpCode opcode, AssignmentBatch& batch, callback_fn_t callbac
         RDMAAssignmentSharedPtr      rdma_assignment;
         for (int i = 0; i < split_size; ++i) {
             callback_fn_t split_callback = (i == split_size - 1 ? callback : [](int, int) { return 0; });
-            rdma_assignment = std::make_shared<RDMAAssignment>(opcode, batch_split_after_cq_depth[i], split_callback);
+            rdma_assignment = std::make_shared<RDMAAssignment>(opcode, batch_split_after_cq_depth[i], metrics, split_callback);
             qp_management_[qpi]->assign_queue_.push(rdma_assignment);
             rdma_assignment->with_imm_data_ = (i == split_size - 1) ? (imm_data != UNDEFINED_IMM_DATA) : false;
             rdma_assignment->imm_data_      = (i == split_size - 1) ? imm_data : UNDEFINED_IMM_DATA;
         }
-
+        metrics->ctx_submit_done = std::chrono::steady_clock::now();
         qp_management_[qpi]->has_runnable_event_.notify_one();
         return rdma_assignment;
     }
@@ -477,6 +482,7 @@ int64_t RDMAContext::post_recv_batch(int qpi, RDMAAssignmentSharedPtr assign)
         std::unique_lock<std::mutex> lock(qp_management_[qpi]->rdma_post_send_mutex_);
         qp_management_[qpi]->outstanding_rdma_reads_.fetch_add(batch_size, std::memory_order_relaxed);
         ret = ibv_post_recv(qp_management_[qpi]->qp_, wr, &bad_wr);
+        assign->metrics_->ctx_post_done = std::chrono::steady_clock::now();
     }
     if (ret) {
         SLIME_LOG_ERROR("Failed to post RDMA send : " << strerror(ret));
@@ -497,11 +503,14 @@ int64_t RDMAContext::post_rc_oneside_batch(int qpi, RDMAAssignmentSharedPtr assi
     struct ibv_sge*     sge        = new ibv_sge[batch_size];
 
     for (size_t i = 0; i < batch_size; ++i) {
-        Assignment     subassign   = assign->batch_[i];
-        struct ibv_mr* mr          = memory_pool_->get_mr(subassign.mr_key);
-        remote_mr_t    remote_mr   = memory_pool_->get_remote_mr(subassign.mr_key);
-        uint64_t       remote_addr = remote_mr.addr;
-        uint32_t       remote_rkey = remote_mr.rkey;
+        Assignment     subassign = assign->batch_[i];
+        struct ibv_mr* mr        = memory_pool_->get_mr(subassign.mr_key);
+        remote_mr_t    remote_mr = memory_pool_->get_remote_mr(subassign.mr_key);
+        //std::cout << "subassign.mr_key" << subassign.mr_key << std::endl;
+        uint64_t remote_addr = remote_mr.addr;
+        uint32_t remote_rkey = remote_mr.rkey;
+        //std::cout << "remote_addr" << remote_addr << std::endl;
+        //std::cout << "remote_rkey" << remote_rkey << std::endl;
         memset(&sge[i], 0, sizeof(ibv_sge));
         sge[i].addr   = (uint64_t)mr->addr + subassign.source_offset;
         sge[i].length = subassign.length;
@@ -522,6 +531,7 @@ int64_t RDMAContext::post_rc_oneside_batch(int qpi, RDMAAssignmentSharedPtr assi
         std::unique_lock<std::mutex> lock(qp_management_[qpi]->rdma_post_send_mutex_);
         qp_management_[qpi]->outstanding_rdma_reads_.fetch_add(assign->batch_size(), std::memory_order_relaxed);
         ret = ibv_post_send(qp_management_[qpi]->qp_, wr, &bad_wr);
+        assign->metrics_->ctx_post_done = std::chrono::steady_clock::now();
     }
 
     delete[] wr;
@@ -533,6 +543,8 @@ int64_t RDMAContext::post_rc_oneside_batch(int qpi, RDMAAssignmentSharedPtr assi
     }
     return 0;
 }
+
+
 
 int64_t RDMAContext::cq_poll_handle()
 {
@@ -557,7 +569,6 @@ int64_t RDMAContext::cq_poll_handle()
             return -1;
         }
         struct ibv_wc wc[SLIME_POLL_COUNT];
-
         while (size_t nr_poll = ibv_poll_cq(cq_, SLIME_POLL_COUNT, wc)) {
             if (stop_cq_future_)
                 return 0;
@@ -577,6 +588,7 @@ int64_t RDMAContext::cq_poll_handle()
                 if (wc[i].wr_id != 0) {
                     callback_info_with_qpi_t* callback_with_qpi =
                         reinterpret_cast<callback_info_with_qpi_t*>(wc[i].wr_id);
+                    callback_with_qpi->callback_info_->metrics_->ctx_cq_done = std::chrono::steady_clock::now();
                     switch (OpCode wr_type = callback_with_qpi->callback_info_->opcode_) {
                         case OpCode::READ:
                             callback_with_qpi->callback_info_->callback_(status_code, wc[i].imm_data);
@@ -589,9 +601,11 @@ int64_t RDMAContext::cq_poll_handle()
                             callback_with_qpi->callback_info_->callback_(status_code, wc[i].imm_data);
                             break;
                         case OpCode::RECV:
+                            //callback_with_qpi->callback_info_->metrics_->ctx_cq_done = std::chrono::steady_clock::now();
                             callback_with_qpi->callback_info_->callback_(status_code, wc[i].imm_data);
                             break;
                         case OpCode::WRITE_WITH_IMM:
+                            //callback_with_qpi->callback_info_->metrics_->ctx_cq_done = std::chrono::steady_clock::now();
                             callback_with_qpi->callback_info_->callback_(status_code, wc[i].imm_data);
                             break;
                         default:
@@ -646,6 +660,7 @@ int64_t RDMAContext::wq_dispatch_handle(int qpi)
                         post_send_batch(qpi, front_assign);
                         break;
                     case OpCode::RECV:
+                        front_assign->metrics_->ctx_wq_done = std::chrono::steady_clock::now();
                         post_recv_batch(qpi, front_assign);
                         break;
                     case OpCode::READ:
@@ -658,6 +673,7 @@ int64_t RDMAContext::wq_dispatch_handle(int qpi)
                         post_send_batch(qpi, front_assign);
                         break;
                     case OpCode::WRITE_WITH_IMM:
+                        front_assign->metrics_->ctx_wq_done = std::chrono::steady_clock::now();
                         post_rc_oneside_batch(qpi, front_assign);
                         break;
                     default:
