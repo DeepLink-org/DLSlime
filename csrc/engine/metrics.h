@@ -26,6 +26,7 @@ typedef struct RDMAMetrics {
     std::chrono::steady_clock::time_point ctx_submit_done{std::chrono::milliseconds::zero()};
     std::chrono::steady_clock::time_point ctx_post_done{std::chrono::milliseconds::zero()};
     std::chrono::steady_clock::time_point ctx_wq_done{std::chrono::milliseconds::zero()};
+    std::chrono::steady_clock::time_point ctx_cq_before_callback_done{std::chrono::milliseconds::zero()};
     std::chrono::steady_clock::time_point ctx_cq_done{std::chrono::milliseconds::zero()};
 
 
@@ -111,7 +112,7 @@ typedef struct RDMAMetrics {
     
     std::chrono::duration<double> cq_done_latency()
     {
-        return (buffer_wait_done - buffer_callback_done);
+        return (ctx_cq_done - buffer_callback_done);
     }
 
 } rdma_metrics_t;

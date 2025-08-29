@@ -42,7 +42,7 @@ bool RDMABuffer::waitSend()
     send_pending_ = false;
     SLIME_LOG_INFO("complete to send the data.");
     metrics_->buffer_wait_done = std::chrono::steady_clock::now();
-    print_time();
+    //print_time();
     return send_completed_;
 }
 
@@ -59,7 +59,7 @@ bool RDMABuffer::waitRecv()
     SLIME_LOG_INFO("complete to recv the data.");
     metrics_->buffer_wait_done = std::chrono::steady_clock::now();
 
-    print_time();
+    //print_time();
     return recv_completed_;
 }
 

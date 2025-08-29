@@ -50,7 +50,7 @@ int main(int argc, char** argv)
     auto send_data_result = sock_data.recv(data_channel_info);
     auto recv_data_result = sock_mmrg.recv(meta_channel_info);
 
-    end_point->connect(json::parse(data_channel_info.to_string()), json::parse(meta_channel_info.to_string()));
+    //end_point->connect(json::parse(data_channel_info.to_string()), json::parse(meta_channel_info.to_string()));
     std::cout << "Connect Success..." << std::endl;
     std::cout << "Finish the connection of QP, start to RECV of buf_0 and buf_1... " << std::endl;
 

@@ -22,7 +22,7 @@ def parse_args():
     parser.add_argument('--master-addr', type=str, default='localhost', help='Master address')
     parser.add_argument('--master-port', type=int, default=6008, help='Master port')
     parser.add_argument('--sizes', nargs='+', default=None, help='List of message sizes in bytes to test')
-    parser.add_argument('--iterations', type=int, default=50, help='Number of iterations')
+    parser.add_argument('--iterations', type=int, default=100, help='Number of iterations')
     parser.add_argument('--warmup', type=int, default=5, help='Warmup iterations')
     parser.add_argument('--use-gpu', action='store_true', help='Use GPU memory')
     return parser.parse_args()

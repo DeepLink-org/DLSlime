@@ -120,7 +120,6 @@ public:
     /* Memory Allocation */
     inline int64_t register_memory_region(std::string mr_key, uintptr_t data_ptr, size_t length)
     {
-        std::cout << "register memory region" << std::endl;
         memory_pool_->register_memory_region(mr_key, data_ptr, length);
         return 0;
     }
@@ -263,6 +262,11 @@ private:
     std::future<void> cq_future_;
     std::atomic<bool> stop_cq_future_{false};
 
+
+    std::thread cq_thread_;
+    std::vector<std::thread> wq_threads_;
+
+    
     /* Completion Queue Polling */
     int64_t cq_poll_handle();
     /* Working Queue Dispatch */

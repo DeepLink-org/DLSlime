@@ -34,20 +34,22 @@ public:
                std::vector<size_t>           offset,
                std::vector<size_t>           data_size)
     {
-        metrics_ = std::make_shared<rdma_metrics_t>();
+        metrics_      = std::make_shared<rdma_metrics_t>();
         meta_metrics_ = std::make_shared<rdma_metrics_t>();
         data_metrics_ = std::make_shared<rdma_metrics_t>();
-        batch_size_ = ptrs.size();
+        batch_size_   = ptrs.size();
+        ptrs_         = ptrs;
+        offset_       = offset;
+        data_size_    = data_size;
         for (uint32_t i = 0; i < batch_size_; ++i) {
             storage_view_t view{.data_ptr = ptrs[i], .storage_offset = offset[i], .length = data_size[i]};
             storage_view_batch_.push_back(view);
         }
-        endpoint_ = endpoint;
+        endpoint_             = endpoint;
         metrics_->buffer_init = std::chrono::steady_clock::now();
     }
 
     ~RDMABuffer() = default;
-    
 
     const size_t batchSize()
     {
@@ -73,19 +75,15 @@ public:
     std::shared_ptr<rdma_metrics_t> data_metrics_;
     std::shared_ptr<rdma_metrics_t> meta_metrics_;
 
-
-
     std::chrono::duration<double> meta_ctx_submit_latency()
     {
         return (meta_metrics_->ctx_submit_done - metrics_->endpoint_meta_start);
     }
 
-
     std::chrono::duration<double> meta_ctx_WQ_latency()
     {
         return (meta_metrics_->ctx_wq_done - meta_metrics_->ctx_submit_done);
     }
-
 
     std::chrono::duration<double> meta_ctx_post_latency()
     {
@@ -97,18 +95,15 @@ public:
         return (meta_metrics_->ctx_cq_done - meta_metrics_->ctx_post_done);
     }
 
-
     std::chrono::duration<double> data_ctx_submit_latency()
     {
         return (data_metrics_->ctx_submit_done - metrics_->endpoint_meta_done);
     }
 
-
     std::chrono::duration<double> data_ctx_WQ_latency()
     {
         return (data_metrics_->ctx_wq_done - data_metrics_->ctx_submit_done);
     }
-
 
     std::chrono::duration<double> data_ctx_post_latency()
     {
@@ -119,10 +114,9 @@ public:
     {
         return (data_metrics_->ctx_cq_done - data_metrics_->ctx_post_done);
     }
-        
-    void print_time()
-    {   
 
+    void print_time()
+    {
 
         // std::cout <<"buffer_init:" << metrics_->latency().count() << " ns\n";
 
@@ -137,14 +131,10 @@ public:
         // std::cout <<"endpoint_data_start:" << metrics_->endpoint_data_start.time_since_epoch().count()  << " ns\n";
         // std::cout <<"endpoint_data_done:" << metrics_->endpoint_data_done.time_since_epoch().count()  << " ns\n";
 
-
-    //      std::chrono::steady_clock::time_point ctx_submit_done{std::chrono::milliseconds::zero()};
-    // std::chrono::steady_clock::time_point ctx_post_done{std::chrono::milliseconds::zero()};
-    // std::chrono::steady_clock::time_point ctx_wq_done{std::chrono::milliseconds::zero()};
-    // std::chrono::steady_clock::time_point ctx_cq_done{std::chrono::milliseconds::zero()};
-
-
-
+        //      std::chrono::steady_clock::time_point ctx_submit_done{std::chrono::milliseconds::zero()};
+        // std::chrono::steady_clock::time_point ctx_post_done{std::chrono::milliseconds::zero()};
+        // std::chrono::steady_clock::time_point ctx_wq_done{std::chrono::milliseconds::zero()};
+        // std::chrono::steady_clock::time_point ctx_cq_done{std::chrono::milliseconds::zero()};
 
         std::cout << "add_tasks_latency: " << metrics_->add_tasks_latency().count() << std::endl;
         std::cout << "add_endpoint_tasks_latency: " << metrics_->add_endpoint_tasks_latency().count() << std::endl;
@@ -163,12 +153,13 @@ public:
         std::cout << "data_ctx_WQ_latency: " << data_ctx_WQ_latency().count() << std::endl;
         std::cout << "data_ctx_post_latency: " << data_ctx_post_latency().count() << std::endl;
         std::cout << "data_ctx_cq_latency: " << data_ctx_cq_latency().count() << std::endl;
-
     }
+    std::shared_ptr<RDMAEndpoint> endpoint_;
+    std::vector<uintptr_t>        ptrs_;
+    std::vector<size_t>           offset_;
+    std::vector<size_t>           data_size_;
 
 private:
-    std::shared_ptr<RDMAEndpoint> endpoint_;
-
     // <tensor_ptrs_, tensor_size_, offset>
     // tensor_ptrs: the pointer of the tensor
     // tensor_size: the length of the tensor

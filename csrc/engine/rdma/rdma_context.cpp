@@ -317,6 +317,12 @@ void RDMAContext::launch_future()
         qp_management_[qpi]->wq_future_ =
             std::async(std::launch::async, [this, qpi]() -> void { wq_dispatch_handle(qpi); });
     }
+
+    // cq_thread_ = std::thread([this]() { this->cq_poll_handle(); });
+    // wq_threads_.reserve(qp_list_len_);
+    // for (int qpi = 0; qpi < qp_list_len_; qpi++) {
+    //     wq_threads_.emplace_back([this, qpi]() { this->wq_dispatch_handle(qpi); });
+    // }
 }
 
 void RDMAContext::stop_future()
@@ -538,6 +544,8 @@ int64_t RDMAContext::post_rc_oneside_batch(int qpi, RDMAAssignmentSharedPtr assi
     return 0;
 }
 
+
+
 int64_t RDMAContext::cq_poll_handle()
 {
     SLIME_LOG_INFO("Polling CQ");
@@ -548,28 +556,20 @@ int64_t RDMAContext::cq_poll_handle()
     }
     if (comp_channel_ == NULL)
         SLIME_LOG_ERROR("comp_channel_ should be constructed");
-    auto now = std::chrono::steady_clock::now();
-    while (1) {
-        // struct ibv_cq* ev_cq;
-        // void*          cq_context;
-        // if (ibv_get_cq_event(comp_channel_, &ev_cq, &cq_context) != 0) {
-        //     SLIME_LOG_ERROR("Failed to get CQ event");
-        //     return -1;
-        // }
-        // ibv_ack_cq_events(ev_cq, 1);
-        // if (ibv_req_notify_cq(ev_cq, 0) != 0) {
-        //     SLIME_LOG_ERROR("Failed to request CQ notification");
-        //     return -1;
-        // }
-        auto tmp = std::chrono::steady_clock::now();
-        // std::cout << "???" << (tmp - now).count() << std::endl;
-        now = tmp;
+    while (!stop_cq_future_) {
+        struct ibv_cq* ev_cq;
+        void*          cq_context;
+        if (ibv_get_cq_event(comp_channel_, &ev_cq, &cq_context) != 0) {
+            SLIME_LOG_ERROR("Failed to get CQ event");
+            return -1;
+        }
+        ibv_ack_cq_events(ev_cq, 1);
+        if (ibv_req_notify_cq(ev_cq, 0) != 0) {
+            SLIME_LOG_ERROR("Failed to request CQ notification");
+            return -1;
+        }
         struct ibv_wc wc[SLIME_POLL_COUNT];
-        auto out_of_cq_polling = std::chrono::steady_clock::now();
-        size_t nr_poll = ibv_poll_cq(cq_, SLIME_POLL_COUNT, wc);
-        if (nr_poll) {
-            auto in_cq_polling = std::chrono::steady_clock::now();
-            std::cout << "polling latency:" << (in_cq_polling - out_of_cq_polling).count() << std::endl;
+        while (size_t nr_poll = ibv_poll_cq(cq_, SLIME_POLL_COUNT, wc)) {
             if (stop_cq_future_)
                 return 0;
             if (nr_poll < 0) {
@@ -588,6 +588,7 @@ int64_t RDMAContext::cq_poll_handle()
                 if (wc[i].wr_id != 0) {
                     callback_info_with_qpi_t* callback_with_qpi =
                         reinterpret_cast<callback_info_with_qpi_t*>(wc[i].wr_id);
+                    callback_with_qpi->callback_info_->metrics_->ctx_cq_done = std::chrono::steady_clock::now();
                     switch (OpCode wr_type = callback_with_qpi->callback_info_->opcode_) {
                         case OpCode::READ:
                             callback_with_qpi->callback_info_->callback_(status_code, wc[i].imm_data);
@@ -600,11 +601,11 @@ int64_t RDMAContext::cq_poll_handle()
                             callback_with_qpi->callback_info_->callback_(status_code, wc[i].imm_data);
                             break;
                         case OpCode::RECV:
-                            callback_with_qpi->callback_info_->metrics_->ctx_cq_done = std::chrono::steady_clock::now();
+                            //callback_with_qpi->callback_info_->metrics_->ctx_cq_done = std::chrono::steady_clock::now();
                             callback_with_qpi->callback_info_->callback_(status_code, wc[i].imm_data);
                             break;
                         case OpCode::WRITE_WITH_IMM:
-                            callback_with_qpi->callback_info_->metrics_->ctx_cq_done = std::chrono::steady_clock::now();
+                            //callback_with_qpi->callback_info_->metrics_->ctx_cq_done = std::chrono::steady_clock::now();
                             callback_with_qpi->callback_info_->callback_(status_code, wc[i].imm_data);
                             break;
                         default:
@@ -616,13 +617,6 @@ int64_t RDMAContext::cq_poll_handle()
                     delete callback_with_qpi;
                 }
             }
-            auto done_cq_polling = std::chrono::steady_clock::now();
-            std::cout << "cq_done latency: " << (done_cq_polling - in_cq_polling).count() << std::endl;
-        }
-        else {
-            // no completion, sleep 0.5ms
-            auto empty_cq_polling = std::chrono::steady_clock::now();
-            //std::cout << "empty_cq latency: " << (empty_cq_polling - out_of_cq_polling).count() << std::endl;
         }
     }
     return 0;

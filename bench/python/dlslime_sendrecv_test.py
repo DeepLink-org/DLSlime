@@ -38,7 +38,7 @@ def benchmark_send_recv(args):
     if args.sizes:
         sizes = [int(s) for s in args.sizes]
     else:
-        sizes = [2**n for n in range(13, 14)]  # 256B to 256MB
+        sizes = [2**n for n in range(11, 28)]  # 256B to 256MB
 
     print("Prepare data sizes: ", sizes)
     benchmark_data = []
@@ -55,8 +55,8 @@ def benchmark_send_recv(args):
             for _ in range(num)
         ]
 
-        all_work = []
         for _ in range(100):
+            all_work = []
             reqs = []
             for i in range(num):
                 if rank == 0:
@@ -68,26 +68,23 @@ def benchmark_send_recv(args):
             work = reqs
             all_work.extend(work)
 
-        [w.wait() for w in all_work]
+            [w.wait() for w in all_work]
 
         if args.use_gpu:
             torch.cuda.synchronize()
         start_time = time.time()
-
-        all_work = []
+        
         for _ in range(args.iterations):
-            reqs = []
+            all_work = []
             for i in range(num):
                 if rank == 0:
                     send_op = dist.isend(send_batch[i], dst=1, group=slime_group)
-                    reqs.extend([send_op])
+                    all_work.extend([send_op])
                 else:
                     recv_op = dist.irecv(recv_batch[i], src=0 ,group=slime_group)
-                    reqs.extend([recv_op])
-            work = reqs
-            all_work.extend(work)
+                    all_work.extend([recv_op])
 
-        [w.wait() for w in all_work]
+            [w.wait() for w in all_work]
 
         if args.use_gpu:
             torch.cuda.synchronize()
@@ -146,7 +143,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--iterations",
         type=int,
-        default=1,
+        default=100,
         help="Number of iterations for benchmarking",
     )
 

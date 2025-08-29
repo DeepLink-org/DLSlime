@@ -1,18 +1,18 @@
 {
   "mode": "recv",
-  "device": "CPU",
-  "iterations": 50,
+  "device": "GPU",
+  "iterations": 100,
   "warmup": 5,
   "data": [
     [
       "4,096",
-      "7.379 ms",
+      "3.685 ms",
       "0.067 ms",
-      "32.893 ms",
-      "40.785 ms",
-      "369.077 ms",
-      "0.55 MB/s",
-      "CPU"
+      "16.822 ms",
+      "16.821 ms",
+      "368.867 ms",
+      "1.11 MB/s",
+      "GPU"
     ]
   ]
 }

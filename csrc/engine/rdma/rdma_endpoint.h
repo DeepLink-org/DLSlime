@@ -137,7 +137,6 @@ private:
     std::mutex              rdma_tasks_mutex_;
 
     std::map<uint32_t, std::function<void()>> imm_data_callback_;
-
     bool RDMA_tasks_threads_running_;
 };
 

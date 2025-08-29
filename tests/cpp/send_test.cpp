@@ -45,7 +45,7 @@ int main(int argc, char** argv)
     sock_data.send(local_data_channel_info, zmq::send_flags::none);
     sock_mmrg.send(local_meta_channel_info, zmq::send_flags::none);
 
-    end_point->connect(json::parse(data_channel_info.to_string()), json::parse(mmrg_channel_info.to_string()));
+    //end_point->connect(json::parse(data_channel_info.to_string()), json::parse(mmrg_channel_info.to_string()));
     std::cout << "Connect Success..." << std::endl;
     std::cout << "Finish the connection of QP, start to SEND of buf_0 and buf_1..." << std::endl;
 

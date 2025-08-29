@@ -53,18 +53,13 @@ AssignmentBatch RDMATask::getDataAssignmentBatch()
 
 int RDMATask::registerDataMemoryRegion()
 {
-    // //std::cout << getDataKey(0) << std::endl;
     auto mr_is_exist = endpoint_->dataCtx()->get_mr_for_endpoint(getDataKey(0));
 
     if (mr_is_exist != nullptr) {
-        // 已经注册过, 直接使用
-        std::cout << "已经注册过, 直接使用" << std::endl;
+
         return 0;
     }
     else {
-        //未注册
-        //std::cout << "未注册" << std::endl;
-        //std::cout << getDataKey(0) << std::endl;
         storage_view_batch_t storage_view_batch = buffer_->storageViewBatch();
         for (int i = 0; i < buffer_->batchSize(); ++i) {
             endpoint_->dataCtx()->register_memory_region(
@@ -78,7 +73,6 @@ void RDMATask::fillBuffer()
 {
     if (opcode_ == OpCode::SEND) {
         std::vector<meta_data_t>& meta_buf = endpoint_->getMetaBuffer();
-        // memset(meta_buf.data() + (slot_id_ % MAX_META_BUFFER_SIZE) * sizeof(meta_data_t), 0, sizeof(meta_data_t));
     }
     else if (opcode_ == OpCode::RECV) {
         std::vector<meta_data_t>& meta_buf = endpoint_->getMetaBuffer();
@@ -111,9 +105,6 @@ int RDMATask::registerRemoteDataMemoryRegion()
             uint64_t addr   = meta_buf[slot_id_ % MAX_META_BUFFER_SIZE].mr_addr[i];
             uint32_t length = meta_buf[slot_id_ % MAX_META_BUFFER_SIZE].mr_size[i];
             uint32_t rkey   = meta_buf[slot_id_ % MAX_META_BUFFER_SIZE].mr_rkey[i];
-            ////std::cout << slot_id_ << "slot_id_" << std::endl;
-            //std::cout << getDataKey(i) << std::endl;
-            //std::cout << addr << " " << length << " " << rkey << std::endl;
             endpoint_->dataCtx()->register_remote_memory_region(getDataKey(i), addr, length, rkey);
         }
         return 0;
@@ -127,7 +118,7 @@ RDMAEndpoint::RDMAEndpoint(const std::string& dev_name, uint8_t ib_port, const s
 {
     SLIME_LOG_INFO("Init the Contexts and RDMA Devices...");
     data_ctx_ = std::make_shared<RDMAContext>(qp_num, 0);
-    meta_ctx_ = std::make_shared<RDMAContext>(1, 1);
+    meta_ctx_ = std::make_shared<RDMAContext>(1, 0);
 
     data_ctx_->init(dev_name, ib_port, link_type);
     meta_ctx_->init(dev_name, ib_port, link_type);
@@ -170,11 +161,6 @@ void RDMAEndpoint::connect(const json& data_ctx_info, const json& meta_ctx_info)
     rdma_tasks_threads_         = std::thread([this] { this->waitandPopTask(std::chrono::milliseconds(100)); });
 }
 
-// std::shared_ptr<RDMABuffer> RDMAEndpoint::createRDMABuffer(storage_view_batch_t batch)
-// {
-//     std::unique_lock<std::mutex> lock(rdma_tasks_mutex_);
-//     return std::make_shared<RDMABuffer>(shared_from_this(), batch);
-// }
 
 void RDMAEndpoint::addSendTask(std::shared_ptr<RDMABuffer> buffer)
 {
@@ -245,8 +231,6 @@ void RDMAEndpoint::asyncSendData(std::shared_ptr<rdma_task_t> task)
         std::unique_lock<std::mutex> lock(this->rdma_tasks_mutex_);
         task->registerRemoteDataMemoryRegion();
         AssignmentBatch data_assign_batch = task->getDataAssignmentBatch();
-        //std::cout << task->slot_id_ << "mr_addr: " << (uintptr_t)meta_buffer_[task->slot_id_].mr_addr[0]
-        //          << " rkey: " << meta_buffer_[task->slot_id_].mr_rkey[0] << std::endl;
         task->buffer_->metrics_->endpoint_meta_done =  std::chrono::steady_clock::now();
         auto data_atx = this->data_ctx_->submit(
             OpCode::WRITE_WITH_IMM, data_assign_batch, task->buffer_->data_metrics_, data_callback, RDMAContext::UNDEFINED_QPI, slot_id);
@@ -275,9 +259,6 @@ void RDMAEndpoint::asyncRecvData(std::shared_ptr<rdma_task_t> task)
 
     {
         AssignmentBatch meta_data = task->getMetaAssignmentBatch();
-        //std::cout << ".mr_addr[0]: " << (uintptr_t)meta_buffer_[task->slot_id_].mr_addr[0]
-        //          << " rkey: " << meta_buffer_[task->slot_id_].mr_rkey[0] << std::endl;
-        
         task->buffer_->metrics_->endpoint_meta_start =  std::chrono::steady_clock::now();
         meta_ctx_->submit(OpCode::WRITE_WITH_IMM, meta_data, task->buffer_->meta_metrics_, meta_callback, RDMAContext::UNDEFINED_QPI, task->slot_id_);
     }

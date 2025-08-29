@@ -14,7 +14,7 @@ using json = nlohmann::json;
 using namespace slime;
 using namespace std::chrono;
 
-DEFINE_string(DEVICE_NAME, "rxe_0", "RDMA device name");
+DEFINE_string(device, "rxe_0", "RDMA device name");
 DEFINE_string(LINK_TYPE, "RoCE", "IB or RoCE");
 DEFINE_int32(IB_PORT, 1, "RDMA port number");
 DEFINE_string(PEER_ADDR, "127.0.0.1", "peer IP address");
@@ -26,9 +26,9 @@ DEFINE_bool(send, false, "Run in send mode");
 DEFINE_bool(recv, false, "Run in recv mode");
 
 DEFINE_int32(num_qp, 1, "Number of QPs");
-DEFINE_int32(num_packets, 1, "Number of packets");
+DEFINE_int32(num_packets, 100, "Number of packets");
 DEFINE_int32(min_packet_size, 11, "Minimum size of packet size (2^(min_packet_size) bytes)");
-DEFINE_int32(max_packet_size, 12, "Maximum size of packet size (2^(max_packet_size) bytes)");
+DEFINE_int32(max_packet_size, 11, "Maximum size of packet size (2^(max_packet_size) bytes)");
 
 typedef struct Result {
     size_t packet_size;
@@ -37,14 +37,37 @@ typedef struct Result {
     double min_latency_ms;
     double max_latency_ms;
     double avg_latency_ms;
-    double stddev_latency;
+    double p50_latency_ms;
+    double p99_latency_ms;
+
     double min_bandwidth_MBs;
     double max_bandwidth_MBs;
     double avg_bandwidth_MBs;
-    double stddev_bandwidth;
-    double success_rate;
+
+    double p50_bandwidth_MBs;
+    double p99_bandwidth_MBs;
 
 } Result_t;
+
+double calculatePercentile(const std::vector<double>& data, double percentile)
+{
+    if (data.empty())
+        return 0.0;
+
+    std::vector<double> sorted_data = data;
+    std::sort(sorted_data.begin(), sorted_data.end());
+
+    double position = percentile * (sorted_data.size() - 1);
+    size_t index    = static_cast<size_t>(position);
+    double fraction = position - index;
+
+    if (index + 1 < sorted_data.size()) {
+        return sorted_data[index] + fraction * (sorted_data[index + 1] - sorted_data[index]);
+    }
+    else {
+        return sorted_data[index];
+    }
+}
 
 void initConnection(std::shared_ptr<RDMAEndpoint>& end_point)
 {
@@ -71,9 +94,14 @@ void initConnection(std::shared_ptr<RDMAEndpoint>& end_point)
         sock_data.send(local_data_info, zmq::send_flags::none);
         sock_meta.send(local_meta_info, zmq::send_flags::none);
 
-        end_point->connect(json::parse(peer_data_info.to_string()), json::parse(peer_meta_info.to_string()));
+        end_point->connect(
+            json::parse(std::string(static_cast<const char*>(peer_data_info.data()), peer_data_info.size())),
+            json::parse(std::string(static_cast<const char*>(peer_meta_info.data()), peer_meta_info.size()))
+        );
     }
 
+
+    
     else if (FLAGS_recv) {
         std::cout << "Initializing RDMA endpoint in RECV mode..." << std::endl;
 
@@ -97,7 +125,10 @@ void initConnection(std::shared_ptr<RDMAEndpoint>& end_point)
         auto           data_res = sock_data.recv(peer_data_info);
         auto           meta_res = sock_meta.recv(peer_meta_info);
         std::cout << "Initializing RDMA endpoint in RECV mode..." << std::endl;
-        end_point->connect(json::parse(peer_data_info.to_string()), json::parse(peer_meta_info.to_string()));
+        end_point->connect(
+            json::parse(std::string(static_cast<const char*>(peer_data_info.data()), peer_data_info.size())),
+            json::parse(std::string(static_cast<const char*>(peer_meta_info.data()), peer_meta_info.size()))
+        );
     }
 
     std::cout << "RDMA Endpoint connection has been successfully established." << std::endl;
@@ -124,17 +155,18 @@ int singleTest(std::shared_ptr<RDMAEndpoint> end_point,
     }
     auto start = std::chrono::high_resolution_clock::now();
     for (size_t i = 0; i < iterations; i++) {
+        auto buffer = std::make_shared<RDMABuffer>(buf->endpoint_, buf->ptrs_, buf->offset_, buf->data_size_);
         if (FLAGS_send) {
-            buf->send();
-            futures.emplace_back(std::async(std::launch::async, [&buf, &completed]() {
-                buf->waitSend();
+            buffer->send();
+            futures.emplace_back(std::async(std::launch::async, [&buffer, &completed]() {
+                buffer->waitSend();
                 completed++;
             }));
         }
         else if (FLAGS_recv) {
-            buf->recv();
-            futures.emplace_back(std::async(std::launch::async, [&buf, &completed]() {
-                buf->waitRecv();
+            buffer->recv();
+            futures.emplace_back(std::async(std::launch::async, [&buffer, &completed]() {
+                buffer->waitRecv();
                 completed++;
             }));
         }
@@ -142,105 +174,131 @@ int singleTest(std::shared_ptr<RDMAEndpoint> end_point,
     for (auto& fut : futures) {
         fut.wait();
     }
-    auto                          end      = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> duration = end - start;
+    auto end         = std::chrono::high_resolution_clock::now();
+    auto duration_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
 
-    double total_bytes = packet_size * iterations;
-    latency            = (duration.count() * 1000);
-    bandwidth          = (total_bytes / duration.count()) / (1024 * 1024);
+    double total_bytes = 2 * packet_size * iterations;
+    latency            = (duration_ns.count() / 1000000.0);
+    bandwidth          = (total_bytes / (duration_ns.count() / 1000000000.0)) / (1024.0 * 1024.0);
     return completed;
 }
 
 void runTest(std::shared_ptr<RDMAEndpoint> end_point, size_t packet_size, size_t total_bytes, Result_t& result)
 {
     const size_t           num_packets = total_bytes / packet_size;
-    std::vector<char>      data_buffer(packet_size, FLAGS_send ? 'A' : '0');
-    std::vector<uintptr_t> ptrs    = {reinterpret_cast<uintptr_t>(data_buffer.data())};
-    std::vector<size_t>    offsets = {0};
-    std::vector<size_t>    sizes   = {data_buffer.size()};
+    std::vector<char>      data_buffer_0(packet_size, FLAGS_send ? 'A' : '0');
+    std::vector<char>      data_buffer_1(packet_size, FLAGS_send ? 'A' : '0');
+    std::vector<uintptr_t> ptrs    = {reinterpret_cast<uintptr_t>(data_buffer_0.data()),reinterpret_cast<uintptr_t>(data_buffer_1.data())};
+    std::vector<size_t>    offsets = {0,0};
+    std::vector<size_t>    sizes   = {data_buffer_0.size(), data_buffer_1.size()};
     auto                   buf     = std::make_shared<RDMABuffer>(end_point, ptrs, offsets, sizes);
 
     std::vector<double> latencies;
     std::vector<double> bandwidths;
     std::vector<double> success_rates;
 
-    size_t num_tests  = 5;
+    size_t num_tests  = FLAGS_num_packets;
     size_t iterations = FLAGS_num_packets / num_tests;
     for (size_t i = 0; i < num_tests; ++i) {
+        auto   buf = std::make_shared<RDMABuffer>(end_point, ptrs, offsets, sizes);
         double latency;
         double bandwidth;
         int    success_count = singleTest(end_point, buf, iterations, packet_size, latency, bandwidth);
         latencies.push_back(latency);
         bandwidths.push_back(bandwidth);
-        success_rates.push_back((double)success_count / num_tests);
     }
     // statistic
+
+    for (auto lat : latencies)
+        std::cout << "Latency: " << lat << " ms\n";
+
     auto [min_lat, max_lat] = std::minmax_element(latencies.begin(), latencies.end());
     double sum_lat          = std::accumulate(latencies.begin(), latencies.end(), 0.0);
     double mean_lat         = sum_lat / FLAGS_num_packets;
-    double sq_sum_lat       = std::inner_product(latencies.begin(), latencies.end(), latencies.begin(), 0.0);
-    double stdev_lat        = std::sqrt(sq_sum_lat / FLAGS_num_packets - mean_lat * mean_lat);
 
     auto [min_bw, max_bw] = std::minmax_element(bandwidths.begin(), bandwidths.end());
     double sum_bw         = std::accumulate(bandwidths.begin(), bandwidths.end(), 0.0);
     double mean_bw        = sum_bw / num_tests;
-    double sq_sum_bw      = std::inner_product(bandwidths.begin(), bandwidths.end(), bandwidths.begin(), 0.0);
-    double stdev_bw       = std::sqrt(sq_sum_bw / num_tests - mean_bw * mean_bw);
-
-    double avg_success = std::accumulate(success_rates.begin(), success_rates.end(), 0.0) / FLAGS_num_packets;
 
     // Store results
-    result.packet_size       = packet_size;
-    result.total_bytes       = total_bytes;
-    result.packet_num        = FLAGS_num_packets;
-    result.min_latency_ms    = *min_lat;
-    result.max_latency_ms    = *max_lat;
-    result.avg_latency_ms    = mean_lat;
-    result.stddev_latency    = stdev_lat;
+    result.packet_size    = packet_size;
+    result.total_bytes    = total_bytes;
+    result.packet_num     = FLAGS_num_packets;
+    result.min_latency_ms = *min_lat;
+    result.max_latency_ms = *max_lat;
+    result.avg_latency_ms = mean_lat;
+    result.p50_latency_ms = calculatePercentile(latencies, 0.50);
+    result.p99_latency_ms = calculatePercentile(latencies, 0.99);
+
     result.min_bandwidth_MBs = *min_bw;
     result.max_bandwidth_MBs = *max_bw;
     result.avg_bandwidth_MBs = mean_bw;
-    result.stddev_bandwidth  = stdev_bw;
-    result.success_rate      = avg_success;
+    result.p50_bandwidth_MBs = calculatePercentile(bandwidths, 0.50);
+    result.p99_bandwidth_MBs = calculatePercentile(bandwidths, 0.99);
 }
 
 void print(const std::vector<Result_t>& results)
 {
-
     std::cout << "\nPerformance Results:\n";
-    std::cout << std::left << std::setw(16) << "Size (Bytes)" << std::setw(16) << "Total Size (Bytes)" << std::setw(24)
-              << "Avg Lat (ms)" << std::setw(24) << "Avg BW (MB/s)" << std::endl;
+
+    // 打印延迟统计
+    std::cout << "\nLatency Statistics (ms):\n";
+    std::cout << "================================================================================\n";
+    std::cout << std::left << std::setw(12) << "Size(B)" << std::setw(12) << "Packets" << std::setw(12) << "Min"
+              << std::setw(12) << "Max" << std::setw(12) << "Avg" << std::setw(12) << "P50" << std::setw(12) << "P99"
+              << std::endl;
+    std::cout << "================================================================================\n";
 
     for (const auto& res : results) {
-        std::cout << std::left << std::setw(16) << res.packet_size << std::setw(16) << res.total_bytes << std::setw(24)
-                  << std::setprecision(4) << res.avg_latency_ms << std::setw(24) << std::setprecision(4)
-                  << res.avg_bandwidth_MBs << std::endl;
+        std::cout << std::left << std::setw(12) << res.packet_size << std::setw(12) << res.packet_num << std::setw(12)
+                  << std::setprecision(4) << res.min_latency_ms << std::setw(12) << std::setprecision(4)
+                  << res.max_latency_ms << std::setw(12) << std::setprecision(4) << res.avg_latency_ms << std::setw(12)
+                  << std::setprecision(4) << res.p50_latency_ms << std::setw(12) << std::setprecision(4)
+                  << res.p99_latency_ms << std::endl;
     }
-}
+    std::cout << "================================================================================\n";
 
-void save(const std::vector<Result_t>& results, const std::string& filename)
-{
-    std::ofstream outfile(filename);
-    if (!outfile.is_open()) {
-        std::cerr << "Failed to open output file: " << filename << std::endl;
-        return;
-    }
-
-    outfile << "Packet Size (Bytes),Total Bytes (Bytes),Amount of Packet"
-            << "Min Latency (ms),Max Latency (ms),Avg Latency (ms), Latency StdDev (ms),"
-            << "Min Bandwidth (MB/s),Max Bandwidth (MB/s),Avg Bandwidth (MB/s),Bandwidth StdDev (MB/s),"
-            << "Success Rate (%)\n";
+    // 打印带宽统计
+    std::cout << "\nBandwidth Statistics (MB/s):\n";
+    std::cout << "================================================================================\n";
+    std::cout << std::left << std::setw(12) << "Size(B)" << std::setw(12) << "Total(B)" << std::setw(12) << "Min"
+              << std::setw(12) << "Max" << std::setw(12) << "Avg" << std::setw(12) << "P50" << std::setw(12) << "P99"
+              << std::endl;
+    std::cout << "================================================================================\n";
 
     for (const auto& res : results) {
-        outfile << res.packet_size << "," << res.total_bytes << "," << res.packet_num << "," << std::setprecision(9)
-                << res.min_latency_ms << "," << res.max_latency_ms << "," << res.avg_latency_ms << ","
-                << res.stddev_latency << "," << res.min_bandwidth_MBs << "," << res.max_bandwidth_MBs << ","
-                << res.avg_bandwidth_MBs << "," << res.stddev_bandwidth << "," << res.success_rate << "\n";
+        std::cout << std::left << std::setw(12) << res.packet_size << std::setw(12) << res.total_bytes << std::setw(12)
+                  << std::setprecision(4) << res.min_bandwidth_MBs << std::setw(12) << std::setprecision(4)
+                  << res.max_bandwidth_MBs << std::setw(12) << std::setprecision(4) << res.avg_bandwidth_MBs
+                  << std::setw(12) << std::setprecision(4) << res.p50_bandwidth_MBs << std::setw(12)
+                  << std::setprecision(4) << res.p99_bandwidth_MBs << std::endl;
     }
-
-    outfile.close();
-    std::cout << "Results saved to " << filename << std::endl;
+    std::cout << "================================================================================\n";
 }
+
+// void save(const std::vector<Result_t>& results, const std::string& filename)
+// {
+//     std::ofstream outfile(filename);
+//     if (!outfile.is_open()) {
+//         std::cerr << "Failed to open output file: " << filename << std::endl;
+//         return;
+//     }
+
+//     outfile << "Packet Size (Bytes),Total Bytes (Bytes),Amount of Packet"
+//             << "Min Latency (ms),Max Latency (ms),Avg Latency (ms), Latency StdDev (ms),"
+//             << "Min Bandwidth (MB/s),Max Bandwidth (MB/s),Avg Bandwidth (MB/s),Bandwidth StdDev (MB/s),"
+//             << "Success Rate (%)\n";
+
+//     for (const auto& res : results) {
+//         outfile << res.packet_size << "," << res.total_bytes << "," << res.packet_num << "," << std::setprecision(9)
+//                 << res.min_latency_ms << "," << res.max_latency_ms << "," << res.avg_latency_ms << ","
+//                 << res.stddev_latency << "," << res.min_bandwidth_MBs << "," << res.max_bandwidth_MBs << ","
+//                 << res.avg_bandwidth_MBs << "," << res.stddev_bandwidth << "," << res.success_rate << "\n";
+//     }
+
+//     outfile.close();
+//     std::cout << "Results saved to " << filename << std::endl;
+// }
 
 int main(int argc, char** argv)
 {
@@ -256,7 +314,7 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    auto end_point = std::make_shared<RDMAEndpoint>(FLAGS_DEVICE_NAME, FLAGS_IB_PORT, FLAGS_LINK_TYPE, FLAGS_num_qp);
+    auto end_point = std::make_shared<RDMAEndpoint>(FLAGS_device, FLAGS_IB_PORT, FLAGS_LINK_TYPE, FLAGS_num_qp);
     initConnection(end_point);
 
     std::vector<size_t> packet_sizes;
@@ -265,7 +323,6 @@ int main(int argc, char** argv)
     }
 
     std::vector<Result_t> results;
-
     for (size_t size : packet_sizes) {
 
         size_t total_bytes = size * FLAGS_num_packets;
