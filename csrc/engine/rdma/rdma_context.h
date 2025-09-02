@@ -18,6 +18,7 @@
 #include <queue>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -202,8 +203,8 @@ private:
         std::condition_variable has_runnable_event_;
 
         /* async wq handler */
-        std::future<void> wq_future_;
-        std::atomic<bool> stop_wq_future_{false};
+        std::thread wq_thread_;
+        std::atomic<bool> stop_wq_thread_{false};
 
         ~qp_management()
         {
@@ -232,13 +233,15 @@ private:
     bool connected_   = false;
 
     /* async cq handler */
-    std::future<void> cq_future_;
-    std::atomic<bool> stop_cq_future_{false};
+    std::thread cq_thread_;
+    std::atomic<bool> stop_cq_thread_{false};
 
     /* Completion Queue Polling */
     int64_t cq_poll_handle();
     /* Working Queue Dispatch */
     int64_t wq_dispatch_handle(int qpi);
+
+    int socketId();
 
     /* Async RDMA SendRecv */
     int64_t post_send_batch(int qpi, RDMAAssignmentSharedPtr assign);
