@@ -261,6 +261,7 @@ class RDMAEndpoint(BaseEndpoint):
     def write_batch(
         self,
         batch: List[Assignment],
+        qpi: int,
         async_op=False,
     ) -> int:
         """Perform batched read from remote MR to local buffer.
@@ -281,7 +282,7 @@ class RDMAEndpoint(BaseEndpoint):
                 assign.source_offset,
                 assign.length,
             ) for assign in batch
-        ], None, -1, -1)
+        ], None, qpi, -1)
         if async_op:
             return rdma_assignment
         else:
