@@ -156,16 +156,46 @@ for idx, (rawsize, ttensor) in enumerate(zip(args.size, ttensors)):
                 else:
                     if args.transfer_engine == "dlslime":
                         fn = rdma_endpoint.read_batch if args.opcode == "read" else rdma_endpoint.write_batch
-                        assign = fn(
-                            batch=[
-                                Assignment(
-                                    mr_key=f"buffer_{idx}",
-                                    target_offset=0,
-                                    source_offset=0,
-                                    length=ttensor.numel() * ttensor.itemsize,
+                        if n_runs == 1:
+                            # split to 2 for multi_qp
+                            assign = [
+                                fn(
+                                    batch=[
+                                        Assignment(
+                                            mr_key=f"buffer_{idx}",
+                                            target_offset=0,
+                                            source_offset=0,
+                                            length=ttensor.numel() * ttensor.itemsize // 2,
+                                        )
+                                    ],
+                                    async_op=True
+                                ),
+                                fn(
+                                    batch=[
+                                        Assignment(
+                                            mr_key=f"buffer_{idx}",
+                                            target_offset=ttensor.numel() * ttensor.itemsize // 2,
+                                            source_offset=ttensor.numel() * ttensor.itemsize // 2,
+                                            length=ttensor.numel() * ttensor.itemsize // 2,
+                                        )
+                                    ],
+                                    async_op=True
                                 )
-                            ],
-                            async_op=True)
+                            ]
+                        else:
+                            assign = [
+                                fn(
+                                    batch=[
+                                        Assignment(
+                                            mr_key=f"buffer_{idx}",
+                                            target_offset=0,
+                                            source_offset=0,
+                                            length=ttensor.numel() * ttensor.itemsize,
+                                        )
+                                    ],
+                                    async_op=True
+                                )
+                            ]
                     else:
                         batch_id = rdma_endpoint.batch_transfer_async_read(
                             f"{all_endpoint_info[peer_rank]['local_ip']}:{all_endpoint_info[peer_rank]['endpoint']}",
@@ -176,7 +206,7 @@ for idx, (rawsize, ttensor) in enumerate(zip(args.size, ttensors)):
                         if batch_id == 0:
                             print(f"error for transport")
                 if args.transfer_engine == 'dlslime':
-                    assigns.append(assign)
+                    assigns.extend(assign)
                 elif args.transfer_engine == 'mooncake':
                     all_batch_ids_to_wait.append(batch_id)
 

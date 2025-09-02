@@ -9,7 +9,7 @@ add_library(
     rdma_buffer.cpp
 )
 
-target_link_libraries(_slime_rdma PUBLIC _slime_engine _slime_utils)
+target_link_libraries(_slime_rdma PUBLIC _slime_engine _slime_utils numa)
 
 set_target_properties(
     _slime_rdma
