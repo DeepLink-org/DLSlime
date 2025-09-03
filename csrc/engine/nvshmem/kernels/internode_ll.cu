@@ -34,7 +34,8 @@ __global__ void send_ll_kernel(int8_t* data, int8_t* buffer, size_t length, size
     __syncthreads();
 
     // Step 3. Send Signal
-    if (lane_id == 0 and warp_id == 0) {
+    if (lane_id == 0) {
+        // TODO: 使用少量的 warp (2)
         auto signal_ptr = buffer_ptr + aligned_size + warp_id;
         deep_ep::nvshmemi_ibgda_amo_nonfetch_add(reinterpret_cast<int*>(signal_ptr), 1, dst_rank, 0);
     }
@@ -46,7 +47,8 @@ __global__ void recv_ll_kernel(int8_t* data, int8_t* buffer, size_t length, size
     // Step 1. Data Copy
     size_t msg_size_per_thread = msg_size_per_warp / 32;
     size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-    
+
+    // __syncthreads();
     for (int i = 0; i < msg_size_per_thread; ++i)
     {
         int idx = i + threadIdx.x * msg_size_per_thread + blockIdx.x * blockDim.x * msg_size_per_thread;
