@@ -173,6 +173,8 @@ int64_t RDMAContext::init(const std::string& dev_name, uint8_t ib_port, const st
         struct ibv_qp_init_attr qp_init_attr = {};
         qp_init_attr.send_cq                 = cq_;
         qp_init_attr.recv_cq                 = cq_;
+        qp_init_attr.sq_sig_all              = false;
+        qp_init_attr.qp_context              = this;
         qp_init_attr.qp_type                 = IBV_QPT_RC;  // Reliable Connection
         qp_init_attr.cap.max_send_wr         = SLIME_MAX_SEND_WR;
         qp_init_attr.cap.max_recv_wr         = SLIME_MAX_RECV_WR;
@@ -266,14 +268,15 @@ int64_t RDMAContext::connect(const json& endpoint_info_json)
 
         // Modify QP to Ready to Receive (RTR) state
         memset(&attr, 0, sizeof(attr));
-        attr.qp_state           = IBV_QPS_RTR;
-        attr.path_mtu           = (enum ibv_mtu)std::min((uint32_t)remote_rdma_info.mtu, (uint32_t)local_rdma_info.mtu);
-        attr.dest_qp_num        = remote_rdma_info.qpn;
-        attr.rq_psn             = remote_rdma_info.psn;
-        attr.max_dest_rd_atomic = SLIME_MAX_DEST_RD_ATOMIC;
-        attr.min_rnr_timer      = 0x12;
-        attr.ah_attr.dlid       = remote_rdma_info.lid;
-        attr.ah_attr.sl         = SLIME_SERVICE_LEVEL;
+        attr.qp_state = IBV_QPS_RTR;
+        attr.path_mtu = (enum ibv_mtu)std::min((uint32_t)remote_rdma_info.mtu, (uint32_t)local_rdma_info.mtu);
+        ;
+        attr.dest_qp_num           = remote_rdma_info.qpn;
+        attr.rq_psn                = remote_rdma_info.psn;
+        attr.max_dest_rd_atomic    = SLIME_MAX_DEST_RD_ATOMIC;
+        attr.min_rnr_timer         = 0x12;
+        attr.ah_attr.dlid          = remote_rdma_info.lid;
+        attr.ah_attr.sl            = SLIME_SERVICE_LEVEL;
         attr.ah_attr.src_path_bits = 0;
         attr.ah_attr.port_num      = ib_port_;
 
@@ -429,7 +432,7 @@ RDMAContext::submit(OpCode opcode, AssignmentBatch& batch, callback_fn_t callbac
             rdma_assignment->imm_data_      = (i == split_size - 1) ? imm_data : UNDEFINED_IMM_DATA;
         }
 
-        qp_management_[qpi]->has_runnable_event_.notify_one();
+        // qp_management_[qpi]->has_runnable_event_.notify_one();
         return rdma_assignment;
     }
 }
@@ -569,16 +572,16 @@ int64_t RDMAContext::cq_poll_handle()
         SLIME_LOG_ERROR("comp_channel_ should be constructed");
     while (!stop_cq_thread_) {
         struct ibv_cq* ev_cq;
-        void*          cq_context;
-        if (ibv_get_cq_event(comp_channel_, &ev_cq, &cq_context) != 0) {
-            SLIME_LOG_ERROR("Failed to get CQ event");
-            return -1;
-        }
-        ibv_ack_cq_events(ev_cq, 1);
-        if (ibv_req_notify_cq(ev_cq, 0) != 0) {
-            SLIME_LOG_ERROR("Failed to request CQ notification");
-            return -1;
-        }
+        // void*          cq_context;
+        // if (ibv_get_cq_event(comp_channel_, &ev_cq, &cq_context) != 0) {
+        //     SLIME_LOG_ERROR("Failed to get CQ event");
+        //     return -1;
+        // }
+        // ibv_ack_cq_events(ev_cq, 1);
+        // if (ibv_req_notify_cq(ev_cq, 0) != 0) {
+        //     SLIME_LOG_ERROR("Failed to request CQ notification");
+        //     return -1;
+        // }
         struct ibv_wc wc[SLIME_POLL_COUNT];
 
         while (size_t nr_poll = ibv_poll_cq(cq_, SLIME_POLL_COUNT, wc)) {
@@ -645,9 +648,6 @@ int64_t RDMAContext::wq_dispatch_handle(int qpi)
 
     while (!qp_management_[qpi]->stop_wq_thread_) {
         std::unique_lock<std::mutex> lock(qp_management_[qpi]->assign_queue_mutex_);
-        qp_management_[qpi]->has_runnable_event_.wait(lock, [this, &qpi]() {
-            return !(qp_management_[qpi]->assign_queue_.empty()) || qp_management_[qpi]->stop_wq_thread_;
-        });
         if (qp_management_[qpi]->stop_wq_thread_)
             return 0;
         while (!(qp_management_[qpi]->assign_queue_.empty())) {

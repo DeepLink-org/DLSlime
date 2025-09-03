@@ -14,14 +14,16 @@ from dlslime import Assignment, RDMAEndpoint, available_nic
 import argparse
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--size', nargs='+', type=int, default=[n for n in range(8, 27)])
+parser.add_argument('--batch-size', type=int, default=1)
+parser.add_argument('--size', nargs='+', type=int, default=[n for n in range(8, 25)])
 parser.add_argument('--num-concurrency', type=int, default=16)
 parser.add_argument('--opcode', type=str, choices=['read', 'write'], default='read')
 parser.add_argument('--with-imm-data', action='store_true', help='with-imm-data')
 parser.add_argument('--save-csv', action='store_true', help='Save benchmark results to CSV file')
 parser.add_argument('--csv-filename', type=str, default='./output.csv', help='Filename for CSV output')
 parser.add_argument('--qp-num', type=int, default=None, help='Queue Pair number for RDMA operations')
-parser.add_argument('--transfer-engine', choices=['dlslime', 'mooncake'], type=str, default='dlslime')
+parser.add_argument('--transfer-engine', choices=['dlslime', 'mooncake', 'nixl'], type=str, default='dlslime')
+parser.add_argument('--nixl-port', default=5555, type=int)
 
 
 args = parser.parse_args()
@@ -29,7 +31,7 @@ args = parser.parse_args()
 
 def get_local_ip():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    s.connect(("8.8.8.8", 80))  # 连接 Google DNS
+    s.connect(("8.8.8.8", 80))
     local_ip = s.getsockname()[0]
     s.close()
     return local_ip
@@ -39,15 +41,18 @@ local_ip = get_local_ip()
 
 
 rank = int(os.environ["RANK"])
+local_rank = int(os.environ["LOCAL_RANK"])
 world_size = int(os.environ["WORLD_SIZE"])
+local_world_size = nnodes = int(os.environ["LOCAL_WORLD_SIZE"])
 master_addr = os.environ["MASTER_ADDR"]
 master_port = os.environ["MASTER_PORT"]
+npros_per_rank = local_world_size
 
 assert world_size % 2 == 0
 num_channels = world_size // 2
 
 if rank == 0:
-    print(rank, world_size, master_addr, master_port)
+    print(f"{rank=}, {world_size=}, {npros_per_rank=}, {master_addr=}, {master_port=}")
 
 peer_rank = (rank + num_channels) % world_size
 
@@ -58,6 +63,21 @@ target_group = dist.new_group(list(range(num_channels, world_size)), backend="cp
 
 if args.transfer_engine == 'mooncake':
     from mooncake.engine import TransferEngine as MooncakeTransferEngine
+    mooncake_endpoint_info = {
+        "local_ip": local_ip,
+        "kv_table": {},
+        "endpoint": []
+    }
+elif args.transfer_engine == 'nixl':
+    from nixl._api import nixl_agent, nixl_agent_config
+    nixl_endpoint_info = {
+        "local_ip": local_ip,
+        "kv_table": {},
+    }
+    if rank < num_channels:
+        nixl_mode = "initiator"
+    else:
+        nixl_mode = "target"
 
 if args.with_imm_data and args.opcode != 'write':
     raise ValueError('Immediate data can only be used with write operations.')
@@ -74,26 +94,28 @@ benchmark_data = []
 
 rdma_devices = available_nic()
 
-mooncake_endpoint_info = {
-    "local_ip": local_ip,
-    "kv_table": {},
-    "endpoint": []
-}
-
-rdma_device = rdma_devices[rank%len(rdma_devices)]
-if args.transfer_engine == 'mooncake':
+rdma_device = rdma_devices[local_rank%len(rdma_devices)]
+if args.transfer_engine == 'dlslime':
+    rdma_endpoint = RDMAEndpoint(rdma_device, ib_port=1, link_type='RoCE', qp_num=qp_num)
+elif args.transfer_engine == 'mooncake':
     engine = MooncakeTransferEngine()
     result = engine.initialize(f"{local_ip}:12001", 'P2PHANDSHAKE', 'rdma', rdma_device)
     mooncake_endpoint_info["endpoint"] = engine.get_rpc_port()
     rdma_endpoint = engine
-else:
-    rdma_endpoint = RDMAEndpoint(rdma_device, ib_port=1, link_type='RoCE', qp_num=qp_num)
+elif args.transfer_engine == 'nixl':
+    if rank < num_channels:
+        config = nixl_agent_config(True, True, args.nixl_port + rank)
+    else:
+        config = nixl_agent_config(True, True, args.nixl_port + rank)
+        # print(args.nixl_port + rank)
+    agent = nixl_agent(nixl_mode, config)
 
-torch.cuda.set_device(rank % 8)
+torch.cuda.set_device(local_rank)
 
 ttensors = [torch.ones([2 << rawsize], device=f"cuda") for rawsize in args.size]
 torch.cuda.synchronize()
 
+nixl_memory_info = []
 for idx, ttensor in enumerate(ttensors):
     if args.transfer_engine == 'dlslime':
         rdma_endpoint.register_memory_region(
@@ -102,7 +124,7 @@ for idx, ttensor in enumerate(ttensors):
             ttensor.storage_offset(),
             ttensor.numel() * ttensor.itemsize
         )
-    else:
+    elif args.transfer_engine == 'mooncake':
         result = rdma_endpoint.register_memory(
             ttensor.data_ptr() + ttensor.storage_offset(),
             ttensor.numel() * ttensor.itemsize
@@ -113,17 +135,74 @@ for idx, ttensor in enumerate(ttensors):
         )
         if result != 0:
             raise RuntimeError(f'Failed to register memory region: {result}')
+    elif args.transfer_engine == 'nixl':
+        nixl_memory_info.append((ttensor.data_ptr() + ttensor.storage_offset(), ttensor.numel() * ttensor.itemsize, local_rank, ""))
+        nixl_endpoint_info["kv_table"][f"buffer_{idx}"] = (
+            ttensor.data_ptr() + ttensor.storage_offset(),
+            ttensor.numel() * ttensor.itemsize
+        )
+
+if args.transfer_engine == 'nixl':
+    reg_descs = agent.register_memory(
+        nixl_memory_info,
+        "VRAM",
+        is_sorted=False
+    )
+    
+    if not reg_descs:  # Same as reg_descs if successful
+        print("Memory registration failed.")
+        exit()
 
 all_endpoint_info = [{} for _ in range(world_size)]
 
 if args.transfer_engine == 'dlslime':
     dist.all_gather_object(all_endpoint_info, rdma_endpoint.endpoint_info)
-else:
+elif args.transfer_engine == 'mooncake':
     dist.all_gather_object(all_endpoint_info, mooncake_endpoint_info)
+elif args.transfer_engine == 'nixl':
+    dist.all_gather_object(all_endpoint_info, nixl_endpoint_info)
 
 if args.transfer_engine == 'dlslime':
     # endpoint connect
     rdma_endpoint.connect(all_endpoint_info[(rank + num_channels) % world_size])
+elif args.transfer_engine == 'mooncake':
+    # construct connect lazily
+    pass
+elif args.transfer_engine == 'nixl':
+    if rank < num_channels:
+        # initiator
+        agent.fetch_remote_metadata("target", all_endpoint_info[peer_rank]['local_ip'], args.nixl_port + peer_rank)
+        
+        agent.send_local_metadata(all_endpoint_info[peer_rank]['local_ip'], args.nixl_port + peer_rank)
+        notifs = agent.get_new_notifs()
+        while len(notifs) == 0:
+            notifs = agent.get_new_notifs()
+
+        # Ensure remote metadata has arrived from fetch
+        ready = False
+        while not ready:
+            ready = agent.check_remote_metadata("target")
+
+        print("Ready for transfer")
+    else:
+        # target
+        ready = False
+
+        target_descs = reg_descs.trim()
+        target_desc_str = agent.get_serialized_descs(target_descs)
+
+        # Send desc list to initiator when metadata is ready
+        while not ready:
+            ready = agent.check_remote_metadata("initiator")
+
+        agent.send_notif("initiator", target_desc_str)
+
+        # # Waiting for transfer
+        # # For now the notification is just UUID, could be any python bytes.
+        # # Also can have more than UUID, and check_remote_xfer_done returns
+        # # the full python bytes, here it would be just UUID.
+        # while not agent.check_remote_xfer_done("initiator", b"UUID"):
+        #     continue
 
 start_event = torch.cuda.Event(enable_timing=True)
 end_event = torch.cuda.Event(enable_timing=True)
@@ -137,6 +216,9 @@ for idx, (rawsize, ttensor) in enumerate(zip(args.size, ttensors)):
     for _ in range(100):
         assigns = []
         all_batch_ids_to_wait = []
+        target_desc_addrs = []
+        initiator_desc_addrs = []
+        xfer_handles = []
         for assign_id in range(n_runs):
             if rank < num_channels:
                 if args.with_imm_data:
@@ -147,8 +229,8 @@ for idx, (rawsize, ttensor) in enumerate(zip(args.size, ttensors)):
                                 target_offset=0,
                                 source_offset=0,
                                 length=ttensor.numel() * ttensor.itemsize,
-                        )
-                        ],
+                            )
+                        ] * args.batch_size,
                         qpi=assign_id % qp_num,
                         imm_data=1,
                         async_op=True
@@ -167,7 +249,7 @@ for idx, (rawsize, ttensor) in enumerate(zip(args.size, ttensors)):
                                             source_offset=0,
                                             length=ttensor.numel() * ttensor.itemsize // 2,
                                         )
-                                    ],
+                                    ]  * args.batch_size,
                                     async_op=True
                                 ),
                                 fn(
@@ -178,7 +260,7 @@ for idx, (rawsize, ttensor) in enumerate(zip(args.size, ttensors)):
                                             source_offset=ttensor.numel() * ttensor.itemsize // 2,
                                             length=ttensor.numel() * ttensor.itemsize // 2,
                                         )
-                                    ],
+                                    ]  * args.batch_size,
                                     async_op=True
                                 )
                             ]
@@ -192,24 +274,41 @@ for idx, (rawsize, ttensor) in enumerate(zip(args.size, ttensors)):
                                             source_offset=0,
                                             length=ttensor.numel() * ttensor.itemsize,
                                         )
-                                    ],
+                                    ]  * args.batch_size,
                                     async_op=True
                                 )
                             ]
-                    else:
+                    elif args.transfer_engine == "mooncake":
                         batch_id = rdma_endpoint.batch_transfer_async_read(
                             f"{all_endpoint_info[peer_rank]['local_ip']}:{all_endpoint_info[peer_rank]['endpoint']}",
-                            [all_endpoint_info[rank]['kv_table'][f"buffer_{idx}"][0]],
-                            [all_endpoint_info[peer_rank]['kv_table'][f"buffer_{idx}"][0]],
-                            [ttensor.numel() * ttensor.itemsize,]
+                            [all_endpoint_info[rank]['kv_table'][f"buffer_{idx}"][0]] * args.batch_size,
+                            [all_endpoint_info[peer_rank]['kv_table'][f"buffer_{idx}"][0]] * args.batch_size,
+                            [ttensor.numel() * ttensor.itemsize,] * args.batch_size
                         )
                         if batch_id == 0:
                             print(f"error for transport")
+                    elif args.transfer_engine == "nixl":
+                        xfer_handle_batch = []
+                        for batch in range(args.batch_size):
+                            target_desc_addrs.append((all_endpoint_info[peer_rank]['kv_table'][f'buffer_{idx}'][0], ttensor.numel() * ttensor.itemsize, peer_rank % npros_per_rank))
+                            initiator_desc_addrs.append((all_endpoint_info[rank]['kv_table'][f'buffer_{idx}'][0], ttensor.numel() * ttensor.itemsize, rank % npros_per_rank))
+                            target_descs = agent.get_xfer_descs(target_desc_addrs, "VRAM", is_sorted=False)
+                            initiator_descs = agent.get_xfer_descs(initiator_desc_addrs, "VRAM", is_sorted=False)
+                            xfer_handle = agent.initialize_xfer(
+                                "READ", initiator_descs, target_descs, "target", "UUID"
+                            )
+                            if not xfer_handle:
+                                print("Creating transfer failed.")
+                                exit()
+                            state = agent.transfer(xfer_handle)
+                            xfer_handle_batch.append(xfer_handle)
+
                 if args.transfer_engine == 'dlslime':
                     assigns.extend(assign)
                 elif args.transfer_engine == 'mooncake':
                     all_batch_ids_to_wait.append(batch_id)
-
+                elif args.transfer_engine == 'nixl':
+                    xfer_handles.extend(xfer_handle_batch)
             else:
                 if args.with_imm_data:
                     assign = rdma_endpoint.recv_batch(
@@ -220,7 +319,7 @@ for idx, (rawsize, ttensor) in enumerate(zip(args.size, ttensors)):
                                 source_offset=0,
                                 length=ttensor.numel() * ttensor.itemsize,
                             )
-                        ],
+                        ] * args.batch_size,
                         qpi=assign_id % qp_num,
                         async_op=True
                     )
@@ -231,6 +330,17 @@ for idx, (rawsize, ttensor) in enumerate(zip(args.size, ttensors)):
             result = rdma_endpoint.get_batch_transfer_status(all_batch_ids_to_wait)
             if result != 0:
                 print(f"transport failure, batch IDs: {all_batch_ids_to_wait}")
+        elif args.transfer_engine == 'nixl':
+            if nixl_mode == "initiator":
+                for xfer_handle in xfer_handles:
+                    while True:
+                        state = agent.check_xfer_state(xfer_handle)
+                        if state == "ERR":
+                            print("Transfer got to Error state.")
+                            exit()
+                        elif state == "DONE":
+                            break
+                    agent.release_xfer_handle(xfer_handle)
 
     end_event.record()
     torch.cuda.synchronize()
@@ -240,7 +350,7 @@ for idx, (rawsize, ttensor) in enumerate(zip(args.size, ttensors)):
 
     if rank < num_channels:
         size_bytes = ttensor.numel() * ttensor.itemsize
-        total_transport = n_runs * size * ttensor.itemsize * 100
+        total_transport = n_runs * size * ttensor.itemsize * 100 * args.batch_size
         avg_latency = total_time / 100 / n_runs
 
         bandwidth = torch.tensor(total_transport / total_time / 1e3)
@@ -248,22 +358,24 @@ for idx, (rawsize, ttensor) in enumerate(zip(args.size, ttensors)):
         bandwidth = int(bandwidth)
 
         benchmark_data.append([
+            args.transfer_engine,
             rank,
             f'{size_bytes:,}',  # noqa: E231
+            f'{args.batch_size}',  # noqa: E231
+            f'{args.num_concurrency}',  # noqa: E231
             f'{total_transport:,}',  # noqa: E231
-            str(0),
-            str(0),
             f'{avg_latency:.3f}',  # noqa: E231
             f'{bandwidth:.3f}'  # noqa: E231
         ])
         if rank == 0:
             print(
                 [
+                    args.transfer_engine,
                     rank,
                     f'{size_bytes:,}',  # noqa: E231
+                    f'{args.batch_size}',  # noqa: E231
+                    f'{args.num_concurrency}',  # noqa: E231
                     f'{total_transport:,}',  # noqa: E231
-                    str(0),
-                    str(0),
                     f'{avg_latency:.3f}',  # noqa: E231
                     f'{bandwidth:.3f}'  # noqa: E231
                 ]
@@ -273,7 +385,7 @@ dist.barrier()
 
 if rank == 0:
     headers = [
-        'rank', 'Message Size (bytes)', 'Total Transport (bytes)', 'Target Affinity', 'Initiator Affinity', 'Avg Latency(ms)',
+        'Transfer Engine', 'rank', 'Message Size (bytes)', 'Batch Size', 'Num Concurrency', 'Total Transport (bytes)', 'Avg Latency(ms)',
         'Bandwidth(MB/s)'
     ]
     print('\nBenchmark Results:')
@@ -285,6 +397,13 @@ if rank == 0:
                 writer.writerow(headers)
             writer.writerows(benchmark_data)
         print(f'CSV saved to {args.csv_filename}')
+
+if args.transfer_engine == 'nixl':
+    if nixl_mode == "target":
+        agent.remove_remote_agent("target")
+        agent.invalidate_local_metadata(local_ip, args.nixl_port + rank)
+
+    agent.deregister_memory(reg_descs)
 
 
 dist.destroy_process_group()
