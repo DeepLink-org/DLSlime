@@ -268,8 +268,9 @@ int64_t RDMAContext::connect(const json& endpoint_info_json)
 
         // Modify QP to Ready to Receive (RTR) state
         memset(&attr, 0, sizeof(attr));
-        attr.qp_state              = IBV_QPS_RTR;
-        attr.path_mtu              = (enum ibv_mtu)std::min((uint32_t)remote_rdma_info.mtu, (uint32_t)local_rdma_info.mtu);;
+        attr.qp_state = IBV_QPS_RTR;
+        attr.path_mtu = (enum ibv_mtu)std::min((uint32_t)remote_rdma_info.mtu, (uint32_t)local_rdma_info.mtu);
+        ;
         attr.dest_qp_num           = remote_rdma_info.qpn;
         attr.rq_psn                = remote_rdma_info.psn;
         attr.max_dest_rd_atomic    = SLIME_MAX_DEST_RD_ATOMIC;
