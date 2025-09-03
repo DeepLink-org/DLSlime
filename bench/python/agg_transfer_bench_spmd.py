@@ -61,10 +61,6 @@ dist.init_process_group("cpu:gloo,cuda:nccl")
 initiator_group = dist.new_group(list(range(num_channels)), backend="cpu:gloo,cuda:nccl")
 target_group = dist.new_group(list(range(num_channels, world_size)), backend="cpu:gloo,cuda:nccl")
 
-# def local_rank() {
-#     return 
-# }
-
 if args.transfer_engine == 'mooncake':
     from mooncake.engine import TransferEngine as MooncakeTransferEngine
     mooncake_endpoint_info = {
