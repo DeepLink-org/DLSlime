@@ -38,6 +38,7 @@ void* NVShmemContext::allocBuffer(size_t size, size_t alignment)
 {
     void* ptr = nvshmem_engine::internode::alloc(size, alignment);
     cudaMemset(ptr, 0, size);
+    nvshmem_engine::internode::barrier();
     return ptr;
 }
 
@@ -52,8 +53,9 @@ void NVShmemContext::registerMemoryRegion(const std::string& mr_key,
     buffer->offset                = offset;
     buffer->length                = length;
     size_t MSG_SIZE_PER_SM        = NUM_WARP_PER_SM * MSG_SIZE_PER_WARP;
-    size_t aligned_size           = (length + MSG_SIZE_PER_SM - 1) / MSG_SIZE_PER_SM * MSG_SIZE_PER_SM + 4096;
-    size_t signal_size            = aligned_size / MSG_SIZE_PER_SM;
+    size_t num_chunks             = (length + MSG_SIZE_PER_SM - 1) / MSG_SIZE_PER_SM;
+    size_t aligned_size           = num_chunks * MSG_SIZE_PER_SM;
+    size_t signal_size            = num_chunks;
     void*  data_buffer            = allocBuffer(aligned_size, MSG_SIZE_PER_SM);
     void*  signal_buffer          = allocBuffer(signal_size, NVSHMEM_ALIGNMENT);
     buffer->nvshmem_data_buffer   = data_buffer;
@@ -70,6 +72,7 @@ void NVShmemContext::send(std::string mr_key, int dst)
     SLIME_LOG_INFO("NVSHMEM Send");
     slime::internode::send_ll(reinterpret_cast<int8_t*>(buffer->data_ptr),
                               reinterpret_cast<int8_t*>(buffer->nvshmem_data_buffer),
+                              reinterpret_cast<int8_t*>(buffer->nvshmem_signal_buffer),
                               buffer->length,
                               MSG_SIZE_PER_WARP,
                               NUM_WARP_PER_SM,
@@ -83,6 +86,7 @@ void NVShmemContext::recv(std::string mr_key, int src)
     SLIME_LOG_INFO("NVSHMEM RECV");
     slime::internode::recv_ll(reinterpret_cast<int8_t*>(buffer->data_ptr),
                               reinterpret_cast<int8_t*>(buffer->nvshmem_data_buffer),
+                              reinterpret_cast<int8_t*>(buffer->nvshmem_signal_buffer),
                               buffer->length,
                               MSG_SIZE_PER_WARP,
                               NUM_WARP_PER_SM,

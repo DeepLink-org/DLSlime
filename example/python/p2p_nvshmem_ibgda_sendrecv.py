@@ -42,7 +42,8 @@ dist.all_gather_object(object_list, nvshmem_edpt_info)
 
 nvshmem_ctx.connect_full_mesh(object_list, 0)
 
-local_tensor = torch.ones([1024], dtype=torch.float32).cuda() * (args.rank + 1)
+local_tensor = torch.ones([2048], dtype=torch.int8).cuda() * (args.rank + 1)
+print(local_tensor)
 
 nvshmem_ctx.register_memory_region(
     "buffer",
@@ -55,16 +56,17 @@ nvshmem_ctx.register_memory_region(
 
 print(f"{args.rank=}, {sum(local_tensor)}")
 
+if args.rank == 0:
+    print("Data Sending")
+    nvshmem_ctx.send("buffer", 1)
+    print(f"{args.rank=}, {sum(local_tensor.to(torch.float32))}")
+else:
+    print("Data Recving")
+    nvshmem_ctx.recv("buffer", 0)
+    print(local_tensor)
+    print(f"{args.rank=}, {sum(local_tensor.to(torch.float32))}")
 
-while True:
-    time.sleep(1)
-    if args.rank == 0:
-        print("Data Sending")
-        nvshmem_ctx.send("buffer", 1)
-        print(f"{args.rank=}, {sum(local_tensor)}")
-    else:
-        print("Data Recving")
-        nvshmem_ctx.recv("buffer", 0)
-        torch.cuda.synchronize()
-        print(f"{args.rank=}, {sum(local_tensor)}")
+torch.cuda.synchronize()
+time.sleep(1)
 
+dist.barrier()
