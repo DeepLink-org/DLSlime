@@ -24,6 +24,7 @@
 #include <vector>
 
 #include <infiniband/verbs.h>
+#include <numa.h>
 #include <stdexcept>
 
 namespace slime {
@@ -224,6 +225,22 @@ int64_t RDMAContext::init(const std::string& dev_name, uint8_t ib_port, const st
     return 0;
 }
 
+int RDMAContext::socketId()
+{
+    // Adapted from https://github.com/kvcache-ai/Mooncake.git
+    std::string   path = "/sys/class/infiniband/" + device_name_ + "/device/numa_node";
+    std::ifstream file(path);
+    if (file.is_open()) {
+        int socket_id;
+        file >> socket_id;
+        file.close();
+        return socket_id;
+    }
+    else {
+        return 0;
+    }
+}
+
 int64_t RDMAContext::connect(const json& endpoint_info_json)
 {
     SLIME_LOG_INFO("RDMA context remote connecting");
@@ -313,25 +330,31 @@ int64_t RDMAContext::connect(const json& endpoint_info_json)
 
 void RDMAContext::launch_future()
 {
-    cq_future_ = std::async(std::launch::async, [this]() -> void { cq_poll_handle(); });
+    cq_thread_ = std::thread([this]() -> void {
+        bindToSocket(socketId());
+        cq_poll_handle();
+    });
+
     for (int qpi = 0; qpi < qp_list_len_; qpi++)
-        qp_management_[qpi]->wq_future_ =
-            std::async(std::launch::async, [this, qpi]() -> void { wq_dispatch_handle(qpi); });
+        qp_management_[qpi]->wq_thread_ = std::thread([this, qpi]() -> void {
+            bindToSocket(socketId());
+            wq_dispatch_handle(qpi);
+        });
 }
 
 void RDMAContext::stop_future()
 {
     // Stop work queue dispatch
     for (int qpi = 0; qpi < qp_list_len_; ++qpi) {
-        if (!qp_management_[qpi]->stop_wq_future_ && qp_management_[qpi]->wq_future_.valid()) {
-            qp_management_[qpi]->stop_wq_future_ = true;
+        if (!qp_management_[qpi]->stop_wq_thread_ && qp_management_[qpi]->wq_thread_.joinable()) {
+            qp_management_[qpi]->stop_wq_thread_ = true;
             qp_management_[qpi]->has_runnable_event_.notify_one();
-            qp_management_[qpi]->wq_future_.get();
+            qp_management_[qpi]->wq_thread_.join();
         }
     }
 
-    if (!stop_cq_future_ && cq_future_.valid()) {
-        stop_cq_future_ = true;
+    if (!stop_cq_thread_ && cq_thread_.joinable()) {
+        stop_cq_thread_ = true;
 
         // create fake wr to wake up cq thread
         ibv_req_notify_cq(cq_, 0);
@@ -356,7 +379,7 @@ void RDMAContext::stop_future()
             ibv_post_send(qp_management_[0]->qp_, &send_wr, &bad_send_wr);
         }
         // wait thread done
-        cq_future_.get();
+        cq_thread_.join();
     }
 }
 
@@ -544,7 +567,7 @@ int64_t RDMAContext::cq_poll_handle()
     }
     if (comp_channel_ == NULL)
         SLIME_LOG_ERROR("comp_channel_ should be constructed");
-    while (!stop_cq_future_) {
+    while (!stop_cq_thread_) {
         struct ibv_cq* ev_cq;
         void*          cq_context;
         if (ibv_get_cq_event(comp_channel_, &ev_cq, &cq_context) != 0) {
@@ -559,7 +582,7 @@ int64_t RDMAContext::cq_poll_handle()
         struct ibv_wc wc[SLIME_POLL_COUNT];
 
         while (size_t nr_poll = ibv_poll_cq(cq_, SLIME_POLL_COUNT, wc)) {
-            if (stop_cq_future_)
+            if (stop_cq_thread_)
                 return 0;
             if (nr_poll < 0) {
                 SLIME_LOG_WARN("Worker: Failed to poll completion queues");
@@ -620,12 +643,12 @@ int64_t RDMAContext::wq_dispatch_handle(int qpi)
     if (comp_channel_ == NULL)
         SLIME_LOG_ERROR("comp_channel_ should be constructed");
 
-    while (!qp_management_[qpi]->stop_wq_future_) {
+    while (!qp_management_[qpi]->stop_wq_thread_) {
         std::unique_lock<std::mutex> lock(qp_management_[qpi]->assign_queue_mutex_);
         qp_management_[qpi]->has_runnable_event_.wait(lock, [this, &qpi]() {
-            return !(qp_management_[qpi]->assign_queue_.empty()) || qp_management_[qpi]->stop_wq_future_;
+            return !(qp_management_[qpi]->assign_queue_.empty()) || qp_management_[qpi]->stop_wq_thread_;
         });
-        if (qp_management_[qpi]->stop_wq_future_)
+        if (qp_management_[qpi]->stop_wq_thread_)
             return 0;
         while (!(qp_management_[qpi]->assign_queue_.empty())) {
             RDMAAssignmentSharedPtr front_assign = qp_management_[qpi]->assign_queue_.front();
