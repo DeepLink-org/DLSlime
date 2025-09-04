@@ -5,12 +5,12 @@ namespace slime {
 
 void RDMABuffer::send()
 {
-    endpoint_->addSendTask(shared_from_this());
+    // endpoint_->addSendTask(shared_from_this());
 }
 
 void RDMABuffer::recv()
 {
-    endpoint_->addRecvTask(shared_from_this());
+    // endpoint_->addRecvTask(shared_from_this());
 }
 
 void RDMABuffer::send_done_callback()
@@ -30,7 +30,6 @@ void RDMABuffer::recv_done_callback()
 bool RDMABuffer::waitSend()
 {
     std::unique_lock<std::mutex> lock(send_mutex_);
-
     if (send_completed_)
         return send_completed_;
 
