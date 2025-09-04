@@ -1,0 +1,2 @@
+add_executable(ascend_direct_perf ascend_direct_perf.cpp)
+target_link_libraries(ascend_direct_perf PUBLIC ascend_direct)
