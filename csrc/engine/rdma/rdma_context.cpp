@@ -173,8 +173,6 @@ int64_t RDMAContext::init(const std::string& dev_name, uint8_t ib_port, const st
         struct ibv_qp_init_attr qp_init_attr = {};
         qp_init_attr.send_cq                 = cq_;
         qp_init_attr.recv_cq                 = cq_;
-        qp_init_attr.sq_sig_all              = false;
-        qp_init_attr.qp_context              = this;
         qp_init_attr.qp_type                 = IBV_QPT_RC;  // Reliable Connection
         qp_init_attr.cap.max_send_wr         = SLIME_MAX_SEND_WR;
         qp_init_attr.cap.max_recv_wr         = SLIME_MAX_RECV_WR;
@@ -268,15 +266,14 @@ int64_t RDMAContext::connect(const json& endpoint_info_json)
 
         // Modify QP to Ready to Receive (RTR) state
         memset(&attr, 0, sizeof(attr));
-        attr.qp_state = IBV_QPS_RTR;
-        attr.path_mtu = (enum ibv_mtu)std::min((uint32_t)remote_rdma_info.mtu, (uint32_t)local_rdma_info.mtu);
-        ;
-        attr.dest_qp_num           = remote_rdma_info.qpn;
-        attr.rq_psn                = remote_rdma_info.psn;
-        attr.max_dest_rd_atomic    = SLIME_MAX_DEST_RD_ATOMIC;
-        attr.min_rnr_timer         = 0x12;
-        attr.ah_attr.dlid          = remote_rdma_info.lid;
-        attr.ah_attr.sl            = SLIME_SERVICE_LEVEL;
+        attr.qp_state           = IBV_QPS_RTR;
+        attr.path_mtu           = (enum ibv_mtu)std::min((uint32_t)remote_rdma_info.mtu, (uint32_t)local_rdma_info.mtu);
+        attr.dest_qp_num        = remote_rdma_info.qpn;
+        attr.rq_psn             = remote_rdma_info.psn;
+        attr.max_dest_rd_atomic = SLIME_MAX_DEST_RD_ATOMIC;
+        attr.min_rnr_timer      = 0x12;
+        attr.ah_attr.dlid       = remote_rdma_info.lid;
+        attr.ah_attr.sl         = SLIME_SERVICE_LEVEL;
         attr.ah_attr.src_path_bits = 0;
         attr.ah_attr.port_num      = ib_port_;
 
@@ -386,55 +383,96 @@ void RDMAContext::stop_future()
     }
 }
 
-RDMAAssignmentSharedPtr
+// split assignment by length
+// split assignment by size
+// split assignment batch to
+
+AssignmentBatch
+split_assign_by_max_length(OpCode opcode, const AssignmentBatch batch, callback_fn_t callback, size_t max_length)
+{
+    AssignmentBatch batch_split_after_max_length;
+    for (size_t i = 0; i < batch.size(); ++i) {
+        for (size_t j = 0; j < batch[i].length; j += max_length) {
+            batch_split_after_max_length.push_back(
+                Assignment(batch[i].mr_key,
+                           batch[i].target_offset + j,
+                           batch[i].source_offset + j,
+                           std::min(static_cast<size_t>(max_length), batch[i].length - j)));
+        }
+    }
+    return batch_split_after_max_length;
+}
+
+std::vector<AssignmentBatch>
+split_assign_by_step(OpCode opcode, const AssignmentBatch batch, callback_fn_t callback, size_t step)
+{
+    std::vector<AssignmentBatch> batch_split;
+    // int                          split_step = SLIME_MAX_CQ_DEPTH / 2;
+    for (int i = 0; i < batch.size(); i += step) {
+        auto split_batch = AssignmentBatch(batch.begin() + i, std::min(batch.end(), batch.begin() + i + step));
+        batch_split.push_back(split_batch);
+        
+    }
+    
+    return batch_split;
+}
+
+std::vector<AssignmentBatch>
+nsplit_assign_by_step(OpCode opcode, const AssignmentBatch batch, callback_fn_t callback, size_t nstep)
+{
+    std::vector<AssignmentBatch> batch_nsplit;
+    size_t                       bsize      = batch.size();
+    int                          step = (bsize + nstep - 1) / nstep;
+    return split_assign_by_step(opcode, batch, callback, step);
+}
+
+std::shared_ptr<RDMASchedulerAssignment>
 RDMAContext::submit(OpCode opcode, AssignmentBatch& batch, callback_fn_t callback, int qpi, int32_t imm_data)
 {
-    AssignmentBatch              batch_split_after_max_length;
-    std::vector<AssignmentBatch> batch_split_after_cq_depth;
+    // Step 1: Split by max length
+    size_t          length      = SLIME_MAX_LENGTH_PER_ASSIGNMENT;
+    AssignmentBatch batch_split = split_assign_by_max_length(opcode, batch, callback, length);
 
-    auto split_by_max_length = [&]() {
-        for (size_t i = 0; i < batch.size(); ++i) {
-            for (size_t j = 0; j < batch[i].length; j += SLIME_MAX_LENGTH_PER_ASSIGNMENT) {
-                batch_split_after_max_length.push_back(
-                    Assignment(batch[i].mr_key,
-                               batch[i].target_offset + j,
-                               batch[i].source_offset + j,
-                               std::min(static_cast<size_t>(SLIME_MAX_LENGTH_PER_ASSIGNMENT), batch[i].length - j)));
-            }
-        }
-    };
+    while (batch_split.size() < SLIME_AGG_QP_NUM) {
+        length      = length / 2;
+        batch_split = split_assign_by_max_length(opcode, batch_split, callback, length);
+    }
 
-    auto split_by_max_cq_depth = [&]() {
-        int split_step = SLIME_MAX_CQ_DEPTH / 2;
-        for (int i = 0; i < batch_split_after_max_length.size(); i += split_step) {
-            batch_split_after_cq_depth.push_back(AssignmentBatch(
-                batch_split_after_max_length.begin() + i,
-                std::min(batch_split_after_max_length.end(), batch_split_after_max_length.begin() + i + split_step)));
-        }
-    };
-
-    split_by_max_length();
-    split_by_max_cq_depth();
+    std::vector<int> agg_qpi_list;
     if (qpi == UNDEFINED_QPI) {
-        qpi = select_qpi();
+        agg_qpi_list = select_qpi(SLIME_AGG_QP_NUM);
+    } else {
+        for (int i = 0; i < SLIME_AGG_QP_NUM; ++i) {
+            agg_qpi_list.push_back(qpi % qp_list_len_);
+            qpi += 1;
+        }
     }
 
-    int split_size = batch_split_after_cq_depth.size();
+    SLIME_ASSERT(batch_split.size() >= SLIME_AGG_QP_NUM, "batch_split.size() < SLIME_AGG_QP_NUM");
+    std::vector<AssignmentBatch> qp_batch = nsplit_assign_by_step(opcode, batch_split, callback, SLIME_AGG_QP_NUM);
 
+    RDMAAssignmentSharedPtrBatch assigns;
+    for (int agg_idx = 0; agg_idx < SLIME_AGG_QP_NUM; ++agg_idx)
     {
-        std::unique_lock<std::mutex> lock(qp_management_[qpi]->assign_queue_mutex_);
+        size_t agg_qpi = agg_qpi_list[agg_idx];
+        std::unique_lock<std::mutex> lock(qp_management_[agg_qpi]->assign_queue_mutex_);
         RDMAAssignmentSharedPtr      rdma_assignment;
-        for (int i = 0; i < split_size; ++i) {
-            callback_fn_t split_callback = (i == split_size - 1 ? callback : [](int, int) { return 0; });
+        std::vector<AssignmentBatch> batch_split_after_cq_depth = split_assign_by_step(opcode, qp_batch[agg_idx], callback, SLIME_MAX_CQ_DEPTH / 2);
+
+        size_t split_size_this_qp = batch_split_after_cq_depth.size();
+        for (int i = 0; i < split_size_this_qp; ++i) {
+            callback_fn_t split_callback = (i == split_size_this_qp - 1 ? callback : [](int, int) { return 0; });
             rdma_assignment = std::make_shared<RDMAAssignment>(opcode, batch_split_after_cq_depth[i], split_callback);
-            qp_management_[qpi]->assign_queue_.push(rdma_assignment);
-            rdma_assignment->with_imm_data_ = (i == split_size - 1) ? (imm_data != UNDEFINED_IMM_DATA) : false;
-            rdma_assignment->imm_data_      = (i == split_size - 1) ? imm_data : UNDEFINED_IMM_DATA;
+            qp_management_[agg_qpi]->assign_queue_.push(rdma_assignment);
+            rdma_assignment->with_imm_data_ = (i == split_size_this_qp - 1) ? (imm_data != UNDEFINED_IMM_DATA) : false;
+            rdma_assignment->imm_data_      = (i == split_size_this_qp - 1) ? imm_data : UNDEFINED_IMM_DATA;
         }
 
-        // qp_management_[qpi]->has_runnable_event_.notify_one();
-        return rdma_assignment;
+        assigns.push_back(rdma_assignment);
+
+        qp_management_[agg_qpi]->has_runnable_event_.notify_one();
     }
+    return std::make_shared<RDMASchedulerAssignment>(assigns);
 }
 
 int64_t RDMAContext::post_send_batch(int qpi, RDMAAssignmentSharedPtr assign)
@@ -572,16 +610,16 @@ int64_t RDMAContext::cq_poll_handle()
         SLIME_LOG_ERROR("comp_channel_ should be constructed");
     while (!stop_cq_thread_) {
         struct ibv_cq* ev_cq;
-        // void*          cq_context;
-        // if (ibv_get_cq_event(comp_channel_, &ev_cq, &cq_context) != 0) {
-        //     SLIME_LOG_ERROR("Failed to get CQ event");
-        //     return -1;
-        // }
-        // ibv_ack_cq_events(ev_cq, 1);
-        // if (ibv_req_notify_cq(ev_cq, 0) != 0) {
-        //     SLIME_LOG_ERROR("Failed to request CQ notification");
-        //     return -1;
-        // }
+        void*          cq_context;
+        if (ibv_get_cq_event(comp_channel_, &ev_cq, &cq_context) != 0) {
+            SLIME_LOG_ERROR("Failed to get CQ event");
+            return -1;
+        }
+        ibv_ack_cq_events(ev_cq, 1);
+        if (ibv_req_notify_cq(ev_cq, 0) != 0) {
+            SLIME_LOG_ERROR("Failed to request CQ notification");
+            return -1;
+        }
         struct ibv_wc wc[SLIME_POLL_COUNT];
 
         while (size_t nr_poll = ibv_poll_cq(cq_, SLIME_POLL_COUNT, wc)) {
@@ -648,6 +686,9 @@ int64_t RDMAContext::wq_dispatch_handle(int qpi)
 
     while (!qp_management_[qpi]->stop_wq_thread_) {
         std::unique_lock<std::mutex> lock(qp_management_[qpi]->assign_queue_mutex_);
+        qp_management_[qpi]->has_runnable_event_.wait(lock, [this, &qpi]() {
+            return !(qp_management_[qpi]->assign_queue_.empty()) || qp_management_[qpi]->stop_wq_thread_;
+        });
         if (qp_management_[qpi]->stop_wq_thread_)
             return 0;
         while (!(qp_management_[qpi]->assign_queue_.empty())) {
