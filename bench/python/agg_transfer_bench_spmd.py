@@ -9,8 +9,6 @@ from tabulate import tabulate
 import torch
 import torch.distributed as dist
 
-from dlslime import Assignment, RDMAEndpoint, available_nic
-
 import argparse
 
 parser = argparse.ArgumentParser()
@@ -61,6 +59,9 @@ dist.init_process_group("cpu:gloo,cuda:nccl")
 initiator_group = dist.new_group(list(range(num_channels)), backend="cpu:gloo,cuda:nccl")
 target_group = dist.new_group(list(range(num_channels, world_size)), backend="cpu:gloo,cuda:nccl")
 
+if args.transfer_engine == 'dlslime' or args.transfer_engine == 'mooncake':
+    from dlslime import Assignment, RDMAEndpoint, available_nic
+
 if args.transfer_engine == 'mooncake':
     from mooncake.engine import TransferEngine as MooncakeTransferEngine
     mooncake_endpoint_info = {
@@ -87,14 +88,16 @@ qp_num = args.qp_num if args.qp_num is not None else int(os.getenv('SLIME_QP_NUM
 if rank == 0:
     print(f'Local_ip: {local_ip}')
     print(f'mode: RDMA RC {args.opcode}')
+    print(f'batch size: {args.batch_size}')
     print(f'num concurrency: {args.num_concurrency}')
     print(f'qp num: {args.qp_num}')
 
 benchmark_data = []
 
-rdma_devices = available_nic()
+if args.transfer_engine in ['dlslime', 'mooncake']:
+    rdma_devices = available_nic()
+    rdma_device = rdma_devices[local_rank%len(rdma_devices)]
 
-rdma_device = rdma_devices[local_rank%len(rdma_devices)]
 if args.transfer_engine == 'dlslime':
     rdma_endpoint = RDMAEndpoint(rdma_device, ib_port=1, link_type='RoCE', qp_num=qp_num)
 elif args.transfer_engine == 'mooncake':
