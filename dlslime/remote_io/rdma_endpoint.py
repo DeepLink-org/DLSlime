@@ -168,6 +168,7 @@ class RDMAEndpoint(BaseEndpoint):
             return rdma_assignment
 
     def read_batch_with_callback(self, batch: List[Assignment], callback: Callable[[int], None]):
+        raise NotImplementedError("Under reconstruction")
         callback_obj_id = id(callback)
 
         def delete_assignment_callback(code: int, _: int):

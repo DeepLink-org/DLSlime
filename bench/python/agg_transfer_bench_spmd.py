@@ -115,6 +115,7 @@ torch.cuda.set_device(local_rank)
 ttensors = [torch.ones([2 << rawsize], device=f"cuda") for rawsize in args.size]
 torch.cuda.synchronize()
 
+print("initiate start")
 nixl_memory_info = []
 for idx, ttensor in enumerate(ttensors):
     if args.transfer_engine == 'dlslime':
@@ -208,8 +209,9 @@ start_event = torch.cuda.Event(enable_timing=True)
 end_event = torch.cuda.Event(enable_timing=True)
 
 n_runs = args.num_concurrency
-
+print(f"initiate done, benchmark start")
 for idx, (rawsize, ttensor) in enumerate(zip(args.size, ttensors)):
+    print(f"benchmark s={ttensor.numel() * ttensor.itemsize}")
     size = 2 << rawsize
     total_time = 0.0
     start_event.record()
@@ -238,46 +240,19 @@ for idx, (rawsize, ttensor) in enumerate(zip(args.size, ttensors)):
                 else:
                     if args.transfer_engine == "dlslime":
                         fn = rdma_endpoint.read_batch if args.opcode == "read" else rdma_endpoint.write_batch
-                        if n_runs == 1:
-                            # split to 2 for multi_qp
-                            assign = [
-                                fn(
-                                    batch=[
-                                        Assignment(
-                                            mr_key=f"buffer_{idx}",
-                                            target_offset=0,
-                                            source_offset=0,
-                                            length=ttensor.numel() * ttensor.itemsize // 2,
-                                        )
-                                    ]  * args.batch_size,
-                                    async_op=True
-                                ),
-                                fn(
-                                    batch=[
-                                        Assignment(
-                                            mr_key=f"buffer_{idx}",
-                                            target_offset=ttensor.numel() * ttensor.itemsize // 2,
-                                            source_offset=ttensor.numel() * ttensor.itemsize // 2,
-                                            length=ttensor.numel() * ttensor.itemsize // 2,
-                                        )
-                                    ]  * args.batch_size,
-                                    async_op=True
-                                )
-                            ]
-                        else:
-                            assign = [
-                                fn(
-                                    batch=[
-                                        Assignment(
-                                            mr_key=f"buffer_{idx}",
-                                            target_offset=0,
-                                            source_offset=0,
-                                            length=ttensor.numel() * ttensor.itemsize,
-                                        )
-                                    ]  * args.batch_size,
-                                    async_op=True
-                                )
-                            ]
+                        assign = [
+                            fn(
+                                batch=[
+                                    Assignment(
+                                        mr_key=f"buffer_{idx}",
+                                        target_offset=0,
+                                        source_offset=0,
+                                        length=ttensor.numel() * ttensor.itemsize,
+                                    )
+                                ]  * args.batch_size,
+                                async_op=True
+                            )
+                        ]
                     elif args.transfer_engine == "mooncake":
                         batch_id = rdma_endpoint.batch_transfer_async_read(
                             f"{all_endpoint_info[peer_rank]['local_ip']}:{all_endpoint_info[peer_rank]['endpoint']}",
