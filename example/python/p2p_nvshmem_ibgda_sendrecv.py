@@ -4,6 +4,7 @@ import time
 
 import torch
 import torch.distributed as dist
+import torch.utils.dlpack
 
 from dlslime import _slime_c
 
@@ -42,7 +43,10 @@ dist.all_gather_object(object_list, nvshmem_edpt_info)
 
 nvshmem_ctx.connect_full_mesh(object_list, 0)
 
-local_tensor = torch.ones([2048], dtype=torch.int8).cuda() * (args.rank + 1)
+local_dlpack_tensor = nvshmem_ctx.alloc_dlpack_tensor(2048, 2048)
+local_tensor = torch.from_dlpack(local_dlpack_tensor)
+if args.rank == 0:
+    local_tensor.add_(1)
 print(local_tensor)
 
 nvshmem_ctx.register_memory_region(
@@ -52,21 +56,28 @@ nvshmem_ctx.register_memory_region(
     local_tensor.numel() * local_tensor.itemsize
 )
 
-# TODO: Allocate Buffer
-
 print(f"{args.rank=}, {sum(local_tensor)}")
 
-if args.rank == 0:
-    print("Data Sending")
-    nvshmem_ctx.send("buffer", 1)
-    print(f"{args.rank=}, {sum(local_tensor.to(torch.float32))}")
-else:
-    print("Data Recving")
-    nvshmem_ctx.recv("buffer", 0)
-    print(local_tensor)
-    print(f"{args.rank=}, {sum(local_tensor.to(torch.float32))}")
+start_event = torch.cuda.Event(enable_timing=True)
+end_event = torch.cuda.Event(enable_timing=True)
 
+start_event.record()
+for i in range(10):
+    if args.rank == 0:
+        print("Data Sending")
+        nvshmem_ctx.send("buffer", 1)
+        print(f"{args.rank=}, {sum(local_tensor.to(torch.float32))}")
+    else:
+        print("Data Recving")
+        nvshmem_ctx.recv("buffer", 0)
+        print(local_tensor)
+        print(f"{args.rank=}, {sum(local_tensor.to(torch.float32))}")
+torch.cuda.synchronize()    
+end_event.record()
+
+print(start_event.elapsed_time(end_event))
 torch.cuda.synchronize()
 time.sleep(1)
 
+print("done")
 dist.barrier()

@@ -38,7 +38,6 @@ __global__ void send_ll_kernel(int8_t* data, int8_t* buffer, int8_t* signal_buff
         auto signal_ptr = reinterpret_cast<uintptr_t>(signal_buffer) + blockIdx.x;
         deep_ep::nvshmemi_ibgda_amo_nonfetch_add(reinterpret_cast<int8_t*>(signal_ptr), 1, dst_rank, 0);
     }
-
 }
 
 __global__ void recv_ll_kernel(int8_t* data, int8_t* buffer, int8_t* signal_buffer, size_t length, size_t msg_size_per_warp, size_t num_warps_per_sm, int rank, int src_rank) {
@@ -55,12 +54,11 @@ __global__ void recv_ll_kernel(int8_t* data, int8_t* buffer, int8_t* signal_buff
 
     __syncthreads();
 
-    // __syncthreads();
     for (int i = 0; i < msg_size_per_thread; ++i)
     {
         int idx = i + threadIdx.x * msg_size_per_thread + blockIdx.x * blockDim.x * msg_size_per_thread;
         if (idx < length)
-            data[idx] = signal_buffer[blockIdx.x];
+            data[idx] = buffer[idx];
     }
     __syncthreads();
 

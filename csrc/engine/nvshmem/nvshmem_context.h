@@ -43,12 +43,20 @@ public:
 
     void* allocBuffer(size_t size, size_t alignment);
 
+    DLManagedTensor* allocDLPackTensor(size_t size, size_t alignment);
+
     void
     registerMemoryRegion(const std::string& mr_key, const uintptr_t data_ptr, const int offset, const size_t length);
 
     void send(std::string mr_key, int dst);
 
     void recv(std::string mr_key, int src);
+
+    void barrier();
+
+    int gpu_device_id() {
+        return gpu_device_id_;
+    }
 
 private:
     int rank_;

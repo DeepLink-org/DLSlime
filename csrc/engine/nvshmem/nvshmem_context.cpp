@@ -1,3 +1,6 @@
+#include "engine/dlpack.h"
+
+#include "engine/nvshmem/kernels/api.cuh"
 #include "engine/nvshmem/kernels/exception.cuh"
 #include "engine/nvshmem/kernels/internode_ll.cuh"
 
@@ -92,6 +95,11 @@ void NVShmemContext::recv(std::string mr_key, int src)
                               NUM_WARP_PER_SM,
                               rank_,
                               src);
+}
+
+void NVShmemContext::barrier()
+{
+    slime::nvshmem_engine::internode::barrier();
 }
 
 }  // namespace slime

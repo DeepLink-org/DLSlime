@@ -1,4 +1,5 @@
 #include "engine/assignment.h"
+#include "engine/dlpack.h"
 
 #ifdef BUILD_NVLINK
 #include "engine/nvlink/memory_pool.h"
@@ -38,6 +39,44 @@
 using json = nlohmann::json;
 
 namespace py = pybind11;
+
+#ifdef BUILD_NVSHMEM
+
+namespace slime {
+
+py::object alloc_dlpack_tensor(slime::NVShmemContext& self, size_t size, size_t alignment)
+{
+    void*            ptr        = self.allocBuffer(size, alignment);
+    DLManagedTensor* dlm_tensor = new DLManagedTensor();
+    DLTensor&        tensor     = dlm_tensor->dl_tensor;
+    tensor.data                 = ptr;
+    tensor.device               = DLDevice{.device_type = DLDeviceType::kDLCUDA, .device_id = self.gpu_device_id()};
+    tensor.dtype                = DLDataType{.code = 0, .bits = 8, .lanes = 1};
+    tensor.ndim                 = static_cast<int>(1);
+    long    aligned_size        = (size + alignment - 1) / alignment * alignment;
+    int64_t shape[]             = {aligned_size};
+    int64_t strides[]           = {1};
+    tensor.shape                = shape;
+    tensor.strides              = strides;
+    tensor.byte_offset          = 0;
+    dlm_tensor->manager_ctx     = nullptr;
+    dlm_tensor->deleter         = nullptr;
+
+    py::capsule capsule(dlm_tensor, "dltensor", [](PyObject* obj) {
+        if (PyCapsule_IsValid(obj, "dltensor")) {
+            DLManagedTensor* mt = static_cast<DLManagedTensor*>(PyCapsule_GetPointer(obj, "dltensor"));
+            if (mt && mt->deleter) {
+                mt->deleter(mt);
+            }
+        }
+    });
+
+    return capsule;
+}
+
+}  // namespace slime
+
+#endif
 
 PYBIND11_MODULE(_slime_c, m)
 {
@@ -107,7 +146,8 @@ PYBIND11_MODULE(_slime_c, m)
         .def("get_local_nvshmem_unique_id", &slime::NVShmemContext::getLocalNVShmemUniqueId)
         .def("register_memory_region", &slime::NVShmemContext::registerMemoryRegion)
         .def("send", &slime::NVShmemContext::send)
-        .def("recv", &slime::NVShmemContext::recv);
+        .def("recv", &slime::NVShmemContext::recv)
+        .def("alloc_dlpack_tensor", &slime::alloc_dlpack_tensor);
 #endif
 
 #ifdef BUILD_NVLINK
