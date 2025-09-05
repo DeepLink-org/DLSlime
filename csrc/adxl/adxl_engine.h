@@ -5,6 +5,9 @@
 #include <vector>
 
 // Mock class for testing
+//
+// Since Huawei's ADXL is not opened to public yet, we put a mock ADXL class here
+// You should replace this class if you get Huawei's ADXL lib
 
 namespace adxl {
 
