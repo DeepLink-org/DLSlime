@@ -1,11 +1,13 @@
 #pragma once
 
-#include "adxl/adxl_engine.h"
-#include "engine/assignment.h"
 #include <map>
 #include <memory>
 #include <string>
 #include <unordered_set>
+
+#include "adxl/adxl_engine.h"
+#include "engine/assignment.h"
+#include "utils/logging.h"
 
 namespace slime {
 

@@ -1,20 +1,30 @@
 #include "engine/ascend_direct_transport/ascend_direct_transport.h"
 
-#include "adxl/adxl_engine.h"
-#include "ascend_direct_transport.h"
 #include <memory>
 #include <string>
+
+#include "adxl/adxl_engine.h"
+#include "ascend_direct_transport.h"
+#include "engine/assignment.h"
 
 namespace slime {
 
 AscendDirectContext::~AscendDirectContext()
 {
+    std::vector<uintptr_t> addrs;
     for (auto& p : addr_to_memhandle_) {
-        unregister_memory_region(p.first);
+        addrs.push_back(p.first);
+    }
+    for (uintptr_t a : addrs) {
+        unregister_memory_region(a);
     }
 
-    for (const std::string adxl_name : connected_engines_) {
-        disconnect(adxl_name);
+    std::vector<std::string> adxl_names;
+    for (const std::string name : connected_engines_) {
+        adxl_names.push_back(name);
+    }
+    for (const std::string& name : adxl_names) {
+        disconnect(name);
     }
 
     adxl_.reset();
@@ -101,6 +111,7 @@ int AscendDirectContext::unregister_memory_region(uintptr_t addr)
     auto iter = addr_to_memhandle_.find(addr);
     if (iter == addr_to_memhandle_.end()) {
         SLIME_LOG_WARN("Unregister a non-exist memory ", addr);
+        return -1;
     }
     adxl_->DeregisterMem(addr_to_memhandle_[addr]);
     addr_to_memhandle_.erase(addr);
