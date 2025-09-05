@@ -22,5 +22,9 @@ target_include_directories(recv_test PUBLIC ${ZeroMQ_INCLUDE_DIRS})
 target_link_libraries(
     recv_test
     PUBLIC
-    _slime_engine _slime_rdma gflags zmq
+    _slime_engine _slime_rdma gflags zmq pthread
 )
+
+if (BUILD_ASCEND_DIRECT)
+    add_subdirectory(ascend_direct)
+endif()

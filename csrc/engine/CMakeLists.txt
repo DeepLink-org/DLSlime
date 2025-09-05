@@ -20,5 +20,9 @@ install(
 add_subdirectory(rdma)
 
 if (BUILD_NVLINK)
-add_subdirectory(nvlink)
+    add_subdirectory(nvlink)
+endif()
+
+if (BUILD_ASCEND_DIRECT)
+    add_subdirectory(ascend_direct_transport)
 endif()
