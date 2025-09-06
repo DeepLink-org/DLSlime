@@ -20,7 +20,7 @@ parser.add_argument('--with-imm-data', action='store_true', help='with-imm-data'
 parser.add_argument('--save-csv', action='store_true', help='Save benchmark results to CSV file')
 parser.add_argument('--csv-filename', type=str, default='./output.csv', help='Filename for CSV output')
 parser.add_argument('--qp-num', type=int, default=None, help='Queue Pair number for RDMA operations')
-parser.add_argument('--transfer-engine', choices=['dlslime', 'mooncake', 'nixl'], type=str, default='dlslime')
+parser.add_argument('--transfer-engine', choices=['dlslime', 'mooncake', 'nixl', 'uccl_p2p'], type=str, default='dlslime')
 parser.add_argument('--nixl-port', default=5555, type=int)
 
 
@@ -79,6 +79,12 @@ elif args.transfer_engine == 'nixl':
         nixl_mode = "initiator"
     else:
         nixl_mode = "target"
+elif args.transfer_engine == 'uccl_p2p':
+    os.environ["UCCL_RCMODE"] = "1"
+    from uccl import p2p
+    uccl_endpoint_info = {
+        "kv_table": {}
+    }
 
 if args.with_imm_data and args.opcode != 'write':
     raise ValueError('Immediate data can only be used with write operations.')
@@ -112,6 +118,10 @@ elif args.transfer_engine == 'nixl':
         config = nixl_agent_config(True, True, args.nixl_port + rank)
         # print(args.nixl_port + rank)
     agent = nixl_agent(nixl_mode, config)
+elif args.transfer_engine == 'uccl_p2p':
+    ep = p2p.Endpoint(local_rank, 4)
+    local_metadata = ep.get_endpoint_metadata()
+    uccl_endpoint_info['metadata'] = local_metadata
 
 torch.cuda.set_device(local_rank)
 
@@ -145,6 +155,19 @@ for idx, ttensor in enumerate(ttensors):
             ttensor.data_ptr() + ttensor.storage_offset(),
             ttensor.numel() * ttensor.itemsize
         )
+    elif args.transfer_engine == 'uccl_p2p':
+        ok, mr_id = ep.reg(
+            ttensor.data_ptr() + ttensor.storage_offset(),
+            ttensor.numel() * ttensor.itemsize
+        )
+        assert ok
+        mooncake_endpoint_info["kv_table"][f"buffer_{idx}"] = (
+            ttensor.data_ptr() + ttensor.storage_offset(),
+            ttensor.numel() * ttensor.itemsize,
+            mr_id
+        )
+        if result != 0:
+            raise RuntimeError(f'Failed to register memory region: {result}')
 
 if args.transfer_engine == 'nixl':
     reg_descs = agent.register_memory(
