@@ -8,6 +8,7 @@ from tabulate import tabulate
 
 import torch
 import torch.distributed as dist
+from torch.distributed import distributed_c10d
 
 import argparse
 
@@ -15,12 +16,13 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--batch-size', type=int, default=1)
 parser.add_argument('--size', nargs='+', type=int, default=[n for n in range(8, 25)])
 parser.add_argument('--num-concurrency', type=int, default=16)
+parser.add_argument('--num-iteration', type=int, default=100)
 parser.add_argument('--opcode', type=str, choices=['read', 'write'], default='read')
 parser.add_argument('--with-imm-data', action='store_true', help='with-imm-data')
 parser.add_argument('--save-csv', action='store_true', help='Save benchmark results to CSV file')
 parser.add_argument('--csv-filename', type=str, default='./output.csv', help='Filename for CSV output')
 parser.add_argument('--qp-num', type=int, default=None, help='Queue Pair number for RDMA operations')
-parser.add_argument('--transfer-engine', choices=['dlslime', 'mooncake', 'nixl', 'uccl_p2p'], type=str, default='dlslime')
+parser.add_argument('--transfer-engine', choices=['dlslime', 'mooncake', 'nixl', 'nccl'], type=str, default='dlslime')
 parser.add_argument('--nixl-port', default=5555, type=int)
 
 
@@ -79,12 +81,6 @@ elif args.transfer_engine == 'nixl':
         nixl_mode = "initiator"
     else:
         nixl_mode = "target"
-elif args.transfer_engine == 'uccl_p2p':
-    os.environ["UCCL_RCMODE"] = "1"
-    from uccl import p2p
-    uccl_endpoint_info = {
-        "kv_table": {}
-    }
 
 if args.with_imm_data and args.opcode != 'write':
     raise ValueError('Immediate data can only be used with write operations.')
@@ -118,10 +114,6 @@ elif args.transfer_engine == 'nixl':
         config = nixl_agent_config(True, True, args.nixl_port + rank)
         # print(args.nixl_port + rank)
     agent = nixl_agent(nixl_mode, config)
-elif args.transfer_engine == 'uccl_p2p':
-    ep = p2p.Endpoint(local_rank, 4)
-    local_metadata = ep.get_endpoint_metadata()
-    uccl_endpoint_info['metadata'] = local_metadata
 
 torch.cuda.set_device(local_rank)
 
@@ -155,19 +147,12 @@ for idx, ttensor in enumerate(ttensors):
             ttensor.data_ptr() + ttensor.storage_offset(),
             ttensor.numel() * ttensor.itemsize
         )
-    elif args.transfer_engine == 'uccl_p2p':
-        ok, mr_id = ep.reg(
-            ttensor.data_ptr() + ttensor.storage_offset(),
-            ttensor.numel() * ttensor.itemsize
-        )
-        assert ok
-        mooncake_endpoint_info["kv_table"][f"buffer_{idx}"] = (
-            ttensor.data_ptr() + ttensor.storage_offset(),
-            ttensor.numel() * ttensor.itemsize,
-            mr_id
-        )
-        if result != 0:
-            raise RuntimeError(f'Failed to register memory region: {result}')
+    elif args.transfer_engine == 'nccl':
+        os.environ["NCCL_P2P_DISABLE"]="1"
+        os.environ["NCCL_SHM_DISABLE"]="1"
+        os.environ["NCCL_P2P_NET_CHUNKSIZE"]="524288"
+        os.environ["NCCL_BUFFSIZE"]="8388608"
+        os.environ["NCCL_IB_QPS_PER_CONNECTION"]="8" 
 
 if args.transfer_engine == 'nixl':
     reg_descs = agent.register_memory(
@@ -192,6 +177,9 @@ elif args.transfer_engine == 'nixl':
 if args.transfer_engine == 'dlslime':
     # endpoint connect
     rdma_endpoint.connect(all_endpoint_info[(rank + num_channels) % world_size])
+elif args.transfer_engine == 'nccl':
+    # construction by torch.distributed
+    pass
 elif args.transfer_engine == 'mooncake':
     # construct connect lazily
     pass
@@ -241,7 +229,7 @@ for idx, (rawsize, ttensor) in enumerate(zip(args.size, ttensors)):
     size = 2 << rawsize
     total_time = 0.0
     start_event.record()
-    for _ in range(100):
+    for iter_id in range(args.num_iteration):
         assigns = []
         all_batch_ids_to_wait = []
         target_desc_addrs = []
@@ -303,6 +291,12 @@ for idx, (rawsize, ttensor) in enumerate(zip(args.size, ttensors)):
                                 exit()
                             state = agent.transfer(xfer_handle)
                             xfer_handle_batch.append(xfer_handle)
+                    elif args.transfer_engine == "nccl":
+                        reqs = []
+                        for batch_id in range(args.batch_size):
+                            send_op = distributed_c10d.P2POp(dist.isend, ttensor, peer_rank, tag=iter_id * args.batch_size + batch_id)
+                            reqs.extend([send_op])
+                        assigns.extend(distributed_c10d.batch_isend_irecv(reqs))
 
                 if args.transfer_engine == 'dlslime':
                     assigns.extend(assign)
@@ -311,21 +305,29 @@ for idx, (rawsize, ttensor) in enumerate(zip(args.size, ttensors)):
                 elif args.transfer_engine == 'nixl':
                     xfer_handles.extend(xfer_handle_batch)
             else:
-                if args.with_imm_data:
-                    assign = rdma_endpoint.recv_batch(
-                        batch=[
-                            Assignment(
-                                mr_key=f"buffer_{idx}",
-                                target_offset=0,
-                                source_offset=0,
-                                length=ttensor.numel() * ttensor.itemsize,
-                            )
-                        ] * args.batch_size,
-                        qpi=assign_id % qp_num,
-                        async_op=True
-                    )
-                    assigns.append(assign)
-        if args.transfer_engine == 'dlslime':
+                if args.transfer_engine == 'dlslime':
+                    if args.with_imm_data:
+                        assign = rdma_endpoint.recv_batch(
+                            batch=[
+                                Assignment(
+                                    mr_key=f"buffer_{idx}",
+                                    target_offset=0,
+                                    source_offset=0,
+                                    length=ttensor.numel() * ttensor.itemsize,
+                                )
+                            ] * args.batch_size,
+                            qpi=assign_id % qp_num,
+                            async_op=True
+                        )
+                        assigns.append(assign)
+                elif args.transfer_engine == 'nccl':
+                    reqs = []
+                    for batch_id in range(args.batch_size):
+                        recv_op = distributed_c10d.P2POp(dist.irecv, ttensor, peer_rank, tag=iter_id * args.batch_size + batch_id)
+                        reqs.extend([recv_op])
+                    assigns.extend(distributed_c10d.batch_isend_irecv(reqs))
+
+        if args.transfer_engine in ['dlslime', 'nccl']:
             [assign.wait() for assign in assigns]
         elif args.transfer_engine == 'mooncake':
             result = rdma_endpoint.get_batch_transfer_status(all_batch_ids_to_wait)
@@ -342,6 +344,7 @@ for idx, (rawsize, ttensor) in enumerate(zip(args.size, ttensors)):
                         elif state == "DONE":
                             break
                     agent.release_xfer_handle(xfer_handle)
+        torch.cuda.synchronize()
 
     end_event.record()
     torch.cuda.synchronize()
@@ -351,8 +354,8 @@ for idx, (rawsize, ttensor) in enumerate(zip(args.size, ttensors)):
 
     if rank < num_channels:
         size_bytes = ttensor.numel() * ttensor.itemsize
-        total_transport = n_runs * size * ttensor.itemsize * 100 * args.batch_size
-        avg_latency = total_time / 100 / n_runs
+        total_transport = n_runs * size * ttensor.itemsize * args.num_iteration * args.batch_size
+        avg_latency = total_time / args.num_iteration / n_runs
 
         bandwidth = torch.tensor(total_transport / total_time / 1e3)
         dist.all_reduce(bandwidth, group=initiator_group)
