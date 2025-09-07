@@ -151,12 +151,14 @@ public:
     /* RDMA Link Construction */
     int64_t connect(const json& endpoint_info_json);
     /* Submit an assignment */
-    RDMAAssignmentSharedPtr submit(OpCode           opcode,
-                                   AssignmentBatch& assignment,
-                                   std::shared_ptr<rdma_metrics_t> metrics = nullptr,
-                                   callback_fn_t    callback = nullptr,
-                                   int              qpi      = UNDEFINED_QPI,
-                                   int32_t          imm_data = UNDEFINED_IMM_DATA);
+
+    RDMAAssignmentSharedPtr submit(OpCode opcode, AssignmentBatch& batch, callback_fn_t callback = nullptr, int qpi = UNDEFINED_QPI, int32_t imm_data = UNDEFINED_IMM_DATA);
+    // RDMAAssignmentSharedPtr submit(OpCode           opcode,
+    //                                AssignmentBatch& assignment,
+    //                                std::shared_ptr<rdma_metrics_t> metrics = nullptr,
+    //                                callback_fn_t    callback = nullptr,
+    //                                int              qpi      = UNDEFINED_QPI,
+    //                                int32_t          imm_data = UNDEFINED_IMM_DATA);
 
     void launch_future();
     void stop_future();
@@ -212,6 +214,8 @@ private:
     typedef struct qp_management {
         /* queue peer list */
         struct ibv_qp* qp_{nullptr};
+        struct ibv_cq* cq_t_{nullptr};
+        struct ibv_comp_channel* comp_channe_t_{nullptr};
 
         /* RDMA Exchange Information */
         rdma_info_t remote_rdma_info_;
@@ -259,7 +263,8 @@ private:
     bool connected_   = false;
 
     /* async cq handler */
-    std::future<void> cq_future_;
+    //std::future<void> cq_future_;
+    std::vector<std::future<void>> cq_futures_s_; // one cq future for each qp
     std::atomic<bool> stop_cq_future_{false};
 
 
@@ -269,6 +274,7 @@ private:
     
     /* Completion Queue Polling */
     int64_t cq_poll_handle();
+    int64_t cq_poll_handle(int qpi);
     /* Working Queue Dispatch */
     int64_t wq_dispatch_handle(int qpi);
 

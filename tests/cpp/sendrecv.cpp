@@ -155,21 +155,21 @@ int singleTest(std::shared_ptr<RDMAEndpoint> end_point,
     }
     auto start = std::chrono::high_resolution_clock::now();
     for (size_t i = 0; i < iterations; i++) {
-        auto buffer = std::make_shared<RDMABuffer>(buf->endpoint_, buf->ptrs_, buf->offset_, buf->data_size_);
-        if (FLAGS_send) {
-            buffer->send();
-            futures.emplace_back(std::async(std::launch::async, [&buffer, &completed]() {
-                buffer->waitSend();
-                completed++;
-            }));
-        }
-        else if (FLAGS_recv) {
-            buffer->recv();
-            futures.emplace_back(std::async(std::launch::async, [&buffer, &completed]() {
-                buffer->waitRecv();
-                completed++;
-            }));
-        }
+        // //auto buffer = std::make_shared<RDMABuffer>(buf->endpoint_, buf->ptrs_, buf->offset_, buf->data_size_);
+        // if (FLAGS_send) {
+        //     buffer->send();
+        //     futures.emplace_back(std::async(std::launch::async, [&buffer, &completed]() {
+        //         buffer->waitSend();
+        //         completed++;
+        //     }));
+        // }
+        // else if (FLAGS_recv) {
+        //     buffer->recv();
+        //     futures.emplace_back(std::async(std::launch::async, [&buffer, &completed]() {
+        //         buffer->waitRecv();
+        //         completed++;
+        //     }));
+        // }
     }
     for (auto& fut : futures) {
         fut.wait();

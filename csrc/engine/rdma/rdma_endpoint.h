@@ -16,7 +16,7 @@
 
 #include "rdma_common.h"
 
-#define MAX_META_BATCH_SIZE 8
+#define MAX_META_BATCH_SIZE 128
 #define MAX_META_BUFFER_SIZE 64
 
 namespace slime {
@@ -69,6 +69,8 @@ class RDMAEndpoint: public std::enable_shared_from_this<RDMAEndpoint> {
 public:
     explicit RDMAEndpoint(const std::string& dev_name, uint8_t ib_port, const std::string& link_type, size_t qp_num);
 
+    explicit RDMAEndpoint(const std::string& data_dev_name, const std::string& meta_dev_name, uint8_t ib_port, const std::string& link_type, size_t qp_num);
+
     ~RDMAEndpoint();
 
     void connect(const json& data_ctx_info, const json& meta_ctx_info);
@@ -97,7 +99,10 @@ public:
     {
         return meta_ctx_;
     }
-
+    int MetaCtxQPNum()
+    {
+        return meta_ctx_qp_num_;
+    }
     int dataCtxQPNum()
     {
         return data_ctx_qp_num_;

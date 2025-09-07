@@ -19,7 +19,10 @@ RDMAAssignment::RDMAAssignment(OpCode opcode, AssignmentBatch& batch, std::share
         batch_[cnt].length        = assignment.length;
         cnt += 1;
     }
-    metrics_ = metrics;
+    if (metrics == nullptr)
+        metrics_ = std::make_shared<rdma_metrics_t>();
+    else
+        metrics_ = metrics;
     callback_info_ = std::make_shared<callback_info_t>(opcode, batch_size_, metrics, callback);
 }
 
