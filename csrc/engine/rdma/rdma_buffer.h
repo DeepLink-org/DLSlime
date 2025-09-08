@@ -27,7 +27,6 @@ public:
     RDMABuffer(std::shared_ptr<RDMAEndpoint> endpoint, storage_view_batch_t& batch):
         endpoint_(endpoint), storage_view_batch_(std::move(batch))
     {
-        
     }
 
     RDMABuffer(std::shared_ptr<RDMAEndpoint> endpoint,
@@ -35,19 +34,16 @@ public:
                std::vector<size_t>           offset,
                std::vector<size_t>           data_size)
     {
-        metrics_      = std::make_shared<rdma_metrics_t>();
-        meta_metrics_ = std::make_shared<rdma_metrics_t>();
-        data_metrics_ = std::make_shared<rdma_metrics_t>();
-        batch_size_   = ptrs.size();
-        ptrs_         = ptrs;
-        offset_       = offset;
-        data_size_    = data_size;
+
+        batch_size_ = ptrs.size();
+        ptrs_       = ptrs;
+        offset_     = offset;
+        data_size_  = data_size;
         for (uint32_t i = 0; i < batch_size_; ++i) {
             storage_view_t view{.data_ptr = ptrs[i], .storage_offset = offset[i], .length = data_size[i]};
             storage_view_batch_.push_back(view);
         }
-        endpoint_             = endpoint;
-        metrics_->buffer_init = std::chrono::steady_clock::now();
+        endpoint_ = endpoint;
     }
 
     ~RDMABuffer() = default;
@@ -74,7 +70,6 @@ public:
     void get_time();
 
 private:
-
     storage_view_batch_t storage_view_batch_;
 
     std::shared_ptr<RDMAEndpoint> endpoint_;

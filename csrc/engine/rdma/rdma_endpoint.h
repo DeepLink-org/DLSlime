@@ -16,14 +16,13 @@
 
 #include "rdma_common.h"
 
-#define MAX_META_BATCH_SIZE 128
+#define MAX_META_BATCH_SIZE 64
 #define MAX_META_BUFFER_SIZE 64
 
 namespace slime {
 
 class RDMABuffer;
 class RDMAEndpoint;
-
 
 typedef struct MetaData {
 
@@ -69,7 +68,11 @@ class RDMAEndpoint: public std::enable_shared_from_this<RDMAEndpoint> {
 public:
     explicit RDMAEndpoint(const std::string& dev_name, uint8_t ib_port, const std::string& link_type, size_t qp_num);
 
-    explicit RDMAEndpoint(const std::string& data_dev_name, const std::string& meta_dev_name, uint8_t ib_port, const std::string& link_type, size_t qp_num);
+    explicit RDMAEndpoint(const std::string& data_dev_name,
+                          const std::string& meta_dev_name,
+                          uint8_t            ib_port,
+                          const std::string& link_type,
+                          size_t             qp_num);
 
     ~RDMAEndpoint();
 
@@ -95,11 +98,11 @@ public:
         return data_ctx_;
     }
 
-    std::shared_ptr<RDMAContext> MetaCtx()
+    std::shared_ptr<RDMAContext> metaCtx()
     {
         return meta_ctx_;
     }
-    int MetaCtxQPNum()
+    int metaCtxQPNum()
     {
         return meta_ctx_qp_num_;
     }
@@ -142,7 +145,7 @@ private:
     std::mutex              rdma_tasks_mutex_;
 
     std::map<uint32_t, std::function<void()>> imm_data_callback_;
-    bool RDMA_tasks_threads_running_;
+    bool                                      RDMA_tasks_threads_running_;
 };
 
 }  // namespace slime

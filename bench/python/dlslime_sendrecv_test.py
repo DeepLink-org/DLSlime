@@ -58,11 +58,7 @@ def benchmark_send_recv(args):
         if args.use_gpu:
             torch.cuda.synchronize()
             
-<<<<<<< HEAD
-        for _ in range(2):
-=======
         for _ in range(25):
->>>>>>> temp-rescue-branch
             all_work = []
             reqs = []
             for i in range(num):
