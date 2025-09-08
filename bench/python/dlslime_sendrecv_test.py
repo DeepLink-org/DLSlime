@@ -38,7 +38,7 @@ def benchmark_send_recv(args):
     if args.sizes:
         sizes = [int(s) for s in args.sizes]
     else:
-        sizes = [2**n for n in range(11, 28)]  # 256B to 256MB
+        sizes = [2**n for n in range(11, 26)]  # 256B to 256MB
 
     print("Prepare data sizes: ", sizes)
     benchmark_data = []
@@ -55,7 +55,10 @@ def benchmark_send_recv(args):
             for _ in range(num)
         ]
 
-        for _ in range(100):
+        if args.use_gpu:
+            torch.cuda.synchronize()
+            
+        for _ in range(25):
             all_work = []
             reqs = []
             for i in range(num):
@@ -143,7 +146,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--iterations",
         type=int,
-        default=100,
+        default=1,
         help="Number of iterations for benchmarking",
     )
 

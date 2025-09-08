@@ -153,7 +153,6 @@ public:
     /* Submit an assignment */
     RDMAAssignmentSharedPtr submit(OpCode           opcode,
                                    AssignmentBatch& assignment,
-                                   std::shared_ptr<rdma_metrics_t> metrics = nullptr,
                                    callback_fn_t    callback = nullptr,
                                    int              qpi      = UNDEFINED_QPI,
                                    int32_t          imm_data = UNDEFINED_IMM_DATA);
