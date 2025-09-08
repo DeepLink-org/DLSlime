@@ -1,7 +1,7 @@
 #pragma once
 
-#include "engine/metrics.h"
 #include "engine/assignment.h"
+#include "engine/metrics.h"
 
 #include <algorithm>
 #include <atomic>
@@ -42,20 +42,17 @@ static const std::map<OpCode, ibv_wr_opcode> ASSIGN_OP_2_IBV_WR_OP = {
 
 typedef struct callback_info {
     callback_info() = default;
-    callback_info(OpCode opcode, size_t batch_size, std::shared_ptr<rdma_metrics_t> metrics, callback_fn_t callback): opcode_(opcode), batch_size_(batch_size)
+    callback_info(OpCode opcode, size_t batch_size, callback_fn_t callback): opcode_(opcode), batch_size_(batch_size)
     {
         if (callback)
             callback_ = std::move(callback);
 
-        // if (!metrics)
-        //     metrics_ = std::make_shared<rdma_metrics_t>();
-        metrics_ = metrics;
+        metrics_ = std::make_shared<rdma_metrics_t>();
     }
 
     callback_fn_t callback_{[this](int code, int imm_data) {
         std::unique_lock<std::mutex> lock(mutex_);
         finished_.fetch_add(1, std::memory_order_relaxed);
-        //metrics_->done = std::chrono::steady_clock::now();
         done_cv_.notify_one();
     }};
 
@@ -87,7 +84,7 @@ class RDMAAssignment {
     friend std::ostream& operator<<(std::ostream& os, const RDMAAssignment& assignment);
 
 public:
-    RDMAAssignment(OpCode opcode, AssignmentBatch& batch, std::shared_ptr<rdma_metrics_t> metrics, callback_fn_t callback = nullptr);
+    RDMAAssignment(OpCode opcode, AssignmentBatch& batch, callback_fn_t callback = nullptr);
 
     ~RDMAAssignment()
     {

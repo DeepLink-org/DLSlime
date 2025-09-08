@@ -38,7 +38,7 @@ def benchmark_send_recv(args):
     if args.sizes:
         sizes = [int(s) for s in args.sizes]
     else:
-        sizes = [2**n for n in range(11, 24)]  # 256B to 256MB
+        sizes = [2**n for n in range(11, 26)]  # 256B to 256MB
 
     print("Prepare data sizes: ", sizes)
     benchmark_data = []
@@ -58,7 +58,11 @@ def benchmark_send_recv(args):
         if args.use_gpu:
             torch.cuda.synchronize()
             
+<<<<<<< HEAD
         for _ in range(2):
+=======
+        for _ in range(25):
+>>>>>>> temp-rescue-branch
             all_work = []
             reqs = []
             for i in range(num):
