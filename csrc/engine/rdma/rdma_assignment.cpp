@@ -9,16 +9,10 @@ RDMAAssignment::RDMAAssignment(OpCode opcode, AssignmentBatch& batch, callback_f
     opcode_ = opcode;
 
     batch_size_ = batch.size();
-    batch_      = new Assignment[batch_size_];
 
-    size_t cnt = 0;
-    for (const Assignment& assignment : batch) {
-        batch_[cnt].mr_key        = assignment.mr_key;
-        batch_[cnt].source_offset = assignment.source_offset;
-        batch_[cnt].target_offset = assignment.target_offset;
-        batch_[cnt].length        = assignment.length;
-        cnt += 1;
-    }
+    batch_      = new Assignment[batch_size_];
+    std::move(batch.begin(), batch.end(), batch_);
+
     callback_info_ = std::make_shared<callback_info_t>(opcode, batch_size_, callback);
 }
 

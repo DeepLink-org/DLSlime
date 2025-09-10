@@ -109,6 +109,37 @@ class RDMAEndpoint(BaseEndpoint):
     def reload_memory_pool(self):
         return self._ctx.reload_memory_pool()
 
+    def post_oneside_raw_v(
+        self,
+        opcode,
+        key,
+        toff,
+        soff,
+        length,
+        async_op=False,
+    ) -> int:
+        """Perform batched read from remote MR to local buffer.
+
+        Args:
+            remote_mr_key: Target MR identifier registered at remote
+            remote_offset: Offset in remote MR (bytes)
+            local_buffer_addr: Local destination VA
+            read_size: Data size in bytes
+
+        Returns:
+            (AsyncOp=False) ibv_wc_status code (0 = IBV_WC_SUCCESS)
+            (AsyncOp=True) RDMAAssignment object for tracking the operation status.
+
+        Warning:
+            This method is not thread-safe and should not be called concurrently.
+        """
+        rdma_assignment = self._ctx.submit_by_vector(opcode, key, toff, soff, length)
+        if async_op:
+            return rdma_assignment
+        else:
+            return rdma_assignment.wait()
+
+
     def send_batch(
         self,
         batch: List[Assignment],
@@ -168,7 +199,6 @@ class RDMAEndpoint(BaseEndpoint):
             return rdma_assignment
 
     def read_batch_with_callback(self, batch: List[Assignment], callback: Callable[[int], None]):
-        raise NotImplementedError("Under reconstruction")
         callback_obj_id = id(callback)
 
         def delete_assignment_callback(code: int, _: int):
@@ -189,6 +219,7 @@ class RDMAEndpoint(BaseEndpoint):
     def read_batch(
         self,
         batch: List[Assignment],
+        qpi: int=-1,
         async_op=False,
     ) -> int:
         """Perform batched read from remote MR to local buffer.
@@ -202,9 +233,6 @@ class RDMAEndpoint(BaseEndpoint):
         Returns:
             (AsyncOp=False) ibv_wc_status code (0 = IBV_WC_SUCCESS)
             (AsyncOp=True) RDMAAssignment object for tracking the operation status.
-
-        Warning:
-            This method is not thread-safe and should not be called concurrently.
         """
         rdma_assignment = self._ctx.submit(_slime_c.OpCode.READ, [
             _slime_c.Assignment(
@@ -213,7 +241,7 @@ class RDMAEndpoint(BaseEndpoint):
                 assign.source_offset,
                 assign.length,
             ) for assign in batch
-        ], None, -1, -1)
+        ], None, qpi, -1)
         if async_op:
             return rdma_assignment
         else:
@@ -262,7 +290,7 @@ class RDMAEndpoint(BaseEndpoint):
     def write_batch(
         self,
         batch: List[Assignment],
-        qpi: int,
+        qpi: int=-1,
         async_op=False,
     ) -> int:
         """Perform batched read from remote MR to local buffer.
