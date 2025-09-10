@@ -383,14 +383,12 @@ void RDMAContext::stop_future()
     }
 }
 
-// split assignment by length
-// split assignment by size
-// split assignment batch to
 void split_assign_by_max_length(OpCode           opcode,
                                 AssignmentBatch& batch,
                                 AssignmentBatch& batch_split_after_max_length,
                                 size_t           max_length)
 {
+    // split assignment by length
     for (size_t i = 0; i < batch.size(); ++i) {
         if (batch[i].length < max_length) {
             batch_split_after_max_length.push_back(std::move(batch[i]));
@@ -405,26 +403,27 @@ void split_assign_by_max_length(OpCode           opcode,
             }
         }
     }
-    return;
 }
 
-std::vector<AssignmentBatch>
-split_assign_by_step(OpCode opcode, AssignmentBatch& batch, std::vector<AssignmentBatch>& batch_split, size_t step)
+void split_assign_by_step(OpCode opcode, AssignmentBatch& batch, std::vector<AssignmentBatch>& batch_split, size_t step)
 {
+    // split assignment by step
     for (int i = 0; i < batch.size(); i += step) {
         AssignmentBatch split_batch;
         std::move(batch.begin() + i, std::min(batch.end(), batch.begin() + i + step), std::back_inserter(split_batch));
         batch_split.push_back(split_batch);
     }
-    return batch_split;
 }
 
-std::vector<AssignmentBatch>
-nsplit_assign_by_step(OpCode opcode, AssignmentBatch& batch, std::vector<AssignmentBatch>& batch_nsplit, size_t nstep)
+void nsplit_assign_by_step(OpCode                        opcode,
+                           AssignmentBatch&              batch,
+                           std::vector<AssignmentBatch>& batch_nsplit,
+                           size_t                        nstep)
 {
+    // split assignment by nstep
     size_t bsize = batch.size();
     int    step  = (bsize + nstep - 1) / nstep;
-    return split_assign_by_step(opcode, batch, batch_nsplit, step);
+    split_assign_by_step(opcode, batch, batch_nsplit, step);
 }
 
 std::shared_ptr<RDMASchedulerAssignment>

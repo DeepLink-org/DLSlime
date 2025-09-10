@@ -216,17 +216,17 @@ private:
     size_t            qp_list_len_{1};
     qp_management_t** qp_management_;
 
-    int last_qp_selection_{-1};
+    int              last_qp_selection_{-1};
     std::vector<int> select_qpi(int num)
     {
         std::vector<int> agg_qpi;
         // Simplest round robin, we could enrich it in the future
-        
+
         for (int i = 0; i < num; ++i) {
             last_qp_selection_ = (last_qp_selection_ + 1) % qp_list_len_;
             agg_qpi.push_back(last_qp_selection_);
         }
-        
+
         return agg_qpi;
     }
 
