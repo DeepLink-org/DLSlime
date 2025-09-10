@@ -77,7 +77,7 @@ n_runs = args.num_concurrency
 ttensors = [torch.ones([size]).cuda() for size in args.size]
 
 for ttensor, size in zip(ttensors, args.size):
-    print(f"{size=}")
+    print(f'{size=}')
     total_time = 0.0
 
     start_event.record()

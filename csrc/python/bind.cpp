@@ -1,43 +1,82 @@
 #include "engine/assignment.h"
-#include "engine/rdma/rdma_assignment.h"
-#include "engine/rdma/rdma_buffer.h"
-#include "engine/rdma/rdma_config.h"
-#include "engine/rdma/rdma_context.h"
-#include "engine/rdma/rdma_endpoint.h"
-#include "engine/rdma/rdma_scheduler.h"
-
-#include "gloo/rendezvous/context.h"
-#include "gloo/rendezvous/file_store.h"
-#include "gloo/rendezvous/prefix_store.h"
-#include "gloo/rendezvous/store.h"
-#include "gloo/transport/device.h"
-#include "gloo/transport/ibverbs/device.h"
-
-#include <functional>
-#include <pybind11/cast.h>
-#include <pybind11/pytypes.h>
+#include "engine/dlpack.h"
 
 #ifdef BUILD_NVLINK
 #include "engine/nvlink/memory_pool.h"
 #include "engine/nvlink/nvlink_transport.h"
 #endif
 
+#ifdef BUILD_NVSHMEM
+#include "engine/nvshmem/nvshmem_context.h"
+#endif
+
+#ifdef BUILD_RDMA
+#include "engine/rdma/rdma_assignment.h"
+#include "engine/rdma/rdma_buffer.h"
+#include "engine/rdma/rdma_config.h"
+#include "engine/rdma/rdma_context.h"
+#include "engine/rdma/rdma_endpoint.h"
+#include "engine/rdma/rdma_scheduler.h"
+#endif
+
 #include "utils/json.hpp"
 #include "utils/logging.h"
 #include "utils/utils.h"
 
-#include "pybind_json/pybind_json.hpp"
-
 #include <cstdint>
+#include <functional>
 #include <memory>
+
+#include <pybind11/cast.h>
 #include <pybind11/chrono.h>
 #include <pybind11/functional.h>
 #include <pybind11/pybind11.h>
+#include <pybind11/pytypes.h>
 #include <pybind11/stl.h>
+
+#include "pybind_json/pybind_json.hpp"
 
 using json = nlohmann::json;
 
 namespace py = pybind11;
+
+#ifdef BUILD_NVSHMEM
+
+namespace slime {
+
+py::object alloc_dlpack_tensor(slime::NVShmemContext& self, size_t size, size_t alignment)
+{
+    void*            ptr        = self.allocBuffer(size, alignment);
+    DLManagedTensor* dlm_tensor = new DLManagedTensor();
+    DLTensor&        tensor     = dlm_tensor->dl_tensor;
+    tensor.data                 = ptr;
+    tensor.device               = DLDevice{.device_type = DLDeviceType::kDLCUDA, .device_id = self.gpu_device_id()};
+    tensor.dtype                = DLDataType{.code = 0, .bits = 8, .lanes = 1};
+    tensor.ndim                 = static_cast<int>(1);
+    long    aligned_size        = (size + alignment - 1) / alignment * alignment;
+    int64_t shape[]             = {aligned_size};
+    int64_t strides[]           = {1};
+    tensor.shape                = shape;
+    tensor.strides              = strides;
+    tensor.byte_offset          = 0;
+    dlm_tensor->manager_ctx     = nullptr;
+    dlm_tensor->deleter         = nullptr;
+
+    py::capsule capsule(dlm_tensor, "dltensor", [](PyObject* obj) {
+        if (PyCapsule_IsValid(obj, "dltensor")) {
+            DLManagedTensor* mt = static_cast<DLManagedTensor*>(PyCapsule_GetPointer(obj, "dltensor"));
+            if (mt && mt->deleter) {
+                mt->deleter(mt);
+            }
+        }
+    });
+
+    return capsule;
+}
+
+}  // namespace slime
+
+#endif
 
 PYBIND11_MODULE(_slime_c, m)
 {
@@ -50,6 +89,7 @@ PYBIND11_MODULE(_slime_c, m)
 
     py::class_<slime::Assignment>(m, "Assignment").def(py::init<std::string, uint64_t, uint64_t, uint64_t>());
 
+#ifdef BUILD_RDMA
     py::class_<slime::RDMAAssignment, slime::RDMAAssignmentSharedPtr>(m, "RDMAAssignment")
         .def("wait", &slime::RDMAAssignment::wait, py::call_guard<py::gil_scoped_release>())
         .def("latency", &slime::RDMAAssignment::latency, py::call_guard<py::gil_scoped_release>());
@@ -113,6 +153,18 @@ PYBIND11_MODULE(_slime_c, m)
         .def("wait_recv", &slime::RDMABuffer::waitRecv);
 
     m.def("available_nic", &slime::available_nic);
+#endif
+
+#ifdef BUILD_NVSHMEM
+    py::class_<slime::NVShmemContext, std::shared_ptr<slime::NVShmemContext>>(m, "NVShmemContext")
+        .def(py::init<const int, const int, const int>())
+        .def("connect_full_mesh", &slime::NVShmemContext::connectFullMesh)
+        .def("get_local_nvshmem_unique_id", &slime::NVShmemContext::getLocalNVShmemUniqueId)
+        .def("register_memory_region", &slime::NVShmemContext::registerMemoryRegion)
+        .def("send", &slime::NVShmemContext::send)
+        .def("recv", &slime::NVShmemContext::recv)
+        .def("alloc_dlpack_tensor", &slime::alloc_dlpack_tensor);
+#endif
 
 #ifdef BUILD_NVLINK
     py::class_<slime::NVLinkContext>(m, "nvlink_context")
