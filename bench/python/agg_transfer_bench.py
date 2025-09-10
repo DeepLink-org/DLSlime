@@ -1,22 +1,14 @@
 """# Remote Read Benchmark
 
-# One Node: LocalHost Test
-## Process 0:
-python3 bench/python/transfer_bench.py --rank 0
-
-## Process 1:
-python3 bench/python/transfer_bench.py --rank 1
-
-# Cross Node
 ## Node 0
-python3 bench/python/transfer_bench.py --rank 0 \
-    --target-endpoint ${NODE_0_IP:PORT} \
-    --initiator-endpoint ${NODE_1_IP:PORT}
+torchrun --master-addr 10.130.8.145 --master-port 6006 \
+    --nnodes 2 --nproc-per-node 1 --node-rank 1 bench/python/agg_transfer_bench_spmd.py \
+    --qp-num 8 --transfer-engine dlslime --batch-size 94 --num-iteration 10 --num-concurrency 8
 
 ## Node 1
-python3 bench/python/transfer_bench.py --rank 1 \
-    --target-endpoint ${NODE_0_IP:PORT} \
-    --initiator-endpoint ${NODE_1_IP:PORT}
+torchrun --master-addr 10.130.8.145 --master-port 6006 \
+    --nnodes 2 --nproc-per-node 1 --node-rank 0 bench/python/agg_transfer_bench_spmd.py \
+    --qp-num 8 --transfer-engine dlslime --batch-size 94 --num-iteration 10 --num-concurrency 8
 """
 
 import argparse

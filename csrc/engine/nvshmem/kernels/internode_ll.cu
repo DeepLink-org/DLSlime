@@ -9,15 +9,15 @@ namespace internode {
 
 __global__ void send_ll_kernel(int8_t* data, int8_t* buffer, int8_t* signal_buffer, size_t length, size_t msg_size_per_warp, size_t num_warps_per_sm, int rank, int dst_rank) {
 
-    size_t alignment = msg_size_per_warp * num_warps_per_sm;
-    size_t block_size = (length + alignment - 1) / alignment;
-    size_t aligned_size = alignment * block_size;
+    // size_t alignment = msg_size_per_warp * num_warps_per_sm;
+    // size_t block_size = (length + alignment - 1) / alignment;
+    // size_t aligned_size = alignment * block_size;
     size_t warp_id = threadIdx.x / 32;
     size_t lane_id = threadIdx.x % 32;
 
     // Step 1. Data Copy
     size_t msg_size_per_thread = msg_size_per_warp / 32;
-    size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    // size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     
     for (int i = 0; i < msg_size_per_thread; ++i)
     {
@@ -44,7 +44,7 @@ __global__ void recv_ll_kernel(int8_t* data, int8_t* buffer, int8_t* signal_buff
 
     // Step 1. Data Copy
     size_t msg_size_per_thread = msg_size_per_warp / 32;
-    size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    // size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (threadIdx.x == 0) {
         while (__ldg(signal_buffer + blockIdx.x) != 32) {

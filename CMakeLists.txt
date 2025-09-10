@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(_slime CUDA CXX)
+project(_slime C CXX)
 
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/utils.cmake)
 
@@ -23,6 +23,7 @@ set(DLSLIME_INSTALL_PATH "lib" CACHE STRING "Library installation directory")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if (BUILD_NVSHMEM OR BUILD_NVLINK)
+    enable_language(CUDA)
     set(CMAKE_CUDA_STANDARD 17)
     set(CMAKE_CUDA_ARCHITECTURES "90")
 endif()

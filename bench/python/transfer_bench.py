@@ -31,15 +31,11 @@ from tabulate import tabulate
 from dlslime import Assignment, RDMAEndpoint, available_nic
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--mode', type=str, choices=["nccl", "dlslime", "gloo"], default="dlslime", help='mode')
 parser.add_argument('--rank', type=int, required=True, help='Rank of the current process (0 or 1)')
 parser.add_argument('--world-size', type=int, choices=[2], default=2, help='World size (must be 2)')
-parser.add_argument('--size', nargs='+', type=int, default=[n for n in range(8, 18)])
-parser.add_argument('--batch-size', type=int, default=64)
+parser.add_argument('--size', nargs='+', type=int, default=[n for n in range(8, 25)])
 parser.add_argument('--target-endpoint', type=str, default='127.0.0.1:6006')
 parser.add_argument('--initiator-endpoint', type=str, default='127.0.0.1:6007')
-parser.add_argument('--master-addr', type=str, default='127.0.0.1')
-parser.add_argument('--master-port', type=str, default='9009')
 parser.add_argument('--target-affi', type=int, default=0, help='CUDA device ID for target (rank 0)')
 parser.add_argument('--initiator-affi', type=int, default=1, help='CUDA device ID for initiator (rank 1)')
 parser.add_argument('--num-concurrency', type=int, default=16)
@@ -50,20 +46,8 @@ parser.add_argument('--qp-num', type=int, default=None, help='Queue Pair number 
 parser.add_argument('--with-imm-data',
                     action='store_true',
                     help='Use immediate data for write operations (only applicable for write operations)')
-parser.add_argument('--num-iters', default=100, type=int)
 
 args = parser.parse_args()
-
-if args.mode in ["nccl", "gloo"]:
-    import torch.distributed as dist
-    from torch.distributed import distributed_c10d
-
-    os.environ["RANK"] = str(args.rank)
-    os.environ["WORLD_SIZE"] = str(2)
-    os.environ["MASTER_ADDR"] = args.master_addr
-    os.environ["MASTER_PORT"] = args.master_port
-
-    dist.init_process_group("cpu:gloo,cuda:nccl")
 
 if args.with_imm_data and args.opcode != 'write':
     raise ValueError('Immediate data can only be used with write operations.')
@@ -132,47 +116,43 @@ for idx, (rawsize, ttensor) in enumerate(zip(args.size, ttensors)):
     for _ in range(100):
         assigns = []
         for assign_id in range(n_runs):
-            if args.mode == "nccl":
-                futures = []
-                for i in range(args.batch_size):
-                    if rank == 0:
-                        futures.append(distributed_c10d.P2POp(dist.isend, ttensor, 1, tag=i))
-                    else:
-                        futures.append(distributed_c10d.P2POp(dist.irecv, ttensor, 0, tag=i))
-                assigns.extend(distributed_c10d.batch_isend_irecv(futures))
-            elif args.mode == "gloo":
-                futures = []
-                for i in range(args.batch_size):
-                    if rank == 0:
-                        futures.append(distributed_c10d.P2POp(dist.isend, ttensor.cpu(), 1, tag=i))
-                    else:
-                        futures.append(distributed_c10d.P2POp(dist.irecv, ttensor.cpu(), 0, tag=i))
-                assigns.extend(distributed_c10d.batch_isend_irecv(futures))
-            else:
-                batch = [
-                    Assignment(
-                        mr_key=str(idx),
-                        target_offset=0,
-                        source_offset=0,
-                        length=ttensor.numel() * ttensor.itemsize,
-                    )
-                ] * args.batch_size
-                if rank == 0:
-                    if args.with_imm_data:
-                        assign = fn(batch=batch,
-                                    qpi=assign_id % qp_num,
-                                    imm_data=1,
-                                    async_op=True)
-                    else:
-                        assign = fn(batch=batch,
-                                    async_op=True)
-                    assigns.append(assign)
+            if rank == 0:
+                if args.with_imm_data:
+                    assign = fn(batch=[
+                        Assignment(
+                            mr_key=str(idx),
+                            target_offset=0,
+                            source_offset=0,
+                            length=ttensor.numel() * ttensor.itemsize,
+                        )
+                    ],
+                                qpi=assign_id % qp_num,
+                                imm_data=1,
+                                async_op=True)
                 else:
-                    if args.with_imm_data:
-                        assign = rdma_endpoint.recv_batch(batch=batch,
-                                                        qpi=assign_id % qp_num,
-                                                        async_op=True)
-                        assigns.append(assign)
+                    assign = fn(batch=[
+                        Assignment(
+                            mr_key=str(idx),
+                            target_offset=0,
+                            source_offset=0,
+                            length=ttensor.numel() * ttensor.itemsize,
+                        )
+                    ],
+                                async_op=True)
+                assigns.append(assign)
+            else:
+                if args.with_imm_data:
+                    assign = rdma_endpoint.recv_batch(batch=[
+                        Assignment(
+                            mr_key=str(idx),
+                            target_offset=0,
+                            source_offset=0,
+                            length=ttensor.numel() * ttensor.itemsize,
+                        )
+                    ],
+                                                      qpi=assign_id % qp_num,
+                                                      async_op=True)
+                    assigns.append(assign)
         [assign.wait() for assign in assigns]
     end_event.record()
     torch.cuda.synchronize()
@@ -181,17 +161,16 @@ for idx, (rawsize, ttensor) in enumerate(zip(args.size, ttensors)):
 
     if rank == 0:
         size_bytes = ttensor.numel() * ttensor.itemsize
-        total_transport = n_runs * size * ttensor.itemsize  * args.batch_size
-        avg_latency = np.mean([assign.latency() for assign in assigns]) if args.mode == "dlslime" else 0
-        bandwidth = total_transport * 100 / total_time / 1e3
+        total_transport = n_runs * size * ttensor.itemsize
+        avg_latency = np.mean([assign.latency() for assign in assigns])
+        bandwidth = n_runs * size * ttensor.itemsize * 100 / total_time / 1e3
 
         benchmark_data.append([
             f'{size_bytes:,}',  # noqa: E231
-            f'{args.batch_size:,}',  # noqa: E231
             f'{total_transport:,}',  # noqa: E231
             str(args.target_affi),
             str(args.initiator_affi),
-            f'{total_time / 100 / args.num_concurrency}',  # noqa: E231
+            f'{avg_latency.total_seconds() * 1000:.2f}',  # noqa: E231
             f'{bandwidth:.2f}'  # noqa: E231
         ])
 
@@ -199,7 +178,7 @@ if rank == 1:
     _ = zmq_recv.recv_pyobj()
 else:
     headers = [
-        'Message Size (bytes)', 'Batch Size', 'Total Transport (bytes)', 'Target Affinity', 'Initiator Affinity', 'Avg Latency(ms)',
+        'Message Size (bytes)', 'Total Transport (bytes)', 'Target Affinity', 'Initiator Affinity', 'Avg Latency(ms)',
         'Bandwidth(MB/s)'
     ]
     print('\nBenchmark Results:')
@@ -216,5 +195,3 @@ else:
 zmq_send.close()
 zmq_recv.close()
 zmq_ctx.term()
-if args.mode in ["nccl", "gloo"]:
-    dist.destroy_process_group()
