@@ -6,6 +6,7 @@
 #include <unordered_set>
 
 #include "adxl/adxl_engine.h"
+#include "adxl/adxl_types.h"
 #include "engine/assignment.h"
 #include "utils/logging.h"
 

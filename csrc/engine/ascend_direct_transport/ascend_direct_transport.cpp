@@ -40,6 +40,7 @@ int AscendDirectContext::init(const std::string& host, int host_port)
 
     std::string                                      adxl_engine_name = host + ":" + std::to_string(host_port);
     std::map<adxl::AscendString, adxl::AscendString> options;
+
     auto status = adxl_->Initialize(adxl::AscendString(adxl_engine_name.c_str()), options);
     if (status != adxl::SUCCESS) {
         SLIME_LOG_ERROR("Failed to initialize AdxlEngine, status: ", status);

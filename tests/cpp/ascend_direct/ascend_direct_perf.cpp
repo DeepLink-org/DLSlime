@@ -97,7 +97,7 @@ int allocateDevMem(void*& devAddr, size_t size)
     return 0;
 }
 
-std::vector<uintptr_t> allocRegistMem(const std::unique_ptr<AscendDirectContext>& asCtx)
+std::vector<uintptr_t> allocRegistMem(const std::unique_ptr<AscendDirectContext>& as_ctx)
 {
     std::vector<uintptr_t> dev_addrs;
     for (int i = 0; i < FLAGS_block_iteration; ++i) {
@@ -111,7 +111,7 @@ std::vector<uintptr_t> allocRegistMem(const std::unique_ptr<AscendDirectContext>
         }
 
         uintptr_t dev_addr_uintptr = reinterpret_cast<uintptr_t>(dev_addr);
-        ret                        = asCtx->register_memory_region(
+        ret                        = as_ctx->register_memory_region(
             "npu:" + std::to_string(FLAGS_device_id), dev_addr_uintptr, batched_block_size);
         if (ret != 0) {
             SLIME_LOG_ERROR("Failed to registerLocalMemory, ret: ", ret);
@@ -126,9 +126,9 @@ std::vector<uintptr_t> allocRegistMem(const std::unique_ptr<AscendDirectContext>
 int initiator()
 {
     std::cout << "running initiator on " << FLAGS_localhost << ":" << FLAGS_local_port << std::endl;
-    std::unique_ptr<AscendDirectContext> asCtx = std::make_unique<AscendDirectContext>();
-    asCtx->init(FLAGS_localhost, FLAGS_local_port);
-    std::vector<uintptr_t> dev_addrs = allocRegistMem(asCtx);
+    std::unique_ptr<AscendDirectContext> as_ctx = std::make_unique<AscendDirectContext>();
+    as_ctx->init(FLAGS_localhost, FLAGS_local_port + 1);
+    std::vector<uintptr_t> dev_addrs = allocRegistMem(as_ctx);
 
     std::cout << "receiving addr info through zmq from " << FLAGS_remote_host << ":" << FLAGS_remote_port << std::endl;
     zmq::context_t ctx;
@@ -159,7 +159,7 @@ int initiator()
         }
         struct timeval start_tv, stop_tv;
         gettimeofday(&start_tv, nullptr);
-        asCtx->read_batch(batched_assignments, FLAGS_remote_host, FLAGS_remote_port);
+        as_ctx->read_batch(batched_assignments, FLAGS_remote_host, FLAGS_remote_port + 1);
         gettimeofday(&stop_tv, nullptr);
         uint64_t duration = (stop_tv.tv_sec - start_tv.tv_sec) * 1000000.0 + (stop_tv.tv_usec - start_tv.tv_usec);
         std::cout << "Block iteration " << i << " test completed: duration " << duration << "us, block size "
@@ -172,7 +172,7 @@ int initiator()
     socket.send(zmq::message_t(0), zmq::send_flags::none);
     socket.close();
     ctx.close();
-    asCtx.reset();
+    as_ctx.reset();
     for (uintptr_t addr : dev_addrs) {
         aclrtFree(reinterpret_cast<void*>(addr));
     }
@@ -182,9 +182,9 @@ int initiator()
 int target()
 {
     std::cout << "running target on " << FLAGS_localhost << ":" << FLAGS_local_port << std::endl;
-    std::unique_ptr<AscendDirectContext> asCtx = std::make_unique<AscendDirectContext>();
-    asCtx->init(FLAGS_localhost, FLAGS_local_port);
-    std::vector<uintptr_t> dev_addrs = allocRegistMem(asCtx);
+    std::unique_ptr<AscendDirectContext> as_ctx = std::make_unique<AscendDirectContext>();
+    as_ctx->init(FLAGS_localhost, FLAGS_local_port + 1);
+    std::vector<uintptr_t> dev_addrs = allocRegistMem(as_ctx);
 
     std::cout << "sending addr info through zmq from " << FLAGS_remote_host << ":" << FLAGS_remote_port << std::endl;
     zmq::context_t ctx;
@@ -209,7 +209,7 @@ int target()
     std::cout << "ending ascend transfer perf, releasing resources" << std::endl;
     socket.close();
     ctx.close();
-    asCtx.reset();
+    as_ctx.reset();
     for (uintptr_t addr : dev_addrs) {
         aclrtFree(reinterpret_cast<void*>(addr));
     }
