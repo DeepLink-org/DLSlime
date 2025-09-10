@@ -52,22 +52,22 @@ x = initiator.read_batch(
 x.wait()
 
 
-# # run with coroutine
-# async def read_batch_coroutine():
-#     loop = asyncio.get_running_loop()
-#     future = loop.create_future()
+# run with coroutine
+async def read_batch_coroutine():
+    loop = asyncio.get_running_loop()
+    future = loop.create_future()
 
-#     def _completion_handler(status: int):
-#         loop.call_soon_threadsafe(future.set_result, status)
+    def _completion_handler(status: int):
+        loop.call_soon_threadsafe(future.set_result, status)
 
-#     initiator.read_batch_with_callback(
-#         [Assignment(mr_key='buffer', target_offset=0, source_offset=8, length=8)],
-#         _completion_handler,
-#     )
-#     await future
+    initiator.read_batch_with_callback(
+        [Assignment(mr_key='buffer', target_offset=0, source_offset=8, length=8)],
+        _completion_handler,
+    )
+    await future
 
 
-# asyncio.run(read_batch_coroutine())
+asyncio.run(read_batch_coroutine())
 
 # Verify data transfer:
 # - Local tensor should now contain data from remote tensor's first 8 elements
