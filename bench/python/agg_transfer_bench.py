@@ -247,8 +247,6 @@ for idx, (rawsize, ttensor) in enumerate(zip(args.size, ttensors)):
         benchmark_data.append([
             f'{size_bytes:,}',  # noqa: E231
             f'{total_transport:,}',  # noqa: E231
-            str(0),
-            str(0),
             f'{0 * 1000:.2f}',  # noqa: E231
             f'{bandwidth:.2f}'  # noqa: E231
         ])
@@ -256,8 +254,6 @@ for idx, (rawsize, ttensor) in enumerate(zip(args.size, ttensors)):
             [
                 f'{size_bytes:,}',  # noqa: E231
                 f'{total_transport:,}',  # noqa: E231
-                str(0),
-                str(0),
                 f'{0 * 1000:.2f}',  # noqa: E231
                 f'{bandwidth:.2f}'  # noqa: E231
             ]

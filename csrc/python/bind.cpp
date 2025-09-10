@@ -118,7 +118,23 @@ PYBIND11_MODULE(_slime_c, m)
         .def("connect", &slime::RDMAContext::connect)
         .def("launch_future", &slime::RDMAContext::launch_future)
         .def("stop_future", &slime::RDMAContext::stop_future)
-        .def("submit", &slime::RDMAContext::submit, py::call_guard<py::gil_scoped_release>());
+        .def("submit", &slime::RDMAContext::submit, py::call_guard<py::gil_scoped_release>())
+        .def("submit_by_vector", [](
+            slime::RDMAContext& self,
+            slime::OpCode opcode,
+            std::vector<std::string>& mr_keys,
+            std::vector<int>& toff,
+            std::vector<int>& soff,
+            std::vector<int>& length
+        ) {
+            std::vector<slime::Assignment> batch;
+            int bs = mr_keys.size();
+            for (int i = 0; i < bs; ++i) {
+                batch.emplace_back(slime::Assignment(mr_keys[i], toff[i], soff[i], length[i]));
+            }
+            return self.submit(opcode, batch);
+        }
+    );
 
     py::class_<slime::RDMAEndpoint, std::shared_ptr<slime::RDMAEndpoint>>(m, "rdma_endpoint")
         .def(py::init<const std::string&, uint8_t, const std::string&, size_t>())
