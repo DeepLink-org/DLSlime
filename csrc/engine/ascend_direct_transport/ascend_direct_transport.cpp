@@ -129,7 +129,7 @@ int AscendDirectContext::connect(const std::string& host, int port)
 
     auto status = adxl_->Connect(adxl_engine_name.c_str(), CONNECT_TIMEOUT_MILLIS);
     if (status != adxl::SUCCESS) {
-        SLIME_LOG_ERROR("Failed to connect to AdxlEngine", adxl_engine_name);
+        SLIME_LOG_ERROR("Failed to connect to AdxlEngine: ", adxl_engine_name);
         return -1;
     }
     connected_engines_.insert(adxl_engine_name);
