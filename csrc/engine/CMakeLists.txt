@@ -17,12 +17,18 @@ install(
     LIBRARY DESTINATION ${DLSLIME_INSTALL_PATH}
 )
 
-add_subdirectory(rdma)
-
 if (BUILD_NVLINK)
     add_subdirectory(nvlink)
 endif()
 
 if (BUILD_ASCEND_DIRECT)
     add_subdirectory(ascend_direct_transport)
+endif()
+
+if (BUILD_NVSHMEM)
+    add_subdirectory(nvshmem)
+endif()
+
+if (BUILD_RDMA)
+    add_subdirectory(rdma)
 endif()

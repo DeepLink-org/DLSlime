@@ -126,11 +126,11 @@ public:
     /* RDMA Link Construction */
     int64_t connect(const json& endpoint_info_json);
     /* Submit an assignment */
-    RDMAAssignmentSharedPtr submit(OpCode           opcode,
-                                   AssignmentBatch& assignment,
-                                   callback_fn_t    callback = nullptr,
-                                   int              qpi      = UNDEFINED_QPI,
-                                   int32_t          imm_data = UNDEFINED_IMM_DATA);
+    std::shared_ptr<RDMASchedulerAssignment> submit(OpCode           opcode,
+                                                    AssignmentBatch& assignment,
+                                                    callback_fn_t    callback = nullptr,
+                                                    int              qpi      = UNDEFINED_QPI,
+                                                    int32_t          imm_data = UNDEFINED_IMM_DATA);
 
     void launch_future();
     void stop_future();
@@ -203,7 +203,7 @@ private:
         std::condition_variable has_runnable_event_;
 
         /* async wq handler */
-        std::thread wq_thread_;
+        std::thread       wq_thread_;
         std::atomic<bool> stop_wq_thread_{false};
 
         ~qp_management()
@@ -216,12 +216,18 @@ private:
     size_t            qp_list_len_{1};
     qp_management_t** qp_management_;
 
-    int last_qp_selection_{-1};
-    int select_qpi()
+    int              last_qp_selection_{-1};
+    std::vector<int> select_qpi(int num)
     {
+        std::vector<int> agg_qpi;
         // Simplest round robin, we could enrich it in the future
-        last_qp_selection_ = (last_qp_selection_ + 1) % qp_list_len_;
-        return last_qp_selection_;
+
+        for (int i = 0; i < num; ++i) {
+            last_qp_selection_ = (last_qp_selection_ + 1) % qp_list_len_;
+            agg_qpi.push_back(last_qp_selection_);
+        }
+
+        return agg_qpi;
     }
 
     typedef struct cq_management {
@@ -233,7 +239,7 @@ private:
     bool connected_   = false;
 
     /* async cq handler */
-    std::thread cq_thread_;
+    std::thread       cq_thread_;
     std::atomic<bool> stop_cq_thread_{false};
 
     /* Completion Queue Polling */
