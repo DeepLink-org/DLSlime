@@ -21,6 +21,10 @@ if (BUILD_NVLINK)
     add_subdirectory(nvlink)
 endif()
 
+if (BUILD_ASCEND_DIRECT)
+    add_subdirectory(ascend_direct_transport)
+endif()
+
 if (BUILD_NVSHMEM)
     add_subdirectory(nvshmem)
 endif()
