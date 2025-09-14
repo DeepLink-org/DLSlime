@@ -94,7 +94,9 @@ RDMASchedulerAssignmentSharedPtr RDMAScheduler::submitAssignment(OpCode opcode, 
     // }
 
     RDMAAssignmentSharedPtrBatch rdma_assignment_batch;
-    rdma_assignment_batch.push_back(rdma_ctxs_[selectRdma()].submit(opcode, batch));
+    auto assignment = rdma_ctxs_[selectRdma()].submit(opcode, batch);
+    for (int i = 0; i < assignment->rdma_assignment_batch_.size(); ++i)
+        rdma_assignment_batch.push_back(assignment->rdma_assignment_batch_[i]);
 
     return std::make_shared<RDMASchedulerAssignment>(rdma_assignment_batch);
 }
