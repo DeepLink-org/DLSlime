@@ -29,17 +29,17 @@ def transfer_demo(mode, send_socket: zmq.Socket, recv_socket: zmq.Socket, value)
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--role', choices=['initiator', 'target'])
+    parser.add_argument('--mode', choices=['initiator', 'target'])
     parser.add_argument('--initiator-url', help='--initiator-endpoint')
     parser.add_argument('--target-url', help='--target-endpoint')
 
     args = parser.parse_args()
-    role = args.role
+    mode = args.mode
 
-    if role == 'initiator':
+    if mode == 'initiator':
         send_url, recv_url = args.initiator_url, args.target_url
         value = 0
-    elif role == 'target':
+    elif mode == 'target':
         send_url, recv_url = args.target_url, args.initiator_url
         value = 1
     else:
@@ -51,7 +51,7 @@ if __name__ == '__main__':
     recv_socket = tcp_ctx.socket(zmq.PULL)
     recv_socket.connect(f'tcp://{recv_url}')
 
-    transfer_demo(role, send_socket, recv_socket, value)
+    transfer_demo(mode, send_socket, recv_socket, value)
 
     send_socket.close()
     recv_socket.close()

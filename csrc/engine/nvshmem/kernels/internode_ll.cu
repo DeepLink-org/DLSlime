@@ -92,7 +92,7 @@ __global__ void recv_ll_kernel(int8_t* data,
 
     __syncthreads();
 
-    coalescing_load(buffer, data, length);
+    coalescing_load(data, buffer, length);
     __syncthreads();
 
     signal_buffer[blockIdx.x] = 0;
