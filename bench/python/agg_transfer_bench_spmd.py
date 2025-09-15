@@ -14,7 +14,6 @@ import argparse
 import csv
 import os
 import socket
-import time
 
 import torch
 import torch.distributed as dist
@@ -23,7 +22,7 @@ from torch.distributed import distributed_c10d
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--batch-size', type=int, default=1)
-parser.add_argument('--size', nargs='+', type=int, default=[n for n in range(12, 15)])
+parser.add_argument('--size', nargs='+', type=int, default=[n for n in range(8, 25)])
 parser.add_argument('--num-concurrency', type=int, default=16)
 parser.add_argument('--num-iteration', type=int, default=100)
 parser.add_argument('--opcode', type=str, choices=['read', 'write'], default='read')
@@ -235,7 +234,6 @@ def transfer_batch_concurrency_dlslime(role, opcode, mr_key, tensor, batch_size,
     slime_opcode = dlslime.OpCode.READ if opcode == 'read' else dlslime.OpCode.WRITE
     if role == 'initiator':
         assigns = []
-        x = time.time()
         for concurrent_id in range(num_concurrency):
             assign = [
                 rdma_endpoint.post_oneside_raw_v(slime_opcode, [mr_key for _ in range(batch_size)],
@@ -244,12 +242,8 @@ def transfer_batch_concurrency_dlslime(role, opcode, mr_key, tensor, batch_size,
                                                  async_op=True)
             ]
             assigns.extend(assign)
-        y = time.time()
 
         [assign.wait() for assign in assigns]
-        z = time.time()
-        rank_0_print('preprocess time:', y - x)
-        rank_0_print('transport time:', z - y)
 
 
 def transfer_batch_concurrency_mooncake(role, opcode, mr_key, tensor, batch_size, num_concurrency):
@@ -263,8 +257,6 @@ def transfer_batch_concurrency_mooncake(role, opcode, mr_key, tensor, batch_size
                 [all_endpoint_info[peer_rank]['kv_table'][mr_key][0] for _ in range(batch_size)],
                 [tensor.numel() * tensor.itemsize for _ in range(batch_size)],
             )
-            # end = time.time()
-            # print(end - begin)
             if batch_id == 0:
                 print('error for transport')
             all_batch_ids_to_wait.append(batch_id)
@@ -278,8 +270,6 @@ def transfer_batch_concurrency_nixl(role, opcode, mr_key, tensor, batch_size, nu
         xfer_handles = []
         target_mr_info = all_endpoint_info[peer_rank]['kv_table'][mr_key][0]
         initiator_mr_info = all_endpoint_info[rank]['kv_table'][mr_key][0]
-        # x = time.time()
-        # qqdd = []
         for concurrent_id in range(num_concurrency):
             target_desc_addrs = [(target_mr_info, tensor.numel() * tensor.itemsize, peer_rank % npros_per_rank)
                                  for _ in range(batch_size)]
@@ -295,7 +285,6 @@ def transfer_batch_concurrency_nixl(role, opcode, mr_key, tensor, batch_size, nu
                 exit()
             state = agent.transfer(xfer_handle)
             xfer_handles.append(xfer_handle)
-        # y = time.time()
         for xfer_handle in xfer_handles:
             while True:
                 state = agent.check_xfer_state(xfer_handle)
@@ -305,10 +294,6 @@ def transfer_batch_concurrency_nixl(role, opcode, mr_key, tensor, batch_size, nu
                 elif state == 'DONE':
                     break
             agent.release_xfer_handle(xfer_handle)
-        # z = time.time()
-        # rank_0_print("preprocess time:", y - x)
-        # rank_0_print("transport time:", z - y)
-        # rank_0_print("qqdd:", torch.sum(torch.tensor(qqdd)))
 
 
 def transfer_batch_concurrency_nccl(role, opcode, mr_key, tensor, batch_size, num_concurrency):
@@ -367,7 +352,7 @@ for idx, (rawsize, ttensor) in enumerate(zip(args.size, ttensors)):
 
         benchmark_data.append([
             args.transfer_engine,
-            rank,
+            num_channels,
             f'{size_bytes:,}',  # noqa: E231
             f'{args.batch_size}',  # noqa: E231
             f'{args.num_concurrency}',  # noqa: E231
@@ -378,7 +363,7 @@ for idx, (rawsize, ttensor) in enumerate(zip(args.size, ttensors)):
 
         rank_0_print([
             args.transfer_engine,
-            rank,
+            num_channels,
             f'{size_bytes:,}',  # noqa: E231
             f'{args.batch_size}',  # noqa: E231
             f'{args.num_concurrency}',  # noqa: E231
@@ -391,11 +376,11 @@ dist.barrier()
 
 if rank == 0:
     headers = [
-        'Transfer Engine', 'rank', 'Message Size (bytes)', 'Batch Size', 'Num Concurrency', 'Total Transport (bytes)',
-        'Avg Latency(ms)', 'Bandwidth(MB/s)'
+        'Transfer Engine', '#Channels', 'Message Size (bytes)', 'Batch Size', 'Num Concurrency',
+        'Total Transport (bytes)', 'Avg Latency(ms)', 'Bandwidth(MB/s)'
     ]
     print('\nBenchmark Results:')
-    print(tabulate(benchmark_data, headers=headers, tablefmt='grid'))
+    print(tabulate(benchmark_data, headers=headers, tablefmt='github'))
     if args.save_csv:
         with open(args.csv_filename, 'w', newline='') as f:
             writer = csv.writer(f)
