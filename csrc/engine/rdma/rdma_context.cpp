@@ -274,7 +274,7 @@ int64_t RDMAContext::connect(const json& endpoint_info_json)
         attr.max_dest_rd_atomic = SLIME_MAX_DEST_RD_ATOMIC;
         attr.min_rnr_timer      = 0x12;
         attr.ah_attr.dlid       = remote_rdma_info.lid;
-        attr.ah_attr.sl         = service_level_;
+        attr.ah_attr.sl         = SLIME_SERVICE_LEVEL;
         attr.ah_attr.src_path_bits = 0;
         attr.ah_attr.port_num      = ib_port_;
 
@@ -656,7 +656,6 @@ int64_t RDMAContext::cq_poll_handle()
                             callback_with_qpi->callback_info_->callback_(status_code, wc[i].imm_data);
                             break;
                         case OpCode::SEND:
-                            callback_with_qpi->callback_info_->callback_(status_code, wc[i].imm_data);
                             break;
                         case OpCode::SEND_WITH_IMM:
                             callback_with_qpi->callback_info_->callback_(status_code, wc[i].imm_data);
@@ -735,6 +734,7 @@ int64_t RDMAContext::wq_dispatch_handle(int qpi)
                         break;
                     default:
                         SLIME_LOG_ERROR("Unknown OpCode");
+                        front_assign->callback_info_->callback_(callback_info_with_qpi_t::UNKNOWN_OPCODE, 0);
                         break;
                 }
                 qp_management_[qpi]->assign_queue_.pop();

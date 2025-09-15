@@ -1,7 +1,6 @@
 #pragma once
 
 #include "engine/assignment.h"
-#include "engine/metrics.h"
 
 #include <algorithm>
 #include <atomic>
@@ -46,8 +45,6 @@ typedef struct callback_info {
     {
         if (callback)
             callback_ = std::move(callback);
-
-        metrics_ = std::make_shared<rdma_metrics_t>();
     }
 
     callback_fn_t callback_{[this](int code, int imm_data) {
@@ -64,13 +61,16 @@ typedef struct callback_info {
     std::condition_variable done_cv_;
     std::mutex              mutex_;
 
-    std::shared_ptr<rdma_metrics_t> metrics_;
-
     void wait()
     {
         std::unique_lock<std::mutex> lock(mutex_);
         done_cv_.wait(lock, [this]() { return finished_ > 0; });
         return;
+    }
+
+    std::chrono::duration<double> latency()
+    {
+        return std::chrono::duration<double>::zero();
     }
 
     bool query()
@@ -101,12 +101,10 @@ public:
 
     std::chrono::duration<double> latency()
     {
-        return callback_info_->metrics_->latency();
+        return callback_info_->latency();
     }
 
     json dump() const;
-
-    std::shared_ptr<rdma_metrics_t> metrics_;
 
 private:
     OpCode opcode_;

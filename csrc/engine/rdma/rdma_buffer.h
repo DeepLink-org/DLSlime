@@ -1,5 +1,4 @@
 #pragma once
-#include "engine/metrics.h"
 #include "engine/rdma/memory_pool.h"
 #include "engine/rdma/rdma_context.h"
 #include "engine/rdma/rdma_endpoint.h"
@@ -90,10 +89,6 @@ private:
 
     std::mutex send_mutex_;
     std::mutex recv_mutex_;
-
-    std::shared_ptr<rdma_metrics_t> metrics_;
-    std::shared_ptr<rdma_metrics_t> meta_metrics_;
-    std::shared_ptr<rdma_metrics_t> data_metrics_;
 };
 
 }  // namespace slime

@@ -42,7 +42,7 @@ parser.add_argument('--num-concurrency', type=int, default=16)
 parser.add_argument('--opcode', type=str, choices=['read', 'write'], default='read')
 parser.add_argument('--save-csv', action='store_true', help='Save benchmark results to CSV file')
 parser.add_argument('--csv-filename', type=str, default='./output.csv', help='Filename for CSV output')
-parser.add_argument('--qp-num', type=int, default=4, help='Queue Pair number for RDMA operations')
+parser.add_argument('--qp-num', type=int, default=None, help='Queue Pair number for RDMA operations')
 parser.add_argument('--with-imm-data',
                     action='store_true',
                     help='Use immediate data for write operations (only applicable for write operations)')
@@ -126,7 +126,7 @@ for idx, (rawsize, ttensor) in enumerate(zip(args.size, ttensors)):
                             length=ttensor.numel() * ttensor.itemsize,
                         )
                     ],
-                                qpi=1,
+                                qpi=assign_id % qp_num,
                                 imm_data=1,
                                 async_op=True)
                 else:
@@ -150,7 +150,7 @@ for idx, (rawsize, ttensor) in enumerate(zip(args.size, ttensors)):
                             length=ttensor.numel() * ttensor.itemsize,
                         )
                     ],
-                                                      qpi=1,
+                                                      qpi=assign_id % qp_num,
                                                       async_op=True)
                     assigns.append(assign)
         [assign.wait() for assign in assigns]

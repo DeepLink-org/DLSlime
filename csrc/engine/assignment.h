@@ -5,7 +5,6 @@
 #include <string>
 #include <vector>
 
-#include "metrics.h"
 #include "utils/json.hpp"
 #include "utils/logging.h"
 
@@ -33,12 +32,6 @@ typedef struct Assignment {
     {
     }
 
-    Assignment(std::string mr_key, uint64_t target_offset, uint64_t source_offset, uint64_t length, std::shared_ptr<rdma_metrics_t> metrics):
-        mr_key(mr_key), target_offset(target_offset), source_offset(source_offset), length(length), metrics_(metrics)
-    {
-    }
-
-
     /* dump */
     json dump() const;
 
@@ -47,8 +40,6 @@ typedef struct Assignment {
     uint64_t    target_offset{};
     uint64_t    length{};
 
-
-    std::shared_ptr<rdma_metrics_t> metrics_;
 } assignment_t;
 
 }  // namespace slime

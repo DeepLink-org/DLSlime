@@ -36,7 +36,7 @@ bool RDMABuffer::waitSend()
 
     send_cv_.wait(lock, [this]() { return send_completed_ > 0; });
     send_pending_ = false;
-    ;
+    SLIME_LOG_INFO("complete to send the data.");
     return send_completed_;
 }
 
@@ -49,6 +49,7 @@ bool RDMABuffer::waitRecv()
 
     recv_cv_.wait(lock, [this]() { return recv_completed_ > 0; });
     recv_pending_ = false;
+    SLIME_LOG_INFO("complete to send the data.");
     return recv_completed_;
 }
 }  // namespace slime

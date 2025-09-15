@@ -51,7 +51,7 @@ AssignmentBatch RDMATask::getDataAssignmentBatch()
 
 int RDMATask::registerDataMemoryRegion()
 {
-    auto mr_is_exist = endpoint_->dataCtx()->get_mr_for_endpoint(getDataKey(0));
+    auto mr_is_exist = endpoint_->dataCtx()->get_mr(getDataKey(0));
 
     if (mr_is_exist != nullptr) {
 
@@ -90,8 +90,8 @@ void RDMATask::fillBuffer()
 
 int RDMATask::registerRemoteDataMemoryRegion()
 {
-    auto mr_is_exist = endpoint_->dataCtx()->get_remote_mr_for_endpoint(getDataKey(0));
-    if (mr_is_exist == 0) {
+    auto mr_is_exist = endpoint_->dataCtx()->get_remote_mr(getDataKey(0));
+    if (mr_is_exist.addr == 0) {
         std::vector<meta_data_t>& meta_buf = endpoint_->getMetaBuffer();
         for (size_t i = 0; i < buffer_->batchSize(); ++i) {
             uint64_t addr   = meta_buf[slot_id_ % MAX_META_BUFFER_SIZE].mr_addr[i];
