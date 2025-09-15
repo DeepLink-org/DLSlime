@@ -1,5 +1,5 @@
 <div align="center">
-<p align="center"> <img src="./docs/imgs/logo.png" alt="" width="300"> </p>
+<p align="center"> <img src="./docs/imgs/logo.png" alt="" width="150"> </p>
 </div>
 
 # DLSlime: Flexible & Efficient Heterogeneous Transfer Toolkit
