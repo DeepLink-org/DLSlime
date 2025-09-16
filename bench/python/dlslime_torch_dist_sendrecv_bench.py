@@ -42,7 +42,7 @@ def benchmark_send_recv(args):
 
     print("Prepare data sizes: ", sizes)
     benchmark_data = []
-    num = 1
+    num = 2
     print("Start to test the bench")
     for size in sizes:
         num_elements = max(1, size // 4)

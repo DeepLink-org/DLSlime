@@ -656,6 +656,7 @@ int64_t RDMAContext::cq_poll_handle()
                             callback_with_qpi->callback_info_->callback_(status_code, wc[i].imm_data);
                             break;
                         case OpCode::SEND:
+                            callback_with_qpi->callback_info_->callback_(status_code, wc[i].imm_data);
                             break;
                         case OpCode::SEND_WITH_IMM:
                             callback_with_qpi->callback_info_->callback_(status_code, wc[i].imm_data);
