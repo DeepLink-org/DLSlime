@@ -27,6 +27,7 @@ if (BUILD_NVSHMEM OR BUILD_NVLINK)
     enable_language(CUDA)
     set(CMAKE_CUDA_STANDARD 17)
     set(CMAKE_CUDA_ARCHITECTURES "90")
+    find_package(CUDAToolkit REQUIRED)
 endif()
 
 if (BUILD_PYTHON)
