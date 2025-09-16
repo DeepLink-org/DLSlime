@@ -4,11 +4,11 @@
 #include <cstdlib>
 
 void all_gather_ll(uintptr_t q,
-                   uintptr_t ipc_buffer_ptr,
-                   uintptr_t ipc_signal_ptr,
-                   int       max_bs,
-                   int       num_head,
-                   int       head_size,
-                   int       itemsize,
-                   int       world_size,
-                   int       rank);
+                   int8_t**  ipc_buffer_ptr,
+                   int8_t**  ipc_signal_ptr,
+                   int32_t   max_bs,
+                   int32_t   num_head,
+                   int32_t   head_size,
+                   int32_t   itemsize,
+                   int32_t   world_size,
+                   int32_t   rank);

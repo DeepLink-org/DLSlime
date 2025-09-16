@@ -20,6 +20,7 @@
 #endif
 
 #include "ops/intra/all_gather_ll/all_gather_ll.h"
+#include "ops/intra/all_gather_ll/buffer.h"
 
 #include "utils/json.hpp"
 #include "utils/logging.h"
@@ -80,6 +81,36 @@ py::object alloc_dlpack_tensor(slime::NVShmemContext& self, size_t size, size_t 
 
 #endif
 
+namespace slime {
+py::object dlpack_local_buffer(slime::AllGatherLLBuffer& self)
+{
+    DLManagedTensor* dlm_tensor = new DLManagedTensor();
+    DLTensor&        tensor     = dlm_tensor->dl_tensor;
+    tensor.data                 = self.local_buffer_;
+    tensor.device               = DLDevice{.device_type = DLDeviceType::kDLCUDA, .device_id = int32_t{self.rank_}};
+    tensor.dtype                = DLDataType{.code = 0, .bits = 8, .lanes = 1};
+    tensor.ndim                 = static_cast<int>(1);
+    int64_t* shape              = new int64_t[1]{static_cast<int64_t>(self.get_buffer_size())};
+    int64_t* strides            = new int64_t[1]{1};
+    tensor.shape                = shape;
+    tensor.strides              = strides;
+    tensor.byte_offset          = 0;
+    dlm_tensor->manager_ctx     = nullptr;
+    dlm_tensor->deleter         = nullptr;
+
+    py::capsule capsule(dlm_tensor, "dltensor", [](PyObject* obj) {
+        if (PyCapsule_IsValid(obj, "dltensor")) {
+            DLManagedTensor* mt = static_cast<DLManagedTensor*>(PyCapsule_GetPointer(obj, "dltensor"));
+            if (mt && mt->deleter) {
+                mt->deleter(mt);
+            }
+        }
+    });
+
+    return capsule;
+}
+}  // namespace slime
+
 PYBIND11_MODULE(_slime_c, m)
 {
     py::enum_<slime::OpCode>(m, "OpCode")
@@ -121,22 +152,20 @@ PYBIND11_MODULE(_slime_c, m)
         .def("launch_future", &slime::RDMAContext::launch_future)
         .def("stop_future", &slime::RDMAContext::stop_future)
         .def("submit", &slime::RDMAContext::submit, py::call_guard<py::gil_scoped_release>())
-        .def("submit_by_vector", [](
-            slime::RDMAContext& self,
-            slime::OpCode opcode,
-            std::vector<std::string>& mr_keys,
-            std::vector<int>& toff,
-            std::vector<int>& soff,
-            std::vector<int>& length
-        ) {
-            std::vector<slime::Assignment> batch;
-            int bs = mr_keys.size();
-            for (int i = 0; i < bs; ++i) {
-                batch.emplace_back(slime::Assignment(mr_keys[i], toff[i], soff[i], length[i]));
-            }
-            return self.submit(opcode, batch);
-        }
-    );
+        .def("submit_by_vector",
+             [](slime::RDMAContext&       self,
+                slime::OpCode             opcode,
+                std::vector<std::string>& mr_keys,
+                std::vector<int>&         toff,
+                std::vector<int>&         soff,
+                std::vector<int>&         length) {
+                 std::vector<slime::Assignment> batch;
+                 int                            bs = mr_keys.size();
+                 for (int i = 0; i < bs; ++i) {
+                     batch.emplace_back(slime::Assignment(mr_keys[i], toff[i], soff[i], length[i]));
+                 }
+                 return self.submit(opcode, batch);
+             });
 
     py::class_<slime::RDMAEndpoint, std::shared_ptr<slime::RDMAEndpoint>>(m, "rdma_endpoint")
         .def(py::init<const std::string&, uint8_t, const std::string&, size_t>())
@@ -178,5 +207,10 @@ PYBIND11_MODULE(_slime_c, m)
         .def("read_batch", &slime::NVLinkContext::read_batch);
 #endif
 
-    m.def("all_gather_ll", &all_gather_ll);
+    py::class_<slime::AllGatherLLBuffer>(m, "AllGatherLLBuffer")
+        .def(py::init<int32_t, int32_t, int32_t, int32_t, int32_t, int32_t>())
+        .def("ipc_info", &slime::AllGatherLLBuffer::ipc_info)
+        .def("connect_full_mesh", &slime::AllGatherLLBuffer::connectFullMesh)
+        .def("all_gather_ll", &slime::AllGatherLLBuffer::allGatherLL)
+        .def("dlpack_local_buffer", &slime::dlpack_local_buffer);
 }
