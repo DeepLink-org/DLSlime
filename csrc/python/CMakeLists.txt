@@ -27,7 +27,7 @@ if (BUILD_NVSHMEM)
     list(APPEND _slime_c_link_libraries _slime_nvshmem)
 endif()
 
-target_link_libraries(_slime_c PRIVATE ${_slime_c_link_libraries})
+target_link_libraries(_slime_c PRIVATE ${_slime_c_link_libraries} _slime_ops)
 
 set_target_properties(
     _slime_c

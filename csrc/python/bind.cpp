@@ -19,6 +19,8 @@
 #include "engine/rdma/rdma_scheduler.h"
 #endif
 
+#include "ops/intra/all_gather_ll/all_gather_ll.h"
+
 #include "utils/json.hpp"
 #include "utils/logging.h"
 #include "utils/utils.h"
@@ -175,4 +177,6 @@ PYBIND11_MODULE(_slime_c, m)
         .def("connect", &slime::NVLinkContext::connect)
         .def("read_batch", &slime::NVLinkContext::read_batch);
 #endif
+
+    m.def("all_gather_ll", &all_gather_ll);
 }
