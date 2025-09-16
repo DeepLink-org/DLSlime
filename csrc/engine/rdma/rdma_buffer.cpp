@@ -47,12 +47,9 @@ bool RDMABuffer::waitRecv()
     if (recv_completed_)
         return recv_completed_;
 
-    // waiting for the recv complete...
     recv_cv_.wait(lock, [this]() { return recv_completed_ > 0; });
     recv_pending_ = false;
-    SLIME_LOG_INFO("complete to recv the data.");
-
+    SLIME_LOG_INFO("complete to send the data.");
     return recv_completed_;
 }
-
 }  // namespace slime

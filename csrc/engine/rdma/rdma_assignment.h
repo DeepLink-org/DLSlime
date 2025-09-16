@@ -4,7 +4,6 @@
 
 #include <algorithm>
 #include <atomic>
-#include <chrono>
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
@@ -40,31 +39,17 @@ static const std::map<OpCode, ibv_wr_opcode> ASSIGN_OP_2_IBV_WR_OP = {
     {OpCode::WRITE_WITH_IMM, ibv_wr_opcode::IBV_WR_RDMA_WRITE_WITH_IMM},
 };
 
-typedef struct RDMAMetrics {
-    std::chrono::steady_clock::time_point arrive{std::chrono::milliseconds::zero()};
-    std::chrono::steady_clock::time_point done{std::chrono::milliseconds::zero()};
-
-    std::chrono::duration<double> latency()
-    {
-        return (done - arrive);
-    }
-
-} rdma_metrics_t;
-
 typedef struct callback_info {
     callback_info() = default;
     callback_info(OpCode opcode, size_t batch_size, callback_fn_t callback): opcode_(opcode), batch_size_(batch_size)
     {
         if (callback)
             callback_ = std::move(callback);
-
-        metrics.arrive = std::chrono::steady_clock::now();
     }
 
     callback_fn_t callback_{[this](int code, int imm_data) {
         std::unique_lock<std::mutex> lock(mutex_);
         finished_.fetch_add(1, std::memory_order_relaxed);
-        metrics.done = std::chrono::steady_clock::now();
         done_cv_.notify_one();
     }};
 
@@ -76,13 +61,16 @@ typedef struct callback_info {
     std::condition_variable done_cv_;
     std::mutex              mutex_;
 
-    rdma_metrics_t metrics;
-
     void wait()
     {
         std::unique_lock<std::mutex> lock(mutex_);
         done_cv_.wait(lock, [this]() { return finished_ > 0; });
         return;
+    }
+
+    std::chrono::duration<double> latency()
+    {
+        return std::chrono::duration<double>::zero();
     }
 
     bool query()
@@ -97,7 +85,6 @@ class RDMAAssignment {
 
 public:
     RDMAAssignment(OpCode opcode, AssignmentBatch& batch, callback_fn_t callback = nullptr);
-    RDMAAssignment(OpCode opcode, AssignmentBatch& batch, int32_t imm_data, callback_fn_t callback_imm = nullptr);
 
     ~RDMAAssignment()
     {
@@ -114,7 +101,7 @@ public:
 
     std::chrono::duration<double> latency()
     {
-        return callback_info_->metrics.latency();
+        return callback_info_->latency();
     }
 
     json dump() const;
