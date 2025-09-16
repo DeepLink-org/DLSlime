@@ -4,8 +4,12 @@
 #include "engine/rdma/rdma_buffer.h"
 #include "engine/rdma/rdma_common.h"
 #include "engine/rdma/rdma_context.h"
+
+#include "utils/logging.h"
+
 #include <atomic>
 #include <mutex>
+#include <stdexcept>
 #include <string>
 
 namespace slime {
@@ -33,20 +37,24 @@ std::string RDMATask::getDataKey(int32_t idx)
 AssignmentBatch RDMATask::getMetaAssignmentBatch()
 {
     size_t meta_buffer_idx = slot_id_ % MAX_META_BUFFER_SIZE;
-    if (opcode_ == OpCode::SEND) {
-        return AssignmentBatch{Assignment("meta_buffer",
+    switch (opcode_) {
+        case OpCode::SEND: {
+            return AssignmentBatch{Assignment("meta_buffer",
                                           meta_buffer_idx * sizeof(meta_data_t),
                                           meta_buffer_idx * sizeof(meta_data_t),
                                           sizeof(meta_data_t))};
-    }
-    if (opcode_ == OpCode::RECV) {
-        return AssignmentBatch{
+        }
+        case OpCode::RECV: {
+            return AssignmentBatch{
             Assignment("meta_buffer",
                        meta_buffer_idx * sizeof(meta_data_t),
                        MAX_META_BUFFER_SIZE * sizeof(meta_data_t) + meta_buffer_idx * sizeof(meta_data_t),
                        sizeof(meta_data_t))};
+        }
+        default:
+            SLIME_ABORT("Unknown Opcode");
+
     }
-    
 }
 
 AssignmentBatch RDMATask::getDataAssignmentBatch()

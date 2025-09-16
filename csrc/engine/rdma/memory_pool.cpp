@@ -9,6 +9,7 @@
 #include <unordered_map>
 
 namespace slime {
+
 int RDMAMemoryPool::register_memory_region(const std::string& mr_key, uintptr_t data_ptr, uint64_t length)
 {
     std::unique_lock<std::mutex> lock(mrs_mutex_);
@@ -47,7 +48,8 @@ int RDMAMemoryPool::register_remote_memory_region(const std::string& mr_key,
 {
     std::unique_lock<std::mutex> lock(remote_mrs_mutex_);
     remote_mrs_[mr_key] = remote_mr_t(addr, length, rkey);
-    SLIME_LOG_DEBUG("Remote memory region registered: " << mr_key << ", " << addr << ", " << length << ", " << rkey << ".");
+    SLIME_LOG_DEBUG("Remote memory region registered: " << mr_key << ", " << addr << ", " << length << ", " << rkey
+                                                        << ".");
     return 0;
 }
 
@@ -70,7 +72,7 @@ int RDMAMemoryPool::unregister_remote_memory_region(const std::string& mr_key)
 json RDMAMemoryPool::mr_info()
 {
     std::unique_lock<std::mutex> lock(mrs_mutex_);
-    json mr_info;
+    json                         mr_info;
     for (auto& mr : mrs_) {
         mr_info[mr.first] = {
             {"addr", (uintptr_t)mr.second->addr},
@@ -84,7 +86,7 @@ json RDMAMemoryPool::mr_info()
 json RDMAMemoryPool::remote_mr_info()
 {
     std::unique_lock<std::mutex> lock(remote_mrs_mutex_);
-    json mr_info;
+    json                         mr_info;
     for (auto& mr : remote_mrs_) {
         mr_info[mr.first] = {{"addr", mr.second.addr}, {"rkey", mr.second.rkey}, {"length", mr.second.length}};
     }
