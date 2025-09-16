@@ -33,10 +33,20 @@ std::string RDMATask::getDataKey(int32_t idx)
 AssignmentBatch RDMATask::getMetaAssignmentBatch()
 {
     size_t meta_buffer_idx = slot_id_ % MAX_META_BUFFER_SIZE;
-    return AssignmentBatch{Assignment("meta_buffer",
-                                      meta_buffer_idx * sizeof(meta_data_t),
-                                      meta_buffer_idx * sizeof(meta_data_t),
-                                      sizeof(meta_data_t))};
+    if (opcode_ == OpCode::SEND) {
+        return AssignmentBatch{Assignment("meta_buffer",
+                                          meta_buffer_idx * sizeof(meta_data_t),
+                                          meta_buffer_idx * sizeof(meta_data_t),
+                                          sizeof(meta_data_t))};
+    }
+    if (opcode_ == OpCode::RECV) {
+        return AssignmentBatch{
+            Assignment("meta_buffer",
+                       meta_buffer_idx * sizeof(meta_data_t),
+                       MAX_META_BUFFER_SIZE * sizeof(meta_data_t) + meta_buffer_idx * sizeof(meta_data_t),
+                       sizeof(meta_data_t))};
+    }
+    
 }
 
 AssignmentBatch RDMATask::getDataAssignmentBatch()
@@ -75,13 +85,15 @@ void RDMATask::fillBuffer()
     else if (opcode_ == OpCode::RECV) {
         std::vector<meta_data_t>& meta_buf = endpoint_->getMetaBuffer();
         for (size_t i = 0; i < buffer_->batchSize(); ++i) {
-            auto mr                                              = endpoint_->dataCtx()->get_mr(getDataKey(i));
-            meta_buf[slot_id_ % MAX_META_BUFFER_SIZE].mr_addr[i] = reinterpret_cast<uint64_t>(mr->addr);
-            meta_buf[slot_id_ % MAX_META_BUFFER_SIZE].mr_rkey[i] = mr->rkey;
-            meta_buf[slot_id_ % MAX_META_BUFFER_SIZE].mr_size[i] = mr->length;
-            meta_buf[slot_id_ % MAX_META_BUFFER_SIZE].mr_slot    = slot_id_;
-            meta_buf[slot_id_ % MAX_META_BUFFER_SIZE].mr_qpidx   = slot_id_ % endpoint_->dataCtxQPNum();
+            auto mr = endpoint_->dataCtx()->get_mr(getDataKey(i));
+            meta_buf[MAX_META_BUFFER_SIZE + slot_id_ % MAX_META_BUFFER_SIZE].mr_addr[i] =
+                reinterpret_cast<uint64_t>(mr->addr);
+            meta_buf[MAX_META_BUFFER_SIZE + slot_id_ % MAX_META_BUFFER_SIZE].mr_rkey[i] = mr->rkey;
+            meta_buf[MAX_META_BUFFER_SIZE + slot_id_ % MAX_META_BUFFER_SIZE].mr_size[i] = mr->length;
         }
+        meta_buf[MAX_META_BUFFER_SIZE + slot_id_ % MAX_META_BUFFER_SIZE].mr_slot = slot_id_;
+        meta_buf[MAX_META_BUFFER_SIZE + slot_id_ % MAX_META_BUFFER_SIZE].mr_qpidx =
+            slot_id_ % endpoint_->dataCtxQPNum();
     }
     else {
         SLIME_LOG_ERROR("Unsupported opcode in RDMATask::fillBuffer()");
@@ -122,7 +134,7 @@ RDMAEndpoint::RDMAEndpoint(const std::string& dev_name, uint8_t ib_port, const s
     SLIME_LOG_INFO("The QP number of control plane is: ", meta_ctx_qp_num_);
     SLIME_LOG_INFO("RDMA Endpoint Init Success and Launch the RDMA Endpoint Task Threads...");
 
-    const size_t max_meta_buffer_size = 64;
+    const size_t max_meta_buffer_size = MAX_META_BUFFER_SIZE * 2;
     meta_buffer_.reserve(max_meta_buffer_size);
     memset(meta_buffer_.data(), 0, meta_buffer_.size() * sizeof(meta_data_t));
     meta_ctx_->register_memory_region(
@@ -148,7 +160,7 @@ RDMAEndpoint::RDMAEndpoint(const std::string& data_dev_name,
     SLIME_LOG_INFO("The QP number of control plane is: ", meta_ctx_qp_num_);
     SLIME_LOG_INFO("RDMA Endpoint Init Success and Launch the RDMA Endpoint Task Threads...");
 
-    const size_t max_meta_buffer_size = 64;
+    const size_t max_meta_buffer_size = MAX_META_BUFFER_SIZE * 2;
     meta_buffer_.reserve(max_meta_buffer_size);
     memset(meta_buffer_.data(), 0, meta_buffer_.size() * sizeof(meta_data_t));
     meta_ctx_->register_memory_region(
