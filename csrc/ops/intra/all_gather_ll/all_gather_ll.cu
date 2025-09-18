@@ -40,19 +40,19 @@ __global__ void all_gather_ll_kernel(int8_t*  q_ptr,
     int*    signal_ptr = ipc_signal_ptr[peer_rank_id];
 
     // Vectorize Optimization
-    using vec_t                      = int4;
-    const int VEC_SIZE               = 16;
-    const int num_vec_msg_per_thread = num_msg_per_thread / VEC_SIZE;
+    using vec_t                          = int4;
+    const int VEC_SIZE                   = 16;
+    const int num_vec_msg_per_thread     = num_msg_per_thread / VEC_SIZE;
     const int num_total_vec_msg_per_rank = num_total_msg_per_rank / VEC_SIZE;
-    vec_t*    vec_buffer_ptr         = reinterpret_cast<vec_t*>(buffer_ptr);
-    vec_t*    vec_q_ptr              = reinterpret_cast<vec_t*>(q_ptr);
+    vec_t*    vec_buffer_ptr             = reinterpret_cast<vec_t*>(buffer_ptr);
+    vec_t*    vec_q_ptr                  = reinterpret_cast<vec_t*>(q_ptr);
 
 #pragma unroll 4
     for (int i = 0; i < num_vec_msg_per_thread; ++i) {
         // Step 1. Split q to num_sms_per_rank parts;
         int q_idx = peer_rank_channel_id * num_threads_per_channel * num_vec_msg_per_thread
                     + threadIdx.x * num_vec_msg_per_thread + i;
-        int buffer_idx         = rank * num_total_vec_msg_per_rank + q_idx;
+        int buffer_idx             = rank * num_total_vec_msg_per_rank + q_idx;
         vec_buffer_ptr[buffer_idx] = vec_q_ptr[q_idx];
     }
 
