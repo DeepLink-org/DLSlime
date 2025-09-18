@@ -1,4 +1,11 @@
-add_library(_slime_ops SHARED intra/all_gather_ll/all_gather_ll.cu)
+add_library(
+    _slime_ops
+    SHARED
+    intra/all_gather_ll/all_gather_ll.cu
+    intra/all_gather_ll/all_gather_ll_buffer.cpp
+)
+
+target_link_libraries(_slime_ops CUDA::cudart)
 
 set_target_properties(
     _slime_ops

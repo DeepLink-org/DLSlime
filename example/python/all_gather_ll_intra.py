@@ -12,11 +12,10 @@ world_size = int(os.environ['WORLD_SIZE'])
 rank = int(os.environ['RANK'])
 
 dist.init_process_group('cuda:nccl,cpu:gloo')
-gpu_group = dist.new_group([_ for _ in range(world_size)], backend='nccl')
 
-max_bs = 32
-num_head = 4
-head_size = 128
+max_bs = 2
+num_head = 32
+head_size = 576
 itemsize = 2
 dtype = torch.bfloat16
 
@@ -27,7 +26,6 @@ buffer = _slime_c.AllGatherLLBuffer(max_bs, num_head, head_size, itemsize, world
 ipc_info = buffer.ipc_info()
 all_ipc_info = [None for _ in range(world_size)]
 dist.all_gather_object(all_ipc_info, ipc_info)
-
 buffer.connect_full_mesh(all_ipc_info)
 
 # allocate q
@@ -40,12 +38,13 @@ with torch.profiler.profile(activities=[torch.profiler.ProfilerActivity.CUDA, to
                             on_trace_ready=torch.profiler.tensorboard_trace_handler(f'./profiler_{rank}.json')) as prof:
     for i in range(10):
         buffer.all_gather_ll(q.data_ptr())
-        # dist.barrier(group=gpu_group)
     prof.step()
 
 local_buffer = buffer.dlpack_local_buffer()
 local_buffer_tensor = torch.utils.dlpack.from_dlpack(local_buffer)
-print(local_buffer_tensor.view(torch.bfloat16))
+print(local_buffer_tensor)
+print(local_buffer_tensor.shape)
+print(q)
 
 dist.barrier()
 dist.destroy_process_group()

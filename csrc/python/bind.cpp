@@ -20,7 +20,7 @@
 #endif
 
 #include "ops/intra/all_gather_ll/all_gather_ll.h"
-#include "ops/intra/all_gather_ll/buffer.h"
+#include "ops/intra/all_gather_ll/all_gather_ll_buffer.h"
 
 #include "utils/json.hpp"
 #include "utils/logging.h"
