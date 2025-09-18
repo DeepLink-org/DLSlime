@@ -10,7 +10,7 @@
 
 namespace slime {
 
-__global__ void all_gather_ll_kernel(int8_t*  q,
+__global__ void all_gather_ll_kernel(int8_t*  q_ptr,
                                      int8_t** ipc_buffer_ptr,
                                      int**    ipc_signal_ptr,
                                      int32_t  max_bs,
@@ -20,31 +20,40 @@ __global__ void all_gather_ll_kernel(int8_t*  q,
                                      int32_t  world_size,
                                      int32_t  rank)
 {
-    int num_sms              = 128;
-    int num_warps_per_sm     = 32;
-    int num_threads_per_warp = 32;
+    const int num_sms              = 128;
+    const int num_warps_per_sm     = 1;
+    const int num_threads_per_warp = 32;
 
-    int num_sms_per_rank = num_sms / world_size;
+    const int num_sms_per_rank = num_sms / world_size;
 
-    int sm_id                = blockIdx.x;
-    int peer_rank_id         = sm_id / num_sms_per_rank;
-    int peer_rank_channel_id = sm_id % num_sms_per_rank;
+    const int sm_id                = blockIdx.x;
+    const int peer_rank_id         = sm_id / num_sms_per_rank;
+    const int peer_rank_channel_id = sm_id % num_sms_per_rank;
 
-    int num_threads_per_channel = num_warps_per_sm * num_threads_per_warp;
-    int num_threads_per_rank    = num_sms_per_rank * num_warps_per_sm * num_threads_per_warp;
-    int total_msg_per_rank      = max_bs * num_head * head_size * itemsize;
+    const int num_threads_per_channel = num_warps_per_sm * num_threads_per_warp;
+    const int num_threads_per_rank    = num_sms_per_rank * num_warps_per_sm * num_threads_per_warp;
+    const int num_total_msg_per_rank  = max_bs * num_head * head_size * itemsize;
 
-    int num_msg_per_thread = total_msg_per_rank / num_threads_per_rank;
+    const int num_msg_per_thread = num_total_msg_per_rank / num_threads_per_rank;
 
     int8_t* buffer_ptr = ipc_buffer_ptr[peer_rank_id];
     int*    signal_ptr = ipc_signal_ptr[peer_rank_id];
 
-    for (int i = 0; i < num_msg_per_thread; ++i) {
+    // Vectorize Optimization
+    using vec_t                      = int4;
+    const int VEC_SIZE               = 16;
+    const int num_vec_msg_per_thread = num_msg_per_thread / VEC_SIZE;
+    const int num_total_vec_msg_per_rank = num_total_msg_per_rank / VEC_SIZE;
+    vec_t*    vec_buffer_ptr         = reinterpret_cast<vec_t*>(buffer_ptr);
+    vec_t*    vec_q_ptr              = reinterpret_cast<vec_t*>(q_ptr);
+
+#pragma unroll 4
+    for (int i = 0; i < num_vec_msg_per_thread; ++i) {
         // Step 1. Split q to num_sms_per_rank parts;
-        int q_idx =
-            peer_rank_channel_id * num_threads_per_channel * num_msg_per_thread + threadIdx.x * num_msg_per_thread + i;
-        int buffer_idx         = rank * total_msg_per_rank + q_idx;
-        buffer_ptr[buffer_idx] = q[q_idx];
+        int q_idx = peer_rank_channel_id * num_threads_per_channel * num_vec_msg_per_thread
+                    + threadIdx.x * num_vec_msg_per_thread + i;
+        int buffer_idx         = rank * num_total_vec_msg_per_rank + q_idx;
+        vec_buffer_ptr[buffer_idx] = vec_q_ptr[q_idx];
     }
 
     __syncthreads();
@@ -80,7 +89,7 @@ void all_gather_ll(uintptr_t q,
                    int32_t   rank)
 {
     int num_sms     = 128;
-    int num_warps   = 32;
+    int num_warps   = 1;
     int num_threads = 32;
 
     int grid_dim  = num_sms;

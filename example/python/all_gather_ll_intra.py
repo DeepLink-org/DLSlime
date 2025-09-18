@@ -15,7 +15,7 @@ dist.init_process_group('cuda:nccl,cpu:gloo')
 
 max_bs = 2
 num_head = 32
-head_size = 576
+head_size = 512
 itemsize = 2
 dtype = torch.bfloat16
 
@@ -34,17 +34,22 @@ buffer_shape = [world_size, max_bs, num_head, head_size]
 signal_shape = [world_size]
 q = torch.ones(q_shape, dtype=dtype, device=f'cuda:{rank}') * rank
 
+for i in range(10):
+    buffer.all_gather_ll(q.data_ptr())
+torch.cuda.synchronize()
+
 with torch.profiler.profile(activities=[torch.profiler.ProfilerActivity.CUDA, torch.profiler.ProfilerActivity.CPU],
                             on_trace_ready=torch.profiler.tensorboard_trace_handler(f'./profiler_{rank}.json')) as prof:
     for i in range(10):
         buffer.all_gather_ll(q.data_ptr())
+        torch.cuda.synchronize()
     prof.step()
 
 local_buffer = buffer.dlpack_local_buffer()
 local_buffer_tensor = torch.utils.dlpack.from_dlpack(local_buffer)
-print(local_buffer_tensor)
+print(local_buffer_tensor.view(torch.bfloat16))
 print(local_buffer_tensor.shape)
-print(q)
+# print(q)
 
 dist.barrier()
 dist.destroy_process_group()
