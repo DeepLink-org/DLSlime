@@ -56,6 +56,7 @@ __global__ void all_gather_ll_kernel(int8_t*  q_ptr,
     vec_t* vec_buffer_ptr = reinterpret_cast<vec_t*>(buffer_ptr) + buffer_idx;
     vec_t* vec_q_ptr      = reinterpret_cast<vec_t*>(q_ptr) + q_idx;
 
+    // Unroll optimization
     UNROLLED_WARP_COPY(
         8, lane_id, num_vec_msg_per_warp, vec_buffer_ptr, vec_q_ptr, deep_ep::ld_nc_global, deep_ep::st_na_global);
 
