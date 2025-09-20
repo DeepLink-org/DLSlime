@@ -9,7 +9,7 @@
 
 #include "engine/assignment.h"
 #include "engine/rdma/rdma_assignment.h"
-#include "utils/logging.h"
+#include "logging.h"
 #include "utils/utils.h"
 
 namespace slime {

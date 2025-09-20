@@ -27,7 +27,10 @@ add_library(
     intra/all_gather_ll/all_gather_ll_buffer.cpp
 )
 
-target_link_libraries(_slime_ops CUDA::cudart)
+target_include_directories(_slime_ops PUBLIC ${TORCH_INCLUDE_DIRS})
+
+target_link_options(_slime_ops PRIVATE "-Wl,--no-as-needed")
+target_link_libraries(_slime_ops CUDA::cudart ${TORCH_LIBRARIES})
 
 set_target_properties(
     _slime_ops

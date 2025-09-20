@@ -1,3 +1,5 @@
+#include <torch/torch.h>
+
 #include "ops/intra/all_gather_ll/all_gather_ll_buffer.h"
 
 namespace slime {
@@ -87,9 +89,10 @@ int AllGatherLLBuffer::allocBuffer()
     return 0;
 }
 
-void AllGatherLLBuffer::allGatherLL(uintptr_t q)
+torch::Tensor AllGatherLLBuffer::allGatherLL(torch::Tensor q)
 {
     all_gather_ll(q, buffer_ptrs_, signal_ptrs_, max_bs_, num_head_, head_size_, itemsize_, world_size_, rank_);
+    return torch::from_blob(reinterpret_cast<void*>(local_buffer_), {world_size_, max_bs_, num_head_, head_size_}, q.options());
 }
 
 }  // namespace slime

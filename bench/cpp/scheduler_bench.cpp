@@ -24,7 +24,7 @@
 #include "engine/rdma/rdma_context.h"
 #include "engine/rdma/rdma_scheduler.h"
 #include "utils/json.hpp"
-#include "utils/logging.h"
+#include "logging.h"
 #include "utils/utils.h"
 
 using json = nlohmann::json;

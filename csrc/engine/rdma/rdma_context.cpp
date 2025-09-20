@@ -6,7 +6,7 @@
 #include "engine/rdma/rdma_env.h"
 
 #include "utils/ibv_helper.h"
-#include "utils/logging.h"
+#include "logging.h"
 #include "utils/utils.h"
 
 #include <algorithm>

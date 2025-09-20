@@ -7,7 +7,7 @@
 #include "engine/rdma/rdma_env.h"
 
 #include "utils/json.hpp"
-#include "utils/logging.h"
+#include "logging.h"
 
 #include <condition_variable>
 #include <cstdint>

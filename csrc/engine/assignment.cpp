@@ -2,7 +2,7 @@
 #include <functional>
 #include <vector>
 
-#include "utils/logging.h"
+#include "logging.h"
 
 #include "assignment.h"
 

@@ -27,7 +27,10 @@ if (BUILD_NVSHMEM)
     list(APPEND _slime_c_link_libraries _slime_nvshmem)
 endif()
 
-target_link_libraries(_slime_c PRIVATE ${_slime_c_link_libraries} _slime_ops)
+if (BUILD_OPS)
+    target_compile_definitions(_slime_c PRIVATE -DBUILD_OPS)
+    target_link_libraries(_slime_c PRIVATE ${_slime_c_link_libraries} _slime_ops ${TORCH_LIBRARIES})
+endif()
 
 set_target_properties(
     _slime_c

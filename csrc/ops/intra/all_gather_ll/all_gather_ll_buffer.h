@@ -9,6 +9,8 @@
 
 #include <vector>
 
+#include <torch/torch.h>
+
 #include "ops/intra/all_gather_ll/all_gather_ll.h"
 
 using json = nlohmann::json;
@@ -29,7 +31,7 @@ public:
 
     int allocBuffer();
 
-    void allGatherLL(uintptr_t q);
+    torch::Tensor allGatherLL(torch::Tensor q);
 
     int8_t** buffer_ptrs_;
     int**    signal_ptrs_;

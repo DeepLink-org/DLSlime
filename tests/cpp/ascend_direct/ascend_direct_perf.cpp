@@ -6,7 +6,7 @@
 
 #include "acl/acl.h"
 #include "engine/ascend_direct_transport/ascend_direct_transport.h"
-#include "utils/logging.h"
+#include "logging.h"
 
 DEFINE_string(localhost, "100.97.164.197", "local IP");
 DEFINE_int32(local_port, 16777, "Port number");

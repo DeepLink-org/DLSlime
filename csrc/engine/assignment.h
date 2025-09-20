@@ -6,7 +6,7 @@
 #include <vector>
 
 #include "utils/json.hpp"
-#include "utils/logging.h"
+#include "logging.h"
 
 namespace slime {
 

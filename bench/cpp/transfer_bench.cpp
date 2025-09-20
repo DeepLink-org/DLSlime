@@ -3,7 +3,7 @@
 #include "engine/rdma/rdma_config.h"
 #include "engine/rdma/rdma_context.h"
 #include "utils/json.hpp"
-#include "utils/logging.h"
+#include "logging.h"
 
 #include <cassert>
 #include <chrono>

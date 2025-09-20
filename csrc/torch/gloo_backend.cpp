@@ -15,7 +15,7 @@
 #include "gloo/transport/ibverbs/device.h"
 
 #include "engine/rdma/rdma_env.h"
-#include "utils/logging.h"
+#include "logging.h"
 #include "utils/utils.h"
 
 namespace slime {
