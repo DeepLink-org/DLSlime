@@ -33,7 +33,11 @@ public:
                std::vector<size_t>           offset,
                std::vector<size_t>           data_size)
     {
+
         batch_size_ = ptrs.size();
+        ptrs_       = ptrs;
+        offset_     = offset;
+        data_size_  = data_size;
         for (uint32_t i = 0; i < batch_size_; ++i) {
             storage_view_t view{.data_ptr = ptrs[i], .storage_offset = offset[i], .length = data_size[i]};
             storage_view_batch_.push_back(view);
@@ -62,16 +66,15 @@ public:
     void send_done_callback();
     void recv_done_callback();
 
+    void get_time();
+
 private:
-    std::shared_ptr<RDMAEndpoint> endpoint_;
-
-    // <tensor_ptrs_, tensor_size_, offset>
-    // tensor_ptrs: the pointer of the tensor
-    // tensor_size: the length of the tensor
-    // offset: the offset of the transmitted tensor
-    // std::vector<std::tuple<uintptr_t, size_t, size_t>> data_info;
-
     storage_view_batch_t storage_view_batch_;
+
+    std::shared_ptr<RDMAEndpoint> endpoint_;
+    std::vector<uintptr_t>        ptrs_;
+    std::vector<size_t>           offset_;
+    std::vector<size_t>           data_size_;
 
     size_t batch_size_;
 

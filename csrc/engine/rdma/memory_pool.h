@@ -53,15 +53,18 @@ public:
         std::unique_lock<std::mutex> lock(mrs_mutex_);
         if (mrs_.find(mr_key) != mrs_.end())
             return mrs_[mr_key];
-        SLIME_LOG_ERROR("mr_key: ", mr_key, "not found in mrs_");
+            
+        SLIME_LOG_WARN("mr_key: ", mr_key, "not found in mrs_");
         return nullptr;
     }
+
     inline remote_mr_t get_remote_mr(const std::string& mr_key)
     {
         std::unique_lock<std::mutex> lock(remote_mrs_mutex_);
         if (remote_mrs_.find(mr_key) != remote_mrs_.end())
             return remote_mrs_[mr_key];
-        SLIME_LOG_ERROR("mr_key: ", mr_key, " not found in remote_mrs_");
+        
+        SLIME_LOG_WARN("mr_key: ", mr_key, " not found in remote_mrs_");
         return remote_mr_t();
     }
 

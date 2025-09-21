@@ -65,6 +65,20 @@ public:
         srand48(time(NULL));
     }
 
+    RDMAContext(size_t qp_num, int64_t service_level): service_level_(service_level)
+    {
+        SLIME_LOG_DEBUG("Initializing qp management, num qp: " << qp_num);
+
+        qp_list_len_   = qp_num;
+        qp_management_ = new qp_management_t*[qp_list_len_];
+        for (int qpi = 0; qpi < qp_list_len_; qpi++) {
+            qp_management_[qpi] = new qp_management_t();
+        }
+
+        /* random initialization for psn configuration */
+        srand48(time(NULL));
+    }
+
     ~RDMAContext()
     {
         stop_future();
@@ -90,6 +104,10 @@ public:
         return memory_pool_->get_mr(mr_key);
     }
 
+    remote_mr_t get_remote_mr(const std::string& mr_key)
+    {
+        return memory_pool_->get_remote_mr(mr_key);
+    }
     /* Initialize */
     int64_t init(const std::string& dev_name, uint8_t ib_port, const std::string& link_type);
 
@@ -243,8 +261,11 @@ private:
     std::thread       cq_thread_;
     std::atomic<bool> stop_cq_thread_{false};
 
+    std::vector<std::thread> wq_threads_;
+
     /* Completion Queue Polling */
     int64_t cq_poll_handle();
+    int64_t cq_poll_handle(int qpi);
     /* Working Queue Dispatch */
     int64_t wq_dispatch_handle(int qpi);
 
@@ -256,6 +277,8 @@ private:
 
     /* Async RDMA Read */
     int64_t post_rc_oneside_batch(int qpi, RDMAAssignmentSharedPtr assign);
+
+    int64_t service_level_{0};
 };
 
 }  // namespace slime

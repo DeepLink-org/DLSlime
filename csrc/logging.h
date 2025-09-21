@@ -91,7 +91,7 @@ inline int get_log_level()
 
 // Error and Warn
 #define SLIME_LOG_ERROR(...) SLIME_LOG_LEVEL("ERROR", "\033[1;91m", 0, __VA_ARGS__)
-#define SLIME_LOG_WARN(...) SLIME_LOG_LEVEL("WARN", "\033[1;91m", 0, __VA_ARGS__)
+#define SLIME_LOG_WARN(...) SLIME_LOG_LEVEL("WARN", "\033[1;91m", 1, __VA_ARGS__)
 
 // Info
 #define SLIME_LOG_INFO(...) SLIME_LOG_LEVEL("INFO", "\033[1;92m", 1, __VA_ARGS__)

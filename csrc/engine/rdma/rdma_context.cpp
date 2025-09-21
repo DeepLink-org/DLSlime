@@ -169,6 +169,9 @@ int64_t RDMAContext::init(const std::string& dev_name, uint8_t ib_port, const st
     SLIME_ASSERT(cq_, "create CQ failed");
 
     for (int qpi = 0; qpi < qp_list_len_; ++qpi) {
+
+        /* Create Completion Queue (CQ) */
+        qp_management_t* qp_man = qp_management_[qpi];
         /* Create Queue Pair (QP) */
         struct ibv_qp_init_attr qp_init_attr = {};
         qp_init_attr.send_cq                 = cq_;
@@ -179,8 +182,7 @@ int64_t RDMAContext::init(const std::string& dev_name, uint8_t ib_port, const st
         qp_init_attr.cap.max_send_sge        = 1;
         qp_init_attr.cap.max_recv_sge        = 1;
         qp_init_attr.sq_sig_all              = false;
-        qp_management_t* qp_man              = qp_management_[qpi];
-        rdma_info_t&     local_rdma_info     = qp_man->local_rdma_info_;
+        rdma_info_t& local_rdma_info         = qp_man->local_rdma_info_;
         qp_man->qp_                          = ibv_create_qp(pd_, &qp_init_attr);
         if (!qp_man->qp_) {
             SLIME_LOG_ERROR("Failed to create QP " << qp_man->qp_->qp_num);
@@ -249,7 +251,6 @@ int64_t RDMAContext::connect(const json& endpoint_info_json)
     for (auto& item : endpoint_info_json["mr_info"].items()) {
         register_remote_memory_region(item.key(), item.value());
     }
-
     SLIME_ASSERT(!connected_, "Already connected!");
     SLIME_ASSERT_EQ(qp_list_len_, endpoint_info_json["rdma_info"].size(), "Peer must have same QP Size.");
 
@@ -574,7 +575,7 @@ int64_t RDMAContext::post_rc_oneside_batch(int qpi, RDMAAssignmentSharedPtr assi
         uint64_t       remote_addr = remote_mr.addr;
         uint32_t       remote_rkey = remote_mr.rkey;
         memset(&sge[i], 0, sizeof(ibv_sge));
-        sge[i].addr   = (uint64_t)mr->addr + subassign.source_offset;
+        sge[i].addr = (uint64_t)mr->addr + subassign.source_offset;
         sge[i].length = subassign.length;
         sge[i].lkey   = mr->lkey;
         wr[i].wr_id =
@@ -628,7 +629,6 @@ int64_t RDMAContext::cq_poll_handle()
             return -1;
         }
         struct ibv_wc wc[SLIME_POLL_COUNT];
-
         while (size_t nr_poll = ibv_poll_cq(cq_, SLIME_POLL_COUNT, wc)) {
             if (stop_cq_thread_)
                 return 0;
@@ -656,6 +656,8 @@ int64_t RDMAContext::cq_poll_handle()
                             callback_with_qpi->callback_info_->callback_(status_code, wc[i].imm_data);
                             break;
                         case OpCode::SEND:
+                            callback_with_qpi->callback_info_->callback_(status_code, wc[i].imm_data);
+                            break;
                         case OpCode::SEND_WITH_IMM:
                             callback_with_qpi->callback_info_->callback_(status_code, wc[i].imm_data);
                             break;
