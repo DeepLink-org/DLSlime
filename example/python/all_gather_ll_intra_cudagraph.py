@@ -10,7 +10,7 @@ class DLSlimeQGather:
 
     def __init__(self, rank: int):
         self.rank = rank
-        self.buffer = _slime_c.AllGatherLLBuffer(2, 16, 1152, 2, 8, self.rank)
+        self.buffer = _slime_c.AllGatherLLBuffer(2, 4, 513 * 8, 2, 8, self.rank)
         ipc_info = self.buffer.ipc_info()
         all_ipc_info = [None for _ in range(8)]
         dist.all_gather_object(all_ipc_info, ipc_info)
@@ -25,7 +25,7 @@ def main():
     rank = dist.get_rank()
     torch.cuda.set_device(rank)
 
-    output_dir = '/workspace/Triton-distributed/profiler/128_sp_batch_8gpu_dlslime'
+    output_dir = './'
     os.makedirs(output_dir, exist_ok=True)
 
     gather = DLSlimeQGather(rank)

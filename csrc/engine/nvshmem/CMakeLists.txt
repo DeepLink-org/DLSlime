@@ -51,7 +51,6 @@ target_include_directories(
 target_link_libraries(
     _slime_nvshmem PUBLIC
     _slime_engine
-    _slime_utils
     ${EP_CUDA_LIBRARIES}
 )
 

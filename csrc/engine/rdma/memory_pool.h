@@ -2,7 +2,7 @@
 
 #include "engine/rdma/rdma_config.h"
 
-#include "utils/json.hpp"
+#include "json.hpp"
 #include "logging.h"
 
 #include <cstddef>

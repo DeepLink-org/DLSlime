@@ -1,3 +1,12 @@
+#include "engine/assignment.h"
+#include "engine/rdma/rdma_assignment.h"
+#include "engine/rdma/rdma_config.h"
+#include "engine/rdma/rdma_context.h"
+#include "engine/rdma/rdma_scheduler.h"
+#include "engine/rdma/utils.h"
+
+#include "json.hpp"
+#include "logging.h"
 
 #include <cassert>
 #include <chrono>
@@ -17,15 +26,6 @@
 #include <gflags/gflags.h>
 #include <zmq.h>
 #include <zmq.hpp>
-
-#include "engine/assignment.h"
-#include "engine/rdma/rdma_assignment.h"
-#include "engine/rdma/rdma_config.h"
-#include "engine/rdma/rdma_context.h"
-#include "engine/rdma/rdma_scheduler.h"
-#include "utils/json.hpp"
-#include "logging.h"
-#include "utils/utils.h"
 
 using json = nlohmann::json;
 using namespace slime;

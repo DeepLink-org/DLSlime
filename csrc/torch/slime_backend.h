@@ -11,7 +11,7 @@
 #include <pybind11/chrono.h>
 
 #include "engine/rdma/rdma_endpoint.h"
-#include "utils/utils.h"
+#include "engine/rdma/utils.h"
 
 namespace slime {
 namespace c10d {

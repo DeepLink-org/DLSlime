@@ -22,7 +22,7 @@ if (BUILD_NVLINK)
 endif()
 
 if (BUILD_ASCEND_DIRECT)
-    add_subdirectory(ascend_direct_transport)
+    add_subdirectory(ascend_direct)
 endif()
 
 if (BUILD_NVSHMEM)

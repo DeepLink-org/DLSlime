@@ -3,8 +3,8 @@
 #include <cstdint>
 #include <unordered_map>
 
-#include "utils/cuda_common.h"
-#include "utils/json.hpp"
+#include "cuda_common.h"
+#include "json.hpp"
 
 namespace slime {
 using json = nlohmann::json;

@@ -1,14 +1,3 @@
-#include "engine/rdma/rdma_context.h"
-#include "engine/assignment.h"
-#include "engine/rdma/memory_pool.h"
-#include "engine/rdma/rdma_assignment.h"
-#include "engine/rdma/rdma_config.h"
-#include "engine/rdma/rdma_env.h"
-
-#include "utils/ibv_helper.h"
-#include "logging.h"
-#include "utils/utils.h"
-
 #include <algorithm>
 #include <atomic>
 #include <cassert>
@@ -18,14 +7,25 @@
 #include <functional>
 #include <memory>
 #include <mutex>
-#include <sys/types.h>
+#include <stdexcept>
 #include <thread>
-#include <unistd.h>
 #include <vector>
 
 #include <infiniband/verbs.h>
 #include <numa.h>
-#include <stdexcept>
+#include <sys/types.h>
+#include <unistd.h>
+
+#include "engine/assignment.h"
+#include "engine/rdma/ibv_helper.h"
+#include "engine/rdma/memory_pool.h"
+#include "engine/rdma/rdma_assignment.h"
+#include "engine/rdma/rdma_config.h"
+#include "engine/rdma/rdma_env.h"
+#include "engine/rdma/utils.h"
+#include "logging.h"
+
+#include "rdma_context.h"
 
 namespace slime {
 

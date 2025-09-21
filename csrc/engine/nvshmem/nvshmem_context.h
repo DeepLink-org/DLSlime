@@ -2,7 +2,7 @@
 
 #include "engine/nvshmem/kernels/api.cuh"
 #include "engine/nvshmem/kernels/internode_ll.cuh"
-#include "utils/json.hpp"
+#include "json.hpp"
 #include "logging.h"
 
 #include <cstdint>

@@ -1,5 +1,19 @@
+#include <cstdint>
+#include <functional>
+#include <memory>
+
+#include <pybind11/cast.h>
+#include <pybind11/chrono.h>
+#include <pybind11/functional.h>
+#include <pybind11/pybind11.h>
+#include <pybind11/pytypes.h>
+#include <pybind11/stl.h>
+
 #include "engine/assignment.h"
 #include "engine/dlpack.h"
+#include "json.hpp"
+#include "logging.h"
+#include "pybind_json/pybind_json.hpp"
 
 #ifdef BUILD_NVLINK
 #include "engine/nvlink/memory_pool.h"
@@ -17,29 +31,13 @@
 #include "engine/rdma/rdma_context.h"
 #include "engine/rdma/rdma_endpoint.h"
 #include "engine/rdma/rdma_scheduler.h"
+#include "engine/rdma/utils.h"
 #endif
 
 #ifdef BUILD_OPS
 #include "ops/intra/all_gather_ll/all_gather_ll.h"
 #include "ops/intra/all_gather_ll/all_gather_ll_buffer.h"
 #endif
-
-#include "utils/json.hpp"
-#include "logging.h"
-#include "utils/utils.h"
-
-#include <cstdint>
-#include <functional>
-#include <memory>
-
-#include <pybind11/cast.h>
-#include <pybind11/chrono.h>
-#include <pybind11/functional.h>
-#include <pybind11/pybind11.h>
-#include <pybind11/pytypes.h>
-#include <pybind11/stl.h>
-
-#include "pybind_json/pybind_json.hpp"
 
 using json = nlohmann::json;
 
@@ -186,5 +184,4 @@ PYBIND11_MODULE(_slime_c, m)
         .def("connect_full_mesh", &slime::AllGatherLLBuffer::connectFullMesh)
         .def("all_gather_ll", &slime::AllGatherLLBuffer::allGatherLL);
 #endif
-
 }

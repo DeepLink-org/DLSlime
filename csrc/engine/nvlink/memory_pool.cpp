@@ -1,8 +1,8 @@
 #include <cstdint>
 #include <vector>
 
+#include "cuda_common.h"
 #include "memory_pool.h"
-#include "utils/cuda_common.h"
 
 namespace slime {
 int NVLinkMemoryPool::register_memory_region(const std::string& mr_key, uintptr_t addr, uint64_t offset, size_t length)

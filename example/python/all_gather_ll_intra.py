@@ -38,24 +38,19 @@ for i in range(10):
     buffer.all_gather_ll(q.data_ptr())
 torch.cuda.synchronize()
 
-# with torch.profiler.profile(activities=[torch.profiler.ProfilerActivity.CUDA, torch.profiler.ProfilerActivity.CPU],
-#                             on_trace_ready=torch.profiler.tensorboard_trace_handler(f'./profiler_{rank}.json'),
-#                             schedule=torch.profiler.schedule(
-#                                 skip_first=2,  # 跳过前 2 个 step（warmup）
-#                                 wait=1,        # 在正式记录前等待 1 个 step
-#                                 warmup=1,      # 在正式记录前预热 1 个 step
-#                                 active=8,      # 记录 3 个 steps
-#                                 repeat=1,      # 只执行一轮 profiling
-#                             )
-# ) as prof:
-#     for i in range(10):
-#         buffer.all_gather_ll(q.data_ptr())
-#         torch.cuda.synchronize()
-#         prof.step()
-
-for i in range(10):
-    buffer.all_gather_ll(q.data_ptr())
-    torch.cuda.synchronize()
+with torch.profiler.profile(activities=[torch.profiler.ProfilerActivity.CUDA, torch.profiler.ProfilerActivity.CPU],
+                            on_trace_ready=torch.profiler.tensorboard_trace_handler(f'./profiler_{rank}.json'),
+                            schedule=torch.profiler.schedule(
+                                skip_first=2,
+                                wait=1,
+                                warmup=1,
+                                active=8,
+                                repeat=1,
+                            )) as prof:
+    for i in range(10):
+        buffer.all_gather_ll(q.data_ptr())
+        torch.cuda.synchronize()
+        prof.step()
 
 local_buffer = buffer.dlpack_local_buffer()
 local_buffer_tensor = torch.utils.dlpack.from_dlpack(local_buffer)

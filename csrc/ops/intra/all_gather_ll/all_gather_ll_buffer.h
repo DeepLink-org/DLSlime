@@ -1,7 +1,6 @@
 #pragma once
 
-#include "utils/cuda_common.h"
-#include "utils/json.hpp"
+#include "json.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -11,6 +10,7 @@
 
 #include <torch/torch.h>
 
+#include "ops/exception.cuh"
 #include "ops/intra/all_gather_ll/all_gather_ll.h"
 
 using json = nlohmann::json;

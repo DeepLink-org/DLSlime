@@ -22,7 +22,6 @@ slime_option(BUILD_TORCH_PLUGIN        "Build torch plugin"               OFF)
 
 # Slime options for test
 slime_option(BUILD_BENCH               "Build transfer engine benchmark"  OFF)
-slime_option(BUILD_EXAMPLE             "Build example"                    OFF)
 slime_option(BUILD_TEST                "Build test"                       OFF)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -52,10 +51,6 @@ endif()
 
 include_directories(csrc)
 add_subdirectory(csrc)
-
-if (BUILD_EXAMPLE)
-    add_subdirectory(example/cpp)
-endif (BUILD_EXAMPLE)
 
 if (BUILD_BENCH)
     add_subdirectory(bench/cpp)
