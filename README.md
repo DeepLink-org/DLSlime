@@ -2,12 +2,12 @@
 <p align="center"> <img src="docs/imgs/assets/logo.svg" alt="" width="300"> </p>
 </div>
 
-<h1 align="center"> Flexible & Efficient Heterogeneous Transfer Toolkit </h1>
-
 <p align="center">
   <a href="https://join.slack.com/t/dlslime/shared_invite/zt-3e9zvercw-a89KI_Ig8N1UTaol_q6MXg"><img src="docs/imgs/assets/slack.svg" width="16" height="16" style="vertical-align: middle;"> Slack </a> |
   <a href="docs/imgs/assets/wechat_qrcode.jpg"><img src="docs/imgs/assets/wechat.svg" width="16" height="16" style="vertical-align: middle;"> WeChat Group </a>
 </p>
+
+<h1 align="center"> Flexible & Efficient Heterogeneous Transfer Toolkit </h1>
 
 ## Getting Started
 

@@ -62,8 +62,8 @@ __global__ __launch_bounds__(1024, 1) void all_gather_ll_kernel(int8_t*  q_ptr,
     __syncwarp();
 
     // Step 2. signal <= 1
-    // check struggler
-    // barrier or signal pingpong
+    // TODO (JimyMa): check struggler
+    // TODO (JimyMa): barrier or signal pingpong
     int* signal_ptr = ipc_signal_ptr[warp_id];
     lane_id == 0 ? deep_ep::atomic_add_release_global(signal_ptr + rank, 1) : 0;
 
@@ -71,16 +71,11 @@ __global__ __launch_bounds__(1024, 1) void all_gather_ll_kernel(int8_t*  q_ptr,
 
     // Step 3. sync
     int* local_signal_ptr = ipc_signal_ptr[rank];
-    if (threadIdx.x == 0 and blockIdx.x == 0) {
-        for (int i = 0; i < world_size; ++i) {
-            while (__ldg(local_signal_ptr + i) < num_sms) {
-                __threadfence_system();
-            }
-            local_signal_ptr[i] = 0;
-        }
+    if (blockIdx.x == 0 and threadIdx.x < world_size) {
+        while (deep_ep::ld_acquire_global(local_signal_ptr + threadIdx.x) != num_sms);
+        local_signal_ptr[threadIdx.x] = 0;
     }
 
-    __syncthreads();
 }
 
 void all_gather_ll(torch::Tensor q,

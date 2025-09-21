@@ -1,6 +1,6 @@
 #include <torch/torch.h>
 
-#include "ops/intra/all_gather_ll/all_gather_ll_buffer.h"
+#include "ops/intra/all_gather_intra/all_gather_intra_buffer.h"
 
 namespace slime {
 

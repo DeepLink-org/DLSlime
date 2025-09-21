@@ -11,7 +11,7 @@
 #include <torch/torch.h>
 
 #include "ops/exception.cuh"
-#include "ops/intra/all_gather_ll/all_gather_ll.h"
+#include "ops/intra/all_gather_intra/all_gather_intra.h"
 
 using json = nlohmann::json;
 

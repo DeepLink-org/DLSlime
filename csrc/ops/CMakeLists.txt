@@ -23,8 +23,8 @@ list(APPEND CMAKE_CUDA_FLAGS
 add_library(
     _slime_ops
     SHARED
-    intra/all_gather_ll/all_gather_ll.cu
-    intra/all_gather_ll/all_gather_ll_buffer.cpp
+    intra/all_gather_intra/all_gather_intra.cu
+    intra/all_gather_intra/all_gather_intra_buffer.cpp
 )
 
 target_compile_definitions(_slime_ops PRIVATE "-DTORCH_API_INCLUDE_EXTENSION_H")

@@ -10,7 +10,7 @@ class DLSlimeQGather:
 
     def __init__(self, rank: int):
         self.rank = rank
-        self.buffer = _slime_c.AllGatherLLBuffer(2, 4, 513 * 8, 2, 8, self.rank)
+        self.buffer = _slime_c.AllGatherLLBuffer(2, 32, 576, 2, 8, self.rank)
         ipc_info = self.buffer.ipc_info()
         all_ipc_info = [None for _ in range(8)]
         dist.all_gather_object(all_ipc_info, ipc_info)
@@ -64,6 +64,7 @@ def main():
     ) as prof:
         for i in range(10):
             torch.profiler.record_function(f'replay_start_{i}')
+            dist.barrier()
             graph.replay()
             torch.profiler.record_function(f'replay_end_{i}')
             torch.cuda.synchronize()
