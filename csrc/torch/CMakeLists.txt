@@ -16,12 +16,11 @@ pybind11_add_module(
 
 target_include_directories(_slime_torch PRIVATE ${TORCH_INCLUDE_DIRS})
 
-target_compile_definitions(_slime_torch PRIVATE
-    "-DTORCH_API_INCLUDE_EXTENSION_H"
-)
-target_compile_definitions(_slime_torch PRIVATE
-    "-DTORCH_EXTENSION_NAME=_slime_torch"
-)
+target_compile_definitions(_slime_torch PRIVATE "-DTORCH_API_INCLUDE_EXTENSION_H")
+target_compile_definitions(_slime_torch PRIVATE "-DTORCH_EXTENSION_NAME=_slime_torch")
+
+target_compile_definitions(_slime_torch PRIVATE "-D_GLIBCXX_USE_CXX11_ABI=${TORCH_ENABLE_ABI}")
+target_compile_definitions(_slime_torch PRIVATE -DPYBIND11_BUILD_ABI=\"${Torch_PYBIND11_BUILD_ABI}\")
 
 target_link_options(_slime_torch PRIVATE "-Wl,--no-as-needed")
 target_link_libraries(

@@ -1,5 +1,5 @@
 <div align="center">
-<p align="center"> <img src="docs/imgs/assets/logo.svg" alt="" width="500"> </p>
+<p align="center"> <img src="docs/imgs/assets/logo.svg" alt="" width="300"> </p>
 </div>
 
 <h1 align="center"> Flexible & Efficient Heterogeneous Transfer Toolkit </h1>

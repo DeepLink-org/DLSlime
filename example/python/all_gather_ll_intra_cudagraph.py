@@ -10,7 +10,7 @@ class DLSlimeQGather:
 
     def __init__(self, rank: int):
         self.rank = rank
-        self.buffer = _slime_c.AllGatherLLBuffer(2, 8, 1152 * 2, 2, 8, self.rank)
+        self.buffer = _slime_c.AllGatherLLBuffer(2, 16, 1152, 2, 8, self.rank)
         ipc_info = self.buffer.ipc_info()
         all_ipc_info = [None for _ in range(8)]
         dist.all_gather_object(all_ipc_info, ipc_info)

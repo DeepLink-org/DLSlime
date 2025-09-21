@@ -27,6 +27,11 @@ add_library(
     intra/all_gather_ll/all_gather_ll_buffer.cpp
 )
 
+target_compile_definitions(_slime_ops PRIVATE "-DTORCH_API_INCLUDE_EXTENSION_H")
+target_compile_definitions(_slime_ops PRIVATE "-DTORCH_EXTENSION_NAME=_slime_ops")
+target_compile_definitions(_slime_ops PRIVATE "-D_GLIBCXX_USE_CXX11_ABI=${TORCH_ENABLE_ABI}")
+target_compile_definitions(_slime_ops PRIVATE -DPYBIND11_BUILD_ABI=\"${Torch_PYBIND11_BUILD_ABI}\")
+
 target_include_directories(_slime_ops PUBLIC ${TORCH_INCLUDE_DIRS})
 
 target_link_options(_slime_ops PRIVATE "-Wl,--no-as-needed")

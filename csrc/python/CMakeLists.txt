@@ -30,6 +30,10 @@ endif()
 if (BUILD_OPS)
     target_compile_definitions(_slime_c PRIVATE -DBUILD_OPS)
     target_link_libraries(_slime_c PRIVATE ${_slime_c_link_libraries} _slime_ops ${TORCH_LIBRARIES})
+    target_compile_definitions(_slime_c PRIVATE "-DTORCH_API_INCLUDE_EXTENSION_H")
+    target_compile_definitions(_slime_c PRIVATE "-DTORCH_EXTENSION_NAME=_slime_c")
+    target_compile_definitions(_slime_c PRIVATE "-D_GLIBCXX_USE_CXX11_ABI=${TORCH_ENABLE_ABI}")
+    target_compile_definitions(_slime_c PRIVATE -DPYBIND11_BUILD_ABI=\"${Torch_PYBIND11_BUILD_ABI}\")
 endif()
 
 set_target_properties(
