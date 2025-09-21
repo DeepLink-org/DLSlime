@@ -46,12 +46,17 @@ if (${TORCH_WITH_CUDA})
     set(TORCH_LIBRARIES ${TORCH_LIBRARIES} ${Torch_DIR}/lib/libc10_cuda.so ${Torch_DIR}/lib/libtorch_cuda.so)
 endif()
 
+message(STATUS "find torch:" ${Torch_DIR})
 message(STATUS "find TORCH_LIBRARIES.")
 message(STATUS "find TORCH_INCLUDE_DIRS.")
+message(STATUS "TORCH ABI:" ${TORCH_ENABLE_ABI})
+message(STATUS "TORCH PYBIND ABI:" ${Torch_PYBIND11_BUILD_ABI})
+
 
 # Common Compilation Flags
-add_compile_definitions("_GLIBCXX_USE_CXX11_ABI=${TORCH_ENABLE_ABI}")
-add_compile_definitions(PYBIND11_BUILD_ABI=\"${Torch_PYBIND11_BUILD_ABI}\")
+add_compile_options("-DTORCH_API_INCLUDE_EXTENSION_H")
+add_compile_options("-D_GLIBCXX_USE_CXX11_ABI=${TORCH_ENABLE_ABI}")
+add_compile_options(-DPYBIND11_BUILD_ABI=\"${Torch_PYBIND11_BUILD_ABI}\")
 
 if (USE_MACA)
     add_compile_definitions("USE_MACA")

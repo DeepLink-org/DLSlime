@@ -37,6 +37,7 @@ if (BUILD_NVSHMEM OR BUILD_NVLINK OR BUILD_OPS)
     set(CMAKE_CUDA_STANDARD 17)
     set(CMAKE_CUDA_ARCHITECTURES "90")
     find_package(CUDAToolkit REQUIRED)
+    include_directories(${CUDAToolkit_INCLUDE_DIRS})
 endif()
 
 if (BUILD_PYTHON)

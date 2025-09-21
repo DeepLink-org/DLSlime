@@ -1,7 +1,7 @@
 #include <cstdint>
 #include <vector>
 
-#include "cuda_common.h"
+#include "cuda_common.cuh"
 #include "memory_pool.h"
 
 namespace slime {

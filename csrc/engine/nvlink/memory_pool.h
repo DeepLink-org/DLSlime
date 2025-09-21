@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <unordered_map>
 
-#include "cuda_common.h"
+#include "cuda_common.cuh"
 #include "json.hpp"
 
 namespace slime {

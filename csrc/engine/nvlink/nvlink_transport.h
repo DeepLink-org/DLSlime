@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-#include "cuda_common.h"
+#include "cuda_common.cuh"
 #include "engine/assignment.h"
 #include "memory_pool.h"
 

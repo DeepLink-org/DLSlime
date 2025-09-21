@@ -50,7 +50,7 @@ python example/python/p2p_rdma_rc_send_recv.py
 ```
 
 ```
-python example/python/p2p_rdma_rc_gdr_send_recv.py
+python example/python/p2p_rdma_rc_send_recv_gdr.py
 ```
 
 - DLSlime torch backend
