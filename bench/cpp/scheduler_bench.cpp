@@ -1,4 +1,3 @@
-
 #include <cassert>
 #include <chrono>
 #include <condition_variable>
@@ -6,15 +5,15 @@
 #include <cstdint>
 #include <future>
 #include <mutex>
-#include <numa.h>
 #include <stdexcept>
 #include <string>
-#include <sys/time.h>
 #include <thread>
-#include <unistd.h>
 #include <unordered_map>
 
 #include <gflags/gflags.h>
+#include <numa.h>
+#include <sys/time.h>
+#include <unistd.h>
 #include <zmq.h>
 #include <zmq.hpp>
 
@@ -23,9 +22,10 @@
 #include "engine/rdma/rdma_config.h"
 #include "engine/rdma/rdma_context.h"
 #include "engine/rdma/rdma_scheduler.h"
-#include "utils/json.hpp"
-#include "utils/logging.h"
-#include "utils/utils.h"
+#include "engine/rdma/utils.h"
+
+#include "json.hpp"
+#include "logging.h"
 
 using json = nlohmann::json;
 using namespace slime;

@@ -1,6 +1,6 @@
 #include "engine/rdma/memory_pool.h"
 
-#include "utils/logging.h"
+#include "logging.h"
 
 #include <cstdint>
 #include <cstdlib>
@@ -9,6 +9,7 @@
 #include <unordered_map>
 
 namespace slime {
+
 int RDMAMemoryPool::register_memory_region(const std::string& mr_key, uintptr_t data_ptr, uint64_t length)
 {
     std::unique_lock<std::mutex> lock(mrs_mutex_);
@@ -22,7 +23,7 @@ int RDMAMemoryPool::register_memory_region(const std::string& mr_key, uintptr_t 
 
     SLIME_ASSERT(mr, " Failed to register memory " << data_ptr);
 
-    SLIME_LOG_DEBUG("Memory region: " << (void*)data_ptr << " -- " << (void*)(data_ptr + length)
+    SLIME_LOG_DEBUG("Memory region: " << mr_key << ", " << (void*)data_ptr << " -- " << (void*)(data_ptr + length)
                                       << ", Device name: " << pd_->context->device->dev_name << ", Length: " << length
                                       << " (" << length / 1024 / 1024 << " MB)"
                                       << ", Permission: " << access_rights << ", LKey: " << mr->lkey
@@ -47,6 +48,8 @@ int RDMAMemoryPool::register_remote_memory_region(const std::string& mr_key,
 {
     std::unique_lock<std::mutex> lock(remote_mrs_mutex_);
     remote_mrs_[mr_key] = remote_mr_t(addr, length, rkey);
+    SLIME_LOG_DEBUG("Remote memory region registered: " << mr_key << ", " << addr << ", " << length << ", " << rkey
+                                                        << ".");
     return 0;
 }
 
@@ -55,6 +58,7 @@ int RDMAMemoryPool::register_remote_memory_region(const std::string& mr_key, con
     std::unique_lock<std::mutex> lock(remote_mrs_mutex_);
     remote_mrs_[mr_key] =
         remote_mr_t(mr_info["addr"].get<uintptr_t>(), mr_info["length"].get<size_t>(), mr_info["rkey"].get<uint32_t>());
+    SLIME_LOG_DEBUG("Remote memory region registered: " << mr_key << ", " << mr_info << ".");
     return 0;
 }
 
@@ -68,7 +72,7 @@ int RDMAMemoryPool::unregister_remote_memory_region(const std::string& mr_key)
 json RDMAMemoryPool::mr_info()
 {
     std::unique_lock<std::mutex> lock(mrs_mutex_);
-    json mr_info;
+    json                         mr_info;
     for (auto& mr : mrs_) {
         mr_info[mr.first] = {
             {"addr", (uintptr_t)mr.second->addr},
@@ -82,7 +86,7 @@ json RDMAMemoryPool::mr_info()
 json RDMAMemoryPool::remote_mr_info()
 {
     std::unique_lock<std::mutex> lock(remote_mrs_mutex_);
-    json mr_info;
+    json                         mr_info;
     for (auto& mr : remote_mrs_) {
         mr_info[mr.first] = {{"addr", mr.second.addr}, {"rkey", mr.second.rkey}, {"length", mr.second.length}};
     }

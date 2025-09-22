@@ -1,5 +1,3 @@
-#include "rdma_scheduler.h"
-
 #include <algorithm>
 #include <cstddef>
 #include <random>
@@ -9,8 +7,10 @@
 
 #include "engine/assignment.h"
 #include "engine/rdma/rdma_assignment.h"
-#include "utils/logging.h"
-#include "utils/utils.h"
+#include "engine/rdma/utils.h"
+#include "logging.h"
+
+#include "rdma_scheduler.h"
 
 namespace slime {
 
@@ -94,7 +94,9 @@ RDMASchedulerAssignmentSharedPtr RDMAScheduler::submitAssignment(OpCode opcode, 
     // }
 
     RDMAAssignmentSharedPtrBatch rdma_assignment_batch;
-    rdma_assignment_batch.push_back(rdma_ctxs_[selectRdma()].submit(opcode, batch));
+    auto assignment = rdma_ctxs_[selectRdma()].submit(opcode, batch);
+    for (int i = 0; i < assignment->rdma_assignment_batch_.size(); ++i)
+        rdma_assignment_batch.push_back(assignment->rdma_assignment_batch_[i]);
 
     return std::make_shared<RDMASchedulerAssignment>(rdma_assignment_batch);
 }

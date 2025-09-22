@@ -23,7 +23,7 @@
 #include "gloo/rendezvous/store.h"
 #include "gloo/transport/device.h"
 #include "gloo/transport/unbound_buffer.h"
-#include "utils/logging.h"
+#include "logging.h"
 
 namespace slime {
 namespace c10d {

@@ -1,34 +1,11 @@
 #pragma once
-#include <cstdlib>
-#include <sstream>
+
+#include "env.h"
+
 #include <string>
 #include <vector>
 
 namespace slime {
-
-template<typename T>
-T get_env(const char* name, T default_value)
-{
-    const char* val = std::getenv(name);
-    if (!val)
-        return default_value;
-
-    if constexpr (std::is_same_v<T, int>) {
-        return std::stoi(val);
-    }
-    else if constexpr (std::is_same_v<T, std::vector<std::string>>) {
-        std::vector<std::string> result;
-        std::stringstream        ss(val);
-        std::string              item;
-        while (std::getline(ss, item, ',')) {
-            result.emplace_back(item);
-        }
-        return result;
-    }
-    else {
-        static_assert(sizeof(T) == 0, "Unsupported type for get_env");
-    }
-}
 
 inline const std::vector<std::string> SLIME_VISIBLE_DEVICES =
     get_env<std::vector<std::string>>("SLIME_VISIBLE_DEVICES", {});
@@ -43,5 +20,6 @@ inline const int SLIME_GID_INDEX                 = get_env<int>("SLIME_GID_INDEX
 inline const int SLIME_QP_NUM                    = get_env<int>("SLIME_QP_NUM", 8);
 inline const int SLIME_CQ_NUM                    = get_env<int>("SLIME_CQ_NUM", 1);
 inline const int SLIME_MAX_CQ_DEPTH              = get_env<int>("SLIME_MAX_CQ_DEPTH", 8192);
+inline const int SLIME_AGG_QP_NUM                = get_env<int>("SLIME_AGG_QP_NUM", 1);
 
 }  // namespace slime

@@ -1,7 +1,12 @@
 #pragma once
 
+#include <cstdlib>
+#include <iostream>
+#include <sstream>
 #include <string>
 #include <vector>
+
+#include <numa.h>
 
 namespace slime {
 

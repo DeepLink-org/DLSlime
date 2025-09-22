@@ -10,11 +10,28 @@ pybind11_add_module(
     bind.cpp
 )
 
-set(_slime_c_link_libraries _slime_rdma)
+set(_slime_c_link_libraries "")
 
 if (BUILD_NVLINK)
     target_compile_definitions(_slime_c PRIVATE -DBUILD_NVLINK)
     list(APPEND _slime_c_link_libraries _slime_nvlink CUDA::cudart)
+endif()
+
+if (BUILD_RDMA)
+    target_compile_definitions(_slime_c PRIVATE -DBUILD_RDMA)
+    list(APPEND _slime_c_link_libraries _slime_rdma)
+endif()
+
+if (BUILD_NVSHMEM)
+    target_compile_definitions(_slime_c PRIVATE -DBUILD_NVSHMEM)
+    list(APPEND _slime_c_link_libraries _slime_nvshmem)
+endif()
+
+if (BUILD_OPS)
+    target_compile_definitions(_slime_c PRIVATE -DBUILD_OPS)
+    target_compile_definitions(_slime_c PRIVATE "-DTORCH_API_INCLUDE_EXTENSION_H")
+    target_compile_definitions(_slime_c PRIVATE "-DTORCH_EXTENSION_NAME=_slime_c")
+    list(APPEND _slime_c_link_libraries ${_slime_c_link_libraries} _slime_ops ${TORCH_LIBRARIES})
 endif()
 
 target_link_libraries(_slime_c PRIVATE ${_slime_c_link_libraries})
@@ -25,12 +42,6 @@ set_target_properties(
     BUILD_WITH_INSTALL_RPATH TRUE
     INSTALL_RPATH "\${ORIGIN}"
 )
-
-# include(GNUInstallDirs)
-# install(
-#     TARGETS _slime_c
-#     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}/python${Python3_VERSION_MAJOR}.${Python3_VERSION_MINOR}/site-packages
-# )
 
 install(
     TARGETS

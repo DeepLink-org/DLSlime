@@ -4,11 +4,14 @@
 
 #pragma once
 
+#include "env.h"
+
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <string>
 
+namespace slime {
 inline std::string get_env_variable(char const* env_var_name)
 {
     if (!env_var_name) {
@@ -20,10 +23,11 @@ inline std::string get_env_variable(char const* env_var_name)
     return "";
 }
 
+
+
 inline int get_log_level()
 {
-    std::string lvl = get_env_variable("SLIME_LOG_LEVEL");
-    return !lvl.empty() ? atoi(lvl.c_str()) : 0;
+    return SLIME_LOG_LEVEL;
 }
 
 #define STREAM_VAR_ARGS1(a) << a
@@ -87,10 +91,11 @@ inline int get_log_level()
 
 // Error and Warn
 #define SLIME_LOG_ERROR(...) SLIME_LOG_LEVEL("ERROR", "\033[1;91m", 0, __VA_ARGS__)
-#define SLIME_LOG_WARN(...) SLIME_LOG_LEVEL("WARN", "\033[1;91m", 0, __VA_ARGS__)
+#define SLIME_LOG_WARN(...) SLIME_LOG_LEVEL("WARN", "\033[1;91m", 1, __VA_ARGS__)
 
 // Info
 #define SLIME_LOG_INFO(...) SLIME_LOG_LEVEL("INFO", "\033[1;92m", 1, __VA_ARGS__)
 
 // Debug
 #define SLIME_LOG_DEBUG(...) SLIME_LOG_LEVEL("DEBUG", "\033[1;92m", 2, __VA_ARGS__)
+}  // namespace slime

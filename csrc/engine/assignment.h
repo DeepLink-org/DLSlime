@@ -5,8 +5,8 @@
 #include <string>
 #include <vector>
 
-#include "utils/json.hpp"
-#include "utils/logging.h"
+#include "json.hpp"
+#include "logging.h"
 
 namespace slime {
 

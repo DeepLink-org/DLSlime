@@ -1,13 +1,14 @@
 #pragma once
 
 #include "engine/assignment.h"
+#include "engine/rdma/affinity.h"
 #include "engine/rdma/memory_pool.h"
 #include "engine/rdma/rdma_assignment.h"
 #include "engine/rdma/rdma_config.h"
 #include "engine/rdma/rdma_env.h"
 
-#include "utils/json.hpp"
-#include "utils/logging.h"
+#include "json.hpp"
+#include "logging.h"
 
 #include <condition_variable>
 #include <cstdint>
@@ -18,6 +19,7 @@
 #include <queue>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -63,6 +65,20 @@ public:
         srand48(time(NULL));
     }
 
+    RDMAContext(size_t qp_num, int64_t service_level): service_level_(service_level)
+    {
+        SLIME_LOG_DEBUG("Initializing qp management, num qp: " << qp_num);
+
+        qp_list_len_   = qp_num;
+        qp_management_ = new qp_management_t*[qp_list_len_];
+        for (int qpi = 0; qpi < qp_list_len_; qpi++) {
+            qp_management_[qpi] = new qp_management_t();
+        }
+
+        /* random initialization for psn configuration */
+        srand48(time(NULL));
+    }
+
     ~RDMAContext()
     {
         stop_future();
@@ -83,23 +99,38 @@ public:
         SLIME_LOG_DEBUG("RDMAContext deconstructed")
     }
 
+    struct ibv_mr* get_mr(const std::string& mr_key)
+    {
+        return memory_pool_->get_mr(mr_key);
+    }
+
+    remote_mr_t get_remote_mr(const std::string& mr_key)
+    {
+        return memory_pool_->get_remote_mr(mr_key);
+    }
     /* Initialize */
     int64_t init(const std::string& dev_name, uint8_t ib_port, const std::string& link_type);
 
     /* Memory Allocation */
-    int64_t register_memory_region(std::string mr_key, uintptr_t data_ptr, size_t length)
+    inline int64_t register_memory_region(std::string mr_key, uintptr_t data_ptr, size_t length)
     {
         memory_pool_->register_memory_region(mr_key, data_ptr, length);
         return 0;
     }
 
-    int64_t register_remote_memory_region(std::string mr_key, json mr_info)
+    inline int register_remote_memory_region(const std::string& mr_key, uintptr_t addr, size_t length, uint32_t rkey)
+    {
+        memory_pool_->register_remote_memory_region(mr_key, addr, length, rkey);
+        return 0;
+    }
+
+    inline int64_t register_remote_memory_region(std::string mr_key, json mr_info)
     {
         memory_pool_->register_remote_memory_region(mr_key, mr_info);
         return 0;
     }
 
-    int64_t unregister_memory_region(std::string mr_key)
+    inline int64_t unregister_memory_region(std::string mr_key)
     {
         memory_pool_->unregister_memory_region(mr_key);
         return 0;
@@ -114,11 +145,11 @@ public:
     /* RDMA Link Construction */
     int64_t connect(const json& endpoint_info_json);
     /* Submit an assignment */
-    RDMAAssignmentSharedPtr submit(OpCode           opcode,
-                                   AssignmentBatch& assignment,
-                                   callback_fn_t    callback = nullptr,
-                                   int              qpi      = UNDEFINED_QPI,
-                                   int32_t          imm_data = UNDEFINED_IMM_DATA);
+    std::shared_ptr<RDMASchedulerAssignment> submit(OpCode           opcode,
+                                                    AssignmentBatch& assignment,
+                                                    callback_fn_t    callback = nullptr,
+                                                    int              qpi      = UNDEFINED_QPI,
+                                                    int32_t          imm_data = UNDEFINED_IMM_DATA);
 
     void launch_future();
     void stop_future();
@@ -191,8 +222,8 @@ private:
         std::condition_variable has_runnable_event_;
 
         /* async wq handler */
-        std::future<void> wq_future_;
-        std::atomic<bool> stop_wq_future_{false};
+        std::thread       wq_thread_;
+        std::atomic<bool> stop_wq_thread_{false};
 
         ~qp_management()
         {
@@ -204,12 +235,18 @@ private:
     size_t            qp_list_len_{1};
     qp_management_t** qp_management_;
 
-    int last_qp_selection_ = -1;
-    int select_qpi()
+    int              last_qp_selection_{-1};
+    std::vector<int> select_qpi(int num)
     {
+        std::vector<int> agg_qpi;
         // Simplest round robin, we could enrich it in the future
-        last_qp_selection_ = (last_qp_selection_ + 1) % qp_list_len_;
-        return last_qp_selection_;
+
+        for (int i = 0; i < num; ++i) {
+            last_qp_selection_ = (last_qp_selection_ + 1) % qp_list_len_;
+            agg_qpi.push_back(last_qp_selection_);
+        }
+
+        return agg_qpi;
     }
 
     typedef struct cq_management {
@@ -221,13 +258,18 @@ private:
     bool connected_   = false;
 
     /* async cq handler */
-    std::future<void> cq_future_;
-    std::atomic<bool> stop_cq_future_{false};
+    std::thread       cq_thread_;
+    std::atomic<bool> stop_cq_thread_{false};
+
+    std::vector<std::thread> wq_threads_;
 
     /* Completion Queue Polling */
     int64_t cq_poll_handle();
+    int64_t cq_poll_handle(int qpi);
     /* Working Queue Dispatch */
     int64_t wq_dispatch_handle(int qpi);
+
+    int socketId();
 
     /* Async RDMA SendRecv */
     int64_t post_send_batch(int qpi, RDMAAssignmentSharedPtr assign);
@@ -235,6 +277,8 @@ private:
 
     /* Async RDMA Read */
     int64_t post_rc_oneside_batch(int qpi, RDMAAssignmentSharedPtr assign);
+
+    int64_t service_level_{0};
 };
 
 }  // namespace slime

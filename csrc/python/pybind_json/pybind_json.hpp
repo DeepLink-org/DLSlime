@@ -13,7 +13,7 @@
 #include <string>
 #include <vector>
 
-#include "utils/json.hpp"
+#include "json.hpp"
 
 #include "pybind11/pybind11.h"
 
