@@ -20,8 +20,7 @@ namespace slime {
 class AllGatherLLBuffer {
 
 public:
-    AllGatherLLBuffer(
-        int32_t max_bs, int32_t num_head, int32_t head_size, int32_t itemsize, int32_t world_size, int32_t rank);
+    AllGatherLLBuffer(int32_t max_bs, int32_t msg_size, int32_t itemsize, int32_t world_size, int32_t rank);
 
     int32_t get_buffer_size();
 
@@ -43,8 +42,7 @@ public:
     cudaIpcMemHandle_t local_signal_ipc_handle_;
 
     int32_t max_bs_;
-    int32_t num_head_;
-    int32_t head_size_;
+    int32_t msg_size_;
     int32_t itemsize_;
     int32_t world_size_;
     int32_t rank_;

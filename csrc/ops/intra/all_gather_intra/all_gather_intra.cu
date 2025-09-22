@@ -17,18 +17,19 @@
 
 namespace slime {
 
+#define MAX_SMS 128
+
 __global__ __launch_bounds__(1024, 1) void all_gather_ll_kernel(int8_t*  q_ptr,
                                                                 int8_t** ipc_buffer_ptr,
                                                                 int**    ipc_signal_ptr,
                                                                 int32_t  max_bs,
-                                                                int32_t  num_head,
-                                                                int32_t  head_size,
+                                                                int32_t  msg_size,
                                                                 int32_t  itemsize,
                                                                 int32_t  world_size,
                                                                 int32_t  rank)
 {
 
-    const int num_sms = std::min(128, max_bs * num_head);
+    const int num_sms = std::min(MAX_SMS, max_bs);
 
     const int sm_id   = blockIdx.x;
     const int warp_id = threadIdx.x / 32;
@@ -38,13 +39,13 @@ __global__ __launch_bounds__(1024, 1) void all_gather_ll_kernel(int8_t*  q_ptr,
     using vec_t        = int4;
     const int VEC_SIZE = sizeof(int4);
 
-    const int num_msg_per_warp     = head_size * itemsize;
+    const int num_msg_per_warp     = msg_size * itemsize;
     const int num_vec_msg_per_warp = num_msg_per_warp / VEC_SIZE;
 
-    const int q_idx_base = sm_id * head_size * itemsize;
-    const int q_size     = max_bs * num_head * head_size * itemsize;
+    const int q_idx_base = sm_id * msg_size * itemsize;
+    const int q_size     = max_bs * msg_size * itemsize;
     // write q to buffer
-    for (int q_idx = q_idx_base; q_idx < q_size; q_idx += num_sms * head_size * itemsize) {
+    for (int q_idx = q_idx_base; q_idx < q_size; q_idx += num_sms * msg_size * itemsize) {
         int8_t*   q_ptr_for_write          = q_ptr + q_idx;
         vec_t*    vec_q_ptr_for_write      = reinterpret_cast<vec_t*>(q_ptr_for_write);
         const int buffer_idx               = q_idx + q_size * rank;
@@ -82,8 +83,7 @@ void all_gather_ll(torch::Tensor q,
                    int8_t**      ipc_buffer_ptr,
                    int**         ipc_signal_ptr,
                    int32_t       max_bs,
-                   int32_t       num_head,
-                   int32_t       head_size,
+                   int32_t       msg_size,
                    int32_t       itemsize,
                    int32_t       world_size,
                    int32_t       rank)
@@ -91,7 +91,7 @@ void all_gather_ll(torch::Tensor q,
 
     int8_t* q_ptr = reinterpret_cast<int8_t*>(q.data_ptr());
 
-    int num_sms   = std::min(128, max_bs * num_head);
+    int num_sms   = std::min(128, max_bs);
     int num_warps = world_size;
 
     int grid_dim  = num_sms;
@@ -105,8 +105,7 @@ void all_gather_ll(torch::Tensor q,
                   ipc_buffer_ptr,
                   ipc_signal_ptr,
                   max_bs,
-                  num_head,
-                  head_size,
+                  msg_size,
                   itemsize,
                   world_size,
                   rank);
@@ -115,7 +114,7 @@ void all_gather_ll(torch::Tensor q,
     if (err != cudaSuccess) {
         throw std::runtime_error(cudaGetErrorString(err));
     }
-    // return torch::empty({world_size, max_bs, num_head, head_size}, q.options().dtype(torch::kBFloat16));
+
 }
 
 }  // namespace slime

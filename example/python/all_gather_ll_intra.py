@@ -21,7 +21,7 @@ dtype = torch.bfloat16
 
 torch.cuda.set_device(rank)
 
-buffer = _slime_c.AllGatherLLBuffer(max_bs, num_head, head_size, itemsize, world_size, rank)
+buffer = _slime_c.AllGatherLLBuffer(max_bs * num_head, head_size, itemsize, world_size, rank)
 
 ipc_info = buffer.ipc_info()
 all_ipc_info = [None for _ in range(world_size)]
