@@ -91,7 +91,7 @@ python example/python/p2p_nvshmem_ibgda_sendrecv.py --rank 1 --world-size 2
 ### pip install
 
 ```
-pip install dlslime==0.0.1.post7
+pip install dlslime==0.0.1.post10
 ```
 
 > \[!Note\]
