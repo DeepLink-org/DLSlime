@@ -92,7 +92,8 @@ int AllGatherLLBuffer::allocBuffer()
 torch::Tensor AllGatherLLBuffer::allGatherLL(torch::Tensor q)
 {
     all_gather_ll(q, buffer_ptrs_, signal_ptrs_, max_bs_, num_head_, head_size_, itemsize_, world_size_, rank_);
-    return torch::from_blob(reinterpret_cast<void*>(local_buffer_), {world_size_, max_bs_, num_head_, head_size_}, q.options());
+    return torch::from_blob(
+        reinterpret_cast<void*>(local_buffer_), {world_size_, max_bs_, num_head_, head_size_}, q.options());
 }
 
 }  // namespace slime

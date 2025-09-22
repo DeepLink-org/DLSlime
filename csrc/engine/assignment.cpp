@@ -2,9 +2,8 @@
 #include <functional>
 #include <vector>
 
-#include "logging.h"
-
 #include "assignment.h"
+#include "logging.h"
 
 namespace slime {
 json Assignment::dump() const
@@ -14,7 +13,8 @@ json Assignment::dump() const
         {{"mr_key", mr_key}, {"target_offset", target_offset}, {"source_offset", source_offset}, {"length", length}}};
 }
 
-std::ostream& operator<<(std::ostream& os, const Assignment& assignment) {
+std::ostream& operator<<(std::ostream& os, const Assignment& assignment)
+{
     os << assignment.dump().dump(2);
     return os;
 }

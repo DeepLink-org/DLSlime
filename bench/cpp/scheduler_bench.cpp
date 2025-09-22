@@ -1,3 +1,22 @@
+#include <cassert>
+#include <chrono>
+#include <condition_variable>
+#include <cstddef>
+#include <cstdint>
+#include <future>
+#include <mutex>
+#include <stdexcept>
+#include <string>
+#include <thread>
+#include <unordered_map>
+
+#include <gflags/gflags.h>
+#include <numa.h>
+#include <sys/time.h>
+#include <unistd.h>
+#include <zmq.h>
+#include <zmq.hpp>
+
 #include "engine/assignment.h"
 #include "engine/rdma/rdma_assignment.h"
 #include "engine/rdma/rdma_config.h"
@@ -7,25 +26,6 @@
 
 #include "json.hpp"
 #include "logging.h"
-
-#include <cassert>
-#include <chrono>
-#include <condition_variable>
-#include <cstddef>
-#include <cstdint>
-#include <future>
-#include <mutex>
-#include <numa.h>
-#include <stdexcept>
-#include <string>
-#include <sys/time.h>
-#include <thread>
-#include <unistd.h>
-#include <unordered_map>
-
-#include <gflags/gflags.h>
-#include <zmq.h>
-#include <zmq.hpp>
 
 using json = nlohmann::json;
 using namespace slime;

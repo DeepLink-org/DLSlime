@@ -11,9 +11,6 @@
 
 #include "engine/assignment.h"
 #include "engine/dlpack.h"
-#include "json.hpp"
-#include "logging.h"
-#include "pybind_json/pybind_json.hpp"
 
 #ifdef BUILD_NVLINK
 #include "engine/nvlink/memory_pool.h"
@@ -38,6 +35,10 @@
 #include "ops/intra/all_gather_intra/all_gather_intra.h"
 #include "ops/intra/all_gather_intra/all_gather_intra_buffer.h"
 #endif
+
+#include "json.hpp"
+#include "logging.h"
+#include "pybind_json/pybind_json.hpp"
 
 using json = nlohmann::json;
 
