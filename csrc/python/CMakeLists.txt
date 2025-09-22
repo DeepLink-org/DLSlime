@@ -27,6 +27,13 @@ if (BUILD_NVSHMEM)
     list(APPEND _slime_c_link_libraries _slime_nvshmem)
 endif()
 
+if (BUILD_OPS)
+    target_compile_definitions(_slime_c PRIVATE -DBUILD_OPS)
+    target_compile_definitions(_slime_c PRIVATE "-DTORCH_API_INCLUDE_EXTENSION_H")
+    target_compile_definitions(_slime_c PRIVATE "-DTORCH_EXTENSION_NAME=_slime_c")
+    list(APPEND _slime_c_link_libraries ${_slime_c_link_libraries} _slime_ops ${TORCH_LIBRARIES})
+endif()
+
 target_link_libraries(_slime_c PRIVATE ${_slime_c_link_libraries})
 
 set_target_properties(

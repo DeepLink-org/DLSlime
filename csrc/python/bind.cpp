@@ -1,3 +1,14 @@
+#include <cstdint>
+#include <functional>
+#include <memory>
+
+#include <pybind11/cast.h>
+#include <pybind11/chrono.h>
+#include <pybind11/functional.h>
+#include <pybind11/pybind11.h>
+#include <pybind11/pytypes.h>
+#include <pybind11/stl.h>
+
 #include "engine/assignment.h"
 #include "engine/dlpack.h"
 
@@ -17,23 +28,16 @@
 #include "engine/rdma/rdma_context.h"
 #include "engine/rdma/rdma_endpoint.h"
 #include "engine/rdma/rdma_scheduler.h"
+#include "engine/rdma/utils.h"
 #endif
 
-#include "utils/json.hpp"
-#include "utils/logging.h"
-#include "utils/utils.h"
+#ifdef BUILD_OPS
+#include "ops/intra/all_gather_intra/all_gather_intra.h"
+#include "ops/intra/all_gather_intra/all_gather_intra_buffer.h"
+#endif
 
-#include <cstdint>
-#include <functional>
-#include <memory>
-
-#include <pybind11/cast.h>
-#include <pybind11/chrono.h>
-#include <pybind11/functional.h>
-#include <pybind11/pybind11.h>
-#include <pybind11/pytypes.h>
-#include <pybind11/stl.h>
-
+#include "json.hpp"
+#include "logging.h"
 #include "pybind_json/pybind_json.hpp"
 
 using json = nlohmann::json;
@@ -119,22 +123,20 @@ PYBIND11_MODULE(_slime_c, m)
         .def("launch_future", &slime::RDMAContext::launch_future)
         .def("stop_future", &slime::RDMAContext::stop_future)
         .def("submit", &slime::RDMAContext::submit, py::call_guard<py::gil_scoped_release>())
-        .def("submit_by_vector", [](
-            slime::RDMAContext& self,
-            slime::OpCode opcode,
-            std::vector<std::string>& mr_keys,
-            std::vector<int>& toff,
-            std::vector<int>& soff,
-            std::vector<int>& length
-        ) {
-            std::vector<slime::Assignment> batch;
-            int bs = mr_keys.size();
-            for (int i = 0; i < bs; ++i) {
-                batch.emplace_back(slime::Assignment(mr_keys[i], toff[i], soff[i], length[i]));
-            }
-            return self.submit(opcode, batch);
-        }
-    );
+        .def("submit_by_vector",
+             [](slime::RDMAContext&       self,
+                slime::OpCode             opcode,
+                std::vector<std::string>& mr_keys,
+                std::vector<int>&         toff,
+                std::vector<int>&         soff,
+                std::vector<int>&         length) {
+                 std::vector<slime::Assignment> batch;
+                 int                            bs = mr_keys.size();
+                 for (int i = 0; i < bs; ++i) {
+                     batch.emplace_back(slime::Assignment(mr_keys[i], toff[i], soff[i], length[i]));
+                 }
+                 return self.submit(opcode, batch);
+             });
 
     py::class_<slime::RDMAEndpoint, std::shared_ptr<slime::RDMAEndpoint>>(m, "rdma_endpoint")
         .def(py::init<const std::string&, uint8_t, const std::string&, size_t>())
@@ -174,5 +176,13 @@ PYBIND11_MODULE(_slime_c, m)
         .def("endpoint_info", &slime::NVLinkContext::endpoint_info)
         .def("connect", &slime::NVLinkContext::connect)
         .def("read_batch", &slime::NVLinkContext::read_batch);
+#endif
+
+#ifdef BUILD_OPS
+    py::class_<slime::AllGatherLLBuffer>(m, "AllGatherLLBuffer")
+        .def(py::init<int32_t, int32_t, int32_t, int32_t, int32_t, int32_t>())
+        .def("ipc_info", &slime::AllGatherLLBuffer::ipc_info)
+        .def("connect_full_mesh", &slime::AllGatherLLBuffer::connectFullMesh)
+        .def("all_gather_ll", &slime::AllGatherLLBuffer::allGatherLL);
 #endif
 }

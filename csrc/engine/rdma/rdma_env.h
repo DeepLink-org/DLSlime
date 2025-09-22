@@ -1,10 +1,12 @@
 #pragma once
+
+#include "env.h"
+
 #include <string>
 #include <vector>
 
-#include "utils/utils.h"
-
 namespace slime {
+
 inline const std::vector<std::string> SLIME_VISIBLE_DEVICES =
     get_env<std::vector<std::string>>("SLIME_VISIBLE_DEVICES", {});
 inline const int SLIME_MAX_LENGTH_PER_ASSIGNMENT = get_env<int>("SLIME_MAX_LENGTH_PER_ASSIGNMENT", 1 << 30);

@@ -15,7 +15,7 @@
 #include <thread>
 #include <unordered_map>
 
-#include "utils/json.hpp"
+#include "json.hpp"
 
 namespace slime {
 

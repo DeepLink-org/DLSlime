@@ -1,5 +1,3 @@
-#include "rdma_scheduler.h"
-
 #include <algorithm>
 #include <cstddef>
 #include <random>
@@ -9,8 +7,10 @@
 
 #include "engine/assignment.h"
 #include "engine/rdma/rdma_assignment.h"
-#include "utils/logging.h"
-#include "utils/utils.h"
+#include "engine/rdma/utils.h"
+#include "logging.h"
+
+#include "rdma_scheduler.h"
 
 namespace slime {
 

@@ -2,8 +2,9 @@
 #include "engine/rdma/rdma_assignment.h"
 #include "engine/rdma/rdma_config.h"
 #include "engine/rdma/rdma_context.h"
-#include "utils/json.hpp"
-#include "utils/logging.h"
+#include "engine/rdma/rdma_scheduler.h"
+#include "json.hpp"
+#include "logging.h"
 
 #include <cassert>
 #include <chrono>
@@ -149,18 +150,18 @@ int initiator(RDMAContext& rdma_context)
 
         int done = false;
 
-        std::vector<RDMAAssignmentSharedPtr> rdma_assignment_batch;
+        RDMASchedulerAssignmentSharedPtrBatch rdma_assignment_batch;
         for (int concurrent_id = 0; concurrent_id < FLAGS_concurrent_num; ++concurrent_id) {
             AssignmentBatch batch;
             for (int i = 0; i < FLAGS_batch_size; ++i) {
                 batch.push_back(Assignment("buffer", i * FLAGS_block_size, i * FLAGS_block_size, FLAGS_block_size));
             }
-            RDMAAssignmentSharedPtr rdma_assignment = rdma_context.submit(OpCode::READ, batch);
+            RDMASchedulerAssignmentSharedPtr rdma_assignment = rdma_context.submit(OpCode::READ, batch);
             rdma_assignment_batch.emplace_back(rdma_assignment);
             total_bytes += FLAGS_batch_size * FLAGS_block_size;
             total_trips += 1;
         }
-        for (RDMAAssignmentSharedPtr& rdma_assignment : rdma_assignment_batch) {
+        for (RDMASchedulerAssignmentSharedPtr& rdma_assignment : rdma_assignment_batch) {
             rdma_assignment->wait();
         }
     }

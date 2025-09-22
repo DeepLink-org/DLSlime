@@ -4,12 +4,12 @@
 
 #pragma once
 
+#include "env.h"
+
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <string>
-
-#include "utils/utils.h"
 
 namespace slime {
 inline std::string get_env_variable(char const* env_var_name)
@@ -23,7 +23,7 @@ inline std::string get_env_variable(char const* env_var_name)
     return "";
 }
 
-inline const int SLIME_LOG_LEVEL = get_env<int>("SLIME_LOG_LEVEL", 0);
+
 
 inline int get_log_level()
 {

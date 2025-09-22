@@ -1,11 +1,13 @@
 #pragma once
 
-#include "engine/assignment.h"
-#include "memory_pool.h"
-#include "utils/cuda_common.h"
 #include <cstdint>
 
+#include "cuda_common.cuh"
+#include "engine/assignment.h"
+#include "memory_pool.h"
+
 namespace slime {
+
 class NVLinkContext {
 public:
     NVLinkContext() = default;

@@ -1,4 +1,3 @@
-# Adapted from: https://github.com/deepseek-ai/DeepEP.git
 set(CMAKE_VERBOSE_MAKEFILE ON)
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3 -fPIC")
@@ -21,48 +20,30 @@ list(APPEND CMAKE_CUDA_FLAGS
     --expt-extended-lambda"
 )
 
-set(USE_SYSTEM_NVTX on)
-set(CUDA_ARCH_LIST "9.0" CACHE STRING "List of CUDA architectures to compile")
-set(TORCH_CUDA_ARCH_LIST "${CUDA_ARCH_LIST}")
-
-find_package(CUDAToolkit REQUIRED)
-find_package(NVSHMEM REQUIRED HINTS ${NVSHMEM_ROOT_DIR}/lib/cmake/nvshmem)
-
-add_library(nvshmem ALIAS nvshmem::nvshmem)
-add_library(nvshmem_host ALIAS nvshmem::nvshmem_host)
-add_library(nvshmem_device ALIAS nvshmem::nvshmem_device)
-
-link_directories(${CUDA_TOOLKIT_ROOT_DIR}/lib ${NVSHMEM_LIB_DIR})
-
-add_subdirectory(kernels)
-
 add_library(
-    _slime_nvshmem
+    _slime_ops
     SHARED
-    nvshmem_context.cpp
+    intra/all_gather_intra/all_gather_intra.cu
+    intra/all_gather_intra/all_gather_intra_buffer.cpp
 )
 
-target_include_directories(
-    _slime_nvshmem
-    PUBLIC
-    /usr/local/cuda/include ${NVSHMEM_INCLUDE_DIR}
-)
+target_compile_definitions(_slime_ops PRIVATE "-DTORCH_API_INCLUDE_EXTENSION_H")
+target_compile_definitions(_slime_ops PRIVATE "-DTORCH_EXTENSION_NAME=_slime_ops")
 
-target_link_libraries(
-    _slime_nvshmem PUBLIC
-    _slime_engine
-    ${EP_CUDA_LIBRARIES}
-)
+target_include_directories(_slime_ops PUBLIC ${TORCH_INCLUDE_DIRS})
+
+target_link_options(_slime_ops PRIVATE "-Wl,--no-as-needed")
+target_link_libraries(_slime_ops CUDA::cudart ${TORCH_LIBRARIES})
 
 set_target_properties(
-    _slime_nvshmem
+    _slime_ops
     PROPERTIES
     BUILD_WITH_INSTALL_RPATH TRUE
-    INSTALL_RPATH "\${ORIGIN};${CUDA_TOOLKIT_ROOT_DIR}/lib;${NVSHMEM_LIB_DIR}"
+    INSTALL_RPATH "\${ORIGIN}"
 )
 
 install(
     TARGETS
-    _slime_nvshmem
+    _slime_ops
     LIBRARY DESTINATION ${DLSLIME_INSTALL_PATH}
 )

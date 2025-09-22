@@ -1,14 +1,18 @@
 <div align="center">
-<p align="center"> <img src="./docs/imgs/logo.png" alt="" width="150"> </p>
+<p align="center"> <img src="docs/imgs/assets/logo.svg" alt="" width="300"> </p>
 </div>
+<p align="center">
+  <a href="https://join.slack.com/t/dlslime/shared_invite/zt-3e9zvercw-a89KI_Ig8N1UTaol_q6MXg"><img src="docs/imgs/assets/slack.svg" width="16" height="16" style="vertical-align: middle;"> Slack </a> |
+  <a href="docs/imgs/assets/wechat_qrcode.jpg"><img src="docs/imgs/assets/wechat.svg" width="16" height="16" style="vertical-align: middle;"> WeChat Group </a>
+</p>
+<h1 align="center"> Flexible & Efficient Heterogeneous Transfer Toolkit </h1>
 
-# Flexible & Efficient Heterogeneous Transfer Toolkit
 
 ## Getting Started
 
 DLSlime offers a set of peer-to-peer communication interfaces. For instance, consider the task of batched slice assignment from a remote tensor to a local tensor. You can accomplish this using the following APIs.
 
-![Assignment Operation](docs/imgs/all_apis.png).
+![Assignment Operation](docs/imgs/interface.svg).
 
 Here are some examples of DLSlime interface.
 
@@ -45,7 +49,7 @@ python example/python/p2p_rdma_rc_send_recv.py
 ```
 
 ```
-python example/python/p2p_rdma_rc_gdr_send_recv.py
+python example/python/p2p_rdma_rc_send_recv_gdr.py
 ```
 
 - DLSlime torch backend

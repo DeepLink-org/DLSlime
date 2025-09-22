@@ -1,13 +1,14 @@
-#include "infiniband/verbs.h"
-
 #include <functional>
 
+#include <infiniband/verbs.h>
+
+#include "engine/rdma/ibv_helper.h"
 #include "engine/rdma/rdma_env.h"
-#include "utils/ibv_helper.h"
-#include "utils/logging.h"
-#include "utils/utils.h"
+#include "engine/rdma/utils.h"
+#include "logging.h"
 
 namespace slime {
+
 std::vector<std::string> available_nic()
 {
     int                 num_devices;

@@ -8,7 +8,7 @@
 #include "adxl/adxl_engine.h"
 #include "adxl/adxl_types.h"
 #include "engine/assignment.h"
-#include "utils/logging.h"
+#include "logging.h"
 
 namespace slime {
 

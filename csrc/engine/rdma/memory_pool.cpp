@@ -1,6 +1,6 @@
 #include "engine/rdma/memory_pool.h"
 
-#include "utils/logging.h"
+#include "logging.h"
 
 #include <cstdint>
 #include <cstdlib>

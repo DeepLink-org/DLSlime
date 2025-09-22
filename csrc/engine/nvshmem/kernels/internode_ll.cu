@@ -1,5 +1,5 @@
 #include "ibgda_device.cuh"
-#include "utils/logging.h"
+#include "logging.h"
 #include <cstdint>
 
 namespace slime {

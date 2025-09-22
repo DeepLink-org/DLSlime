@@ -1,13 +1,14 @@
 #pragma once
 
 #include "engine/assignment.h"
+#include "engine/rdma/affinity.h"
 #include "engine/rdma/memory_pool.h"
 #include "engine/rdma/rdma_assignment.h"
 #include "engine/rdma/rdma_config.h"
 #include "engine/rdma/rdma_env.h"
 
-#include "utils/json.hpp"
-#include "utils/logging.h"
+#include "json.hpp"
+#include "logging.h"
 
 #include <condition_variable>
 #include <cstdint>
