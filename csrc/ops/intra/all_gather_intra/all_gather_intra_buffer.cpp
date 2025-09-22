@@ -1,25 +1,30 @@
 #include <torch/torch.h>
 
-#include "ops/intra/all_gather_intra/all_gather_intra_buffer.h"
+#include "logging.h"
+
+#include "all_gather_intra_buffer.h"
+
 
 namespace slime {
 
-AllGatherLLBuffer::AllGatherLLBuffer(
-    int32_t max_bs, int32_t num_head, int32_t head_size, int32_t itemsize, int32_t world_size, int32_t rank):
+AllGatherLLBuffer::AllGatherLLBuffer(int32_t max_bs, int32_t msg_size, int32_t itemsize, int32_t world_size, int32_t rank):
     max_bs_(max_bs),
-    num_head_(num_head),
-    head_size_(head_size),
+    msg_size_(msg_size),
     itemsize_(itemsize),
     world_size_(world_size),
     rank_(rank)
 {
+
+    SLIME_ASSERT((msg_size * itemsize) % 16 == 0, "By now, msg size must be divided by 16");
+
     int32_t buffer_size = get_buffer_size();
     allocBuffer();
+
 }
 
 int32_t AllGatherLLBuffer::get_buffer_size()
 {
-    return max_bs_ * num_head_ * head_size_ * itemsize_ * world_size_;
+    return max_bs_ * msg_size_ * itemsize_ * world_size_;
 }
 
 json AllGatherLLBuffer::ipc_info()
@@ -91,9 +96,9 @@ int AllGatherLLBuffer::allocBuffer()
 
 torch::Tensor AllGatherLLBuffer::allGatherLL(torch::Tensor q)
 {
-    all_gather_ll(q, buffer_ptrs_, signal_ptrs_, max_bs_, num_head_, head_size_, itemsize_, world_size_, rank_);
+    all_gather_ll(q, buffer_ptrs_, signal_ptrs_, max_bs_, msg_size_, itemsize_, world_size_, rank_);
     return torch::from_blob(
-        reinterpret_cast<void*>(local_buffer_), {world_size_, max_bs_, num_head_, head_size_}, q.options());
+        reinterpret_cast<void*>(local_buffer_), {world_size_, max_bs_, msg_size_}, q.options());
 }
 
 }  // namespace slime

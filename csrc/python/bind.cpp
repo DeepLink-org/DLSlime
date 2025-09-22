@@ -180,7 +180,7 @@ PYBIND11_MODULE(_slime_c, m)
 
 #ifdef BUILD_OPS
     py::class_<slime::AllGatherLLBuffer>(m, "AllGatherLLBuffer")
-        .def(py::init<int32_t, int32_t, int32_t, int32_t, int32_t, int32_t>())
+        .def(py::init<int32_t, int32_t, int32_t, int32_t, int32_t>())
         .def("ipc_info", &slime::AllGatherLLBuffer::ipc_info)
         .def("connect_full_mesh", &slime::AllGatherLLBuffer::connectFullMesh)
         .def("all_gather_ll", &slime::AllGatherLLBuffer::allGatherLL);
