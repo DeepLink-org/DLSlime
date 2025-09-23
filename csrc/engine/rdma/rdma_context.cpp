@@ -272,7 +272,7 @@ int64_t RDMAContext::connect(const json& endpoint_info_json)
         attr.dest_qp_num        = remote_rdma_info.qpn;
         attr.rq_psn             = remote_rdma_info.psn;
         attr.max_dest_rd_atomic = SLIME_MAX_DEST_RD_ATOMIC;
-        attr.min_rnr_timer      = 0x12;
+        attr.min_rnr_timer      = 1;
         attr.ah_attr.dlid       = remote_rdma_info.lid;
         attr.ah_attr.sl         = SLIME_SERVICE_LEVEL;
         attr.ah_attr.src_path_bits = 0;
