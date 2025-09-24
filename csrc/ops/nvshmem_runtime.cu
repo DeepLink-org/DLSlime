@@ -1,3 +1,4 @@
+// Adapted from https://github.com/DeepSeek-ai/DeepEP.git
 #include <cstddef>
 #include <cstdint>
 #include <cstring>

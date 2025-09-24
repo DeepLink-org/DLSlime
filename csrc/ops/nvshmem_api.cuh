@@ -1,3 +1,4 @@
+// Adapted from https://github.com/DeepSeek-ai/DeepEP.git
 #pragma once
 
 #include <cstddef>

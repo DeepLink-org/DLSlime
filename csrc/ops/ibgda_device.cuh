@@ -5,6 +5,8 @@
 //
 // Modified from original source:
 //  - nvshmem/src/include/non_abi/device/pt-to-pt/ibgda_device.cuh
+// Adapted from https://github.com/DeepSeek-ai/DeepEP.git
+
 #pragma once
 
 #include "configs.cuh"

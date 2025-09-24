@@ -4,21 +4,16 @@
 
 #include "all_gather_intra_ll_buffer.h"
 
-
 namespace slime {
 
-AllGatherIntraLLBuffer::AllGatherIntraLLBuffer(int32_t max_bs, int32_t msg_size, int32_t itemsize, int32_t world_size, int32_t rank):
-    max_bs_(max_bs),
-    msg_size_(msg_size),
-    itemsize_(itemsize),
-    world_size_(world_size),
-    rank_(rank)
+AllGatherIntraLLBuffer::AllGatherIntraLLBuffer(
+    int32_t max_bs, int32_t msg_size, int32_t itemsize, int32_t world_size, int32_t rank):
+    max_bs_(max_bs), msg_size_(msg_size), itemsize_(itemsize), world_size_(world_size), rank_(rank)
 {
 
     SLIME_ASSERT((msg_size * itemsize) % 16 == 0, "By now, msg size must be divided by 16");
 
     allocBuffer();
-
 }
 
 int32_t AllGatherIntraLLBuffer::get_buffer_size()
@@ -96,8 +91,7 @@ int AllGatherIntraLLBuffer::connectFullMesh(std::vector<json> all_buffer_info)
 torch::Tensor AllGatherIntraLLBuffer::allGatherLL(torch::Tensor q)
 {
     all_gather_intra_ll(q, buffer_ptrs_, signal_ptrs_, max_bs_, msg_size_, itemsize_, world_size_, rank_);
-    return torch::from_blob(
-        reinterpret_cast<void*>(local_buffer_), {world_size_, max_bs_, msg_size_}, q.options());
+    return torch::from_blob(reinterpret_cast<void*>(local_buffer_), {world_size_, max_bs_, msg_size_}, q.options());
 }
 
 }  // namespace slime

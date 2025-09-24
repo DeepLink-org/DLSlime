@@ -1,3 +1,4 @@
+// Adapted from https://github.com/DeepSeek-ai/DeepEP.git
 #pragma once
 
 #include <device_host_transport/nvshmem_common_ibgda.h>
