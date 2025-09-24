@@ -55,14 +55,12 @@ if (BUILD_INTER_OPS)
     set(
         INTER_OPS_INCLUDE_DIRS
         ${NVSHMEM_INCLUDE_DIR}
+        /usr/local/cuda/include
     )
     list(APPEND OPS_INCLUDE_DIRS ${INTER_OPS_INCLUDE_DIRS})
     set(
         INTER_OPS_LIBRARIES
-        CUDA::cudart
-        nvshmem::nvshmem
-        nvshmem::nvshmem_host
-        nvshmem::nvshmem_device
+        nvshmem CUDA::cudart cudadevrt mlx5
     )
     list(APPEND OPS_LIBRARIES ${INTER_OPS_LIBRARIES})
 endif ()
@@ -72,6 +70,17 @@ add_library(
     SHARED
     ${OPS_SRC}
 )
+
+if (BUILD_INTER_OPS)
+    set_target_properties(_slime_ops PROPERTIES
+            POSITION_INDEPENDENT_CODE ON
+            CXX_STANDARD_REQUIRED ON
+            CUDA_STANDARD_REQUIRED ON
+            CXX_STANDARD 17
+            CUDA_STANDARD 17
+            CUDA_SEPARABLE_COMPILATION ON
+    )
+endif()
 
 target_compile_definitions(_slime_ops PRIVATE "-DTORCH_API_INCLUDE_EXTENSION_H")
 target_compile_definitions(_slime_ops PRIVATE "-DTORCH_EXTENSION_NAME=_slime_ops")
