@@ -3,6 +3,7 @@
 #include "logging.h"
 #include "ops/nvshmem_api.cuh"
 
+#include "all_gather_inter_ll.h"
 #include "all_gather_inter_ll_buffer.h"
 
 namespace slime {
@@ -47,6 +48,7 @@ int AllGatherInterLLBuffer::connectFullMesh(std::vector<json> all_buffer_info)
 
 torch::Tensor AllGatherInterLLBuffer::allGatherLL(torch::Tensor q)
 {
+    all_gather_inter_ll(q, sym_buffer_, sym_signal_, max_bs_, msg_size_, itemsize_, world_size_, rank_);
     return torch::from_blob(reinterpret_cast<void*>(sym_buffer_), {world_size_, max_bs_, msg_size_}, q.options());
 }
 

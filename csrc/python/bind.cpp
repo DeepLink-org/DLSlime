@@ -31,11 +31,11 @@
 #include "engine/rdma/utils.h"
 #endif
 
-#ifdef BUILD_OPS
+#ifdef BUILD_INTRA_OPS
 #include "ops/intra_ll/all_gather_intra_ll/all_gather_intra_ll_buffer.h"
 #endif
 
-#ifdef BUILD_OPS
+#ifdef BUILD_INTER_OPS
 #include "ops/inter_ll/all_gather_inter_ll/all_gather_inter_ll_buffer.h"
 #endif
 
@@ -181,7 +181,7 @@ PYBIND11_MODULE(_slime_c, m)
         .def("read_batch", &slime::NVLinkContext::read_batch);
 #endif
 
-#ifdef BUILD_OPS
+#ifdef BUILD_INTRA_OPS
     py::class_<slime::AllGatherIntraLLBuffer>(m, "AllGatherIntraLLBuffer")
         .def(py::init<int32_t, int32_t, int32_t, int32_t, int32_t>())
         .def("buffer_info", &slime::AllGatherIntraLLBuffer::buffer_info)
@@ -189,7 +189,7 @@ PYBIND11_MODULE(_slime_c, m)
         .def("all_gather_ll", &slime::AllGatherIntraLLBuffer::allGatherLL);
 #endif
 
-#ifdef BUILD_OPS
+#ifdef BUILD_INTER_OPS
     py::class_<slime::AllGatherInterLLBuffer>(m, "AllGatherInterLLBuffer")
         .def(py::init<int32_t, int32_t, int32_t, int32_t, int32_t>());
 #endif 
