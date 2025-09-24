@@ -10,11 +10,11 @@ class DLSlimeQGather:
 
     def __init__(self, rank: int):
         self.rank = rank
-        self.buffer = _slime_c.AllGatherLLBuffer(64, 576, 2, 8, self.rank)
-        ipc_info = self.buffer.ipc_info()
-        all_ipc_info = [None for _ in range(8)]
-        dist.all_gather_object(all_ipc_info, ipc_info)
-        self.buffer.connect_full_mesh(all_ipc_info)
+        self.buffer = _slime_c.AllGatherIntraLLBuffer(64, 576, 2, 8, self.rank)
+        buffer_info = self.buffer.buffer_info()
+        all_buffer_info = [None for _ in range(8)]
+        dist.all_gather_object(all_buffer_info, buffer_info)
+        self.buffer.connect_full_mesh(all_buffer_info)
 
     def forward(self, input_tensor: torch.Tensor) -> torch.Tensor:
         return self.buffer.all_gather_ll(input_tensor)

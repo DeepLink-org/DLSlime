@@ -1,7 +1,5 @@
 #pragma once
 
-#include "json.hpp"
-
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -10,28 +8,31 @@
 
 #include <torch/torch.h>
 
+#include "json.hpp"
 #include "ops/exception.cuh"
-#include "ops/intra/all_gather_intra/all_gather_intra.h"
+
+#include "all_gather_intra_ll.h"
 
 using json = nlohmann::json;
 
 namespace slime {
 
-class AllGatherLLBuffer {
+class AllGatherIntraLLBuffer {
 
 public:
-    AllGatherLLBuffer(int32_t max_bs, int32_t msg_size, int32_t itemsize, int32_t world_size, int32_t rank);
+    AllGatherIntraLLBuffer(int32_t max_bs, int32_t msg_size, int32_t itemsize, int32_t world_size, int32_t rank);
 
     int32_t get_buffer_size();
 
-    json ipc_info();
+    json buffer_info();
 
-    int connectFullMesh(std::vector<json> all_ipc_info);
+    int connectFullMesh(std::vector<json> all_buffer_info);
 
     int allocBuffer();
 
     torch::Tensor allGatherLL(torch::Tensor q);
 
+private:
     int8_t** buffer_ptrs_;
     int**    signal_ptrs_;
 

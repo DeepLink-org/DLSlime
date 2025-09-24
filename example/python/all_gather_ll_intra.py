@@ -21,12 +21,12 @@ dtype = torch.bfloat16
 
 torch.cuda.set_device(rank)
 
-buffer = _slime_c.AllGatherLLBuffer(max_bs * num_head, head_size, itemsize, world_size, rank)
+buffer = _slime_c.AllGatherIntraLLBuffer(max_bs * num_head, head_size, itemsize, world_size, rank)
 
-ipc_info = buffer.ipc_info()
-all_ipc_info = [None for _ in range(world_size)]
-dist.all_gather_object(all_ipc_info, ipc_info)
-buffer.connect_full_mesh(all_ipc_info)
+buffer_info = buffer.buffer_info()
+all_buffer_info = [None for _ in range(world_size)]
+dist.all_gather_object(all_buffer_info, buffer_info)
+buffer.connect_full_mesh(all_buffer_info)
 
 # allocate q
 q_shape = [max_bs, num_head, head_size]

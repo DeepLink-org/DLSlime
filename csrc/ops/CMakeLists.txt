@@ -20,20 +20,39 @@ list(APPEND CMAKE_CUDA_FLAGS
     --expt-extended-lambda"
 )
 
+# find NVShmem
+find_package(NVSHMEM REQUIRED HINTS ${NVSHMEM_ROOT_DIR}/lib/cmake/nvshmem)
+
+add_library(nvshmem ALIAS nvshmem::nvshmem)
+add_library(nvshmem_host ALIAS nvshmem::nvshmem_host)
+add_library(nvshmem_device ALIAS nvshmem::nvshmem_device)
+
+set(
+    INTRA_LL_OPS_SRC
+    intra_ll/all_gather_intra_ll/all_gather_intra_ll.cu
+    intra_ll/all_gather_intra_ll/all_gather_intra_ll_buffer.cpp
+)
+
+set(
+    INTER_LL_OPS_SRC
+    inter_ll/all_gather_inter_ll/all_gather_inter_ll.cu
+    inter_ll/all_gather_inter_ll/all_gather_inter_ll_buffer.cpp
+)
+
 add_library(
     _slime_ops
     SHARED
-    intra/all_gather_intra/all_gather_intra.cu
-    intra/all_gather_intra/all_gather_intra_buffer.cpp
+    ${INTRA_OPS_SRC}
+    ${INTER_LL_OPS_SRC}
 )
 
 target_compile_definitions(_slime_ops PRIVATE "-DTORCH_API_INCLUDE_EXTENSION_H")
 target_compile_definitions(_slime_ops PRIVATE "-DTORCH_EXTENSION_NAME=_slime_ops")
 
-target_include_directories(_slime_ops PUBLIC ${TORCH_INCLUDE_DIRS})
+target_include_directories(_slime_ops PUBLIC ${TORCH_INCLUDE_DIRS} ${NVSHMEM_INCLUDE_DIR})
 
 target_link_options(_slime_ops PRIVATE "-Wl,--no-as-needed")
-target_link_libraries(_slime_ops CUDA::cudart ${TORCH_LIBRARIES})
+target_link_libraries(_slime_ops CUDA::cudart ${TORCH_LIBRARIES} ${NVSHMEM_LIB_DIR})
 
 set_target_properties(
     _slime_ops

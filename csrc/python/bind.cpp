@@ -32,8 +32,11 @@
 #endif
 
 #ifdef BUILD_OPS
-#include "ops/intra/all_gather_intra/all_gather_intra.h"
-#include "ops/intra/all_gather_intra/all_gather_intra_buffer.h"
+#include "ops/intra_ll/all_gather_intra_ll/all_gather_intra_ll_buffer.h"
+#endif
+
+#ifdef BUILD_OPS
+#include "ops/inter_ll/all_gather_inter_ll/all_gather_inter_ll_buffer.h"
 #endif
 
 #include "json.hpp"
@@ -179,10 +182,16 @@ PYBIND11_MODULE(_slime_c, m)
 #endif
 
 #ifdef BUILD_OPS
-    py::class_<slime::AllGatherLLBuffer>(m, "AllGatherLLBuffer")
+    py::class_<slime::AllGatherIntraLLBuffer>(m, "AllGatherIntraLLBuffer")
         .def(py::init<int32_t, int32_t, int32_t, int32_t, int32_t>())
-        .def("ipc_info", &slime::AllGatherLLBuffer::ipc_info)
-        .def("connect_full_mesh", &slime::AllGatherLLBuffer::connectFullMesh)
-        .def("all_gather_ll", &slime::AllGatherLLBuffer::allGatherLL);
+        .def("buffer_info", &slime::AllGatherIntraLLBuffer::buffer_info)
+        .def("connect_full_mesh", &slime::AllGatherIntraLLBuffer::connectFullMesh)
+        .def("all_gather_ll", &slime::AllGatherIntraLLBuffer::allGatherLL);
 #endif
+
+#ifdef BUILD_OPS
+    py::class_<slime::AllGatherInterLLBuffer>(m, "AllGatherInterLLBuffer")
+        .def(py::init<int32_t, int32_t, int32_t, int32_t, int32_t>());
+#endif 
+
 }
