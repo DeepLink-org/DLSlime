@@ -50,6 +50,7 @@ if (BUILD_INTER_OPS)
         INTER_OPS_SRC
         inter_ll/all_gather_inter_ll/all_gather_inter_ll.cu
         inter_ll/all_gather_inter_ll/all_gather_inter_ll_buffer.cpp
+        nvshmem_runtime.cu
     )
     list(APPEND OPS_SRC ${INTER_OPS_SRC})
     set(
@@ -94,7 +95,7 @@ set_target_properties(
     _slime_ops
     PROPERTIES
     BUILD_WITH_INSTALL_RPATH TRUE
-    INSTALL_RPATH "\${ORIGIN}"
+    INSTALL_RPATH "\${ORIGIN}:${Torch_DIR}/lib"
 )
 
 install(

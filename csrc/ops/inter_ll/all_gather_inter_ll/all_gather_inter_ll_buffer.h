@@ -15,13 +15,13 @@ using json = nlohmann::json;
 
 class AllGatherInterLLBuffer {
 
-    static constexpr int32_t nvshmem_alignment = 1024;
+    static constexpr int32_t nvshmem_alignment = 16;
     static constexpr int32_t root_rank         = 0;
 
 public:
     AllGatherInterLLBuffer(int32_t max_bs, int32_t msg_size, int32_t itemsize, int32_t world_size, int32_t rank);
 
-    int32_t get_buffer_size();
+    int32_t getBufferSize();
 
     json buffer_info();
 

@@ -6,11 +6,26 @@ import torch.distributed as dist
 from dlslime import _slime_c
 
 
+os.environ['NVSHMEM_DISABLE_P2P'] = '1'
+os.environ['NVSHMEM_IB_ENABLE_IBGDA'] = '1'
+os.environ['NVSHMEM_IBGDA_NUM_RC_PER_PE'] = '1'
+# Make sure QP depth is always larger than the number of on-flight WRs, so that we can skip WQ slot check
+os.environ['NVSHMEM_QP_DEPTH'] = os.environ.get('NVSHMEM_QP_DEPTH', '1024')
+
+# Reduce gpu memory usage
+# 6 default teams + 1 extra team
+os.environ['NVSHMEM_MAX_TEAMS'] = '7'
+# Disable NVLink SHArP
+os.environ['NVSHMEM_DISABLE_NVLS'] = '1'
+# NOTES: NVSHMEM initialization requires at least 256 MiB
+os.environ['NVSHMEM_CUMEM_GRANULARITY'] = f'{2 ** 29}'
+
+
 class DLSlimeQGather:
 
     def __init__(self, rank: int):
         self.rank = rank
-        self.buffer = _slime_c.AllGatherIntraLLBuffer(64, 576, 2, 8, self.rank)
+        self.buffer = _slime_c.AllGatherInterLLBuffer(64, 576, 2, 8, self.rank)
         buffer_info = self.buffer.buffer_info()
         all_buffer_info = [None for _ in range(8)]
         dist.all_gather_object(all_buffer_info, buffer_info)

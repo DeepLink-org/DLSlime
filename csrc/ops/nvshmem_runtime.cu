@@ -8,6 +8,7 @@
 #include "exception.cuh"
 #include "ibgda_device.cuh"
 #include "launch.cuh"
+#include "nvshmem_api.cuh"
 #include "nvshmem_common.cuh"
 #include "utils.cuh"
 

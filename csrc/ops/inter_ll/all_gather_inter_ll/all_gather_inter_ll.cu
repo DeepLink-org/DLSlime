@@ -71,9 +71,9 @@ __global__ __launch_bounds__(1024, 1) void all_gather_inter_ll_kernel(int8_t* q_
 
     // Step 2. Buffer Broadcast
     for (int q_idx = q_idx_base; q_idx < q_size; q_idx += num_sms * msg_size * itemsize) {
-        const int buffer_idx           = q_idx + q_size * rank;
-        uintptr_t buffer_ptr_for_write = reinterpret_cast<uintptr_t>(sym_buffer_ptr + buffer_idx);
         if (warp_id != rank) {
+            const int       buffer_idx           = q_idx + q_size * rank;
+            const uintptr_t buffer_ptr_for_write = reinterpret_cast<uintptr_t>(sym_buffer_ptr + buffer_idx);
             deep_ep::nvshmemi_ibgda_put_nbi_warp(
                 buffer_ptr_for_write, buffer_ptr_for_write, num_msg_per_warp, warp_id, sm_id % 2, lane_id, 0);
         }
@@ -82,7 +82,10 @@ __global__ __launch_bounds__(1024, 1) void all_gather_inter_ll_kernel(int8_t* q_
 
     // Step 3. Write Signal
     if (lane_id == 0) {
-        deep_ep::nvshmemi_ibgda_amo_nonfetch_add(sym_signal_ptr + warp_id, 1, warp_id, sm_id % 2);
+        if (warp_id != rank)
+            deep_ep::nvshmemi_ibgda_amo_nonfetch_add(sym_signal_ptr + rank, 1, warp_id, sm_id % 2);
+        else
+            deep_ep::atomic_add_release_global(sym_signal_ptr + rank, 1);
     }
     __syncthreads();
 

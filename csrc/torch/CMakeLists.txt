@@ -31,7 +31,7 @@ set_target_properties(
     _slime_torch
     PROPERTIES
     BUILD_WITH_INSTALL_RPATH TRUE
-    INSTALL_RPATH "\${ORIGIN};${Torch_DIR}/lib"
+    INSTALL_RPATH "\${ORIGIN}:\${Torch_DIR}/lib"
 )
 
 install(
