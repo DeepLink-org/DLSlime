@@ -127,8 +127,8 @@ The `FLAG` can be
 | `BUILD_NVSHMEM`      | Build NVShmem Transfer Engine         | NVIDIA   |     OFF |
 | `BUILD_TORCH_PLUGIN` | Build DLSlime as a torch backend      | Hetero   |     OFF |
 | `USE_GLOO_BACKEND`   | Use GLOO RDMA Send/Recv torch backend | Hetero   |     OFF |
-| `USE_INTRA_OPS`      | Use INTRA Collective OPS              | GPGPU    |     OFF |
-| `USE_INTER_OPS`      | Use INTER Collective OPS (NVSHMEM)    | NVIDIA   |     OFF |
+| `BUILD_INTRA_OPS`    | Use INTRA Collective OPS              | GPGPU    |     OFF |
+| `BUILD_INTER_OPS`    | Use INTER Collective OPS (NVSHMEM)    | NVIDIA   |     OFF |
 
 > \[!Note\]
 > Please enable `USE_MECA` when using DLSlime as a torch backend in Metax platform.
