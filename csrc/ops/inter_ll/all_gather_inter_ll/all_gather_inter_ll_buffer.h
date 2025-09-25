@@ -23,10 +23,13 @@ class AllGatherInterLLBuffer {
 
 public:
     AllGatherInterLLBuffer(int32_t max_bs, int32_t msg_size, torch::Dtype dtype, int32_t world_size, int32_t rank);
+    AllGatherInterLLBuffer(int32_t max_bs, int32_t msg_size, torch::Dtype dtype, int32_t world_size, int32_t rank, bool rdma_only);
 
     int32_t getBufferSize();
 
     int32_t itemsize();
+
+    int32_t local_rank();
 
     json bufferInfo();
 
@@ -49,6 +52,8 @@ private:
 
     int32_t world_size_;
     int32_t rank_;
+
+    bool rdma_only_{false};
 };
 
 }  // namespace slime

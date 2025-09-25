@@ -30,7 +30,8 @@ __global__ __launch_bounds__(1024, 1) void all_gather_inter_ll_kernel(int8_t* q_
                                                                       int32_t itemsize,
                                                                       int32_t world_size,
                                                                       int32_t rank,
-                                                                      int32_t phases)
+                                                                      int32_t phases,
+                                                                      bool    rdma_only)
 {
 
     // Vectorize Optimization
@@ -136,7 +137,8 @@ void all_gather_inter_ll(torch::Tensor q,
                          int32_t       itemsize,
                          int32_t       world_size,
                          int32_t       rank,
-                         int           phase)
+                         int           phase,
+                         bool          rdma_only)
 {
 
     int8_t* q_ptr = reinterpret_cast<int8_t*>(q.data_ptr());
@@ -159,7 +161,8 @@ void all_gather_inter_ll(torch::Tensor q,
                   itemsize,
                   world_size,
                   rank,
-                  phase);
+                  phase,
+                  rdma_only);
 
     cudaError_t err = cudaGetLastError();
     if (err != cudaSuccess) {

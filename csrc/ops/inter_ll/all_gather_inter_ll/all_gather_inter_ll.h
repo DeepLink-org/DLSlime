@@ -18,6 +18,7 @@ void all_gather_inter_ll(torch::Tensor q,
                          int32_t       itemsize,
                          int32_t       world_size,
                          int32_t       rank,
-                         int           phase);
+                         int           phase,
+                         bool          rdma_only);
 
 }  // namespace slime
