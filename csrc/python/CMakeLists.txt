@@ -11,6 +11,7 @@ pybind11_add_module(
 )
 
 set(_slime_c_link_libraries "")
+set(BIND_INSTALL_RPATH "\${ORIGIN}")
 
 if (BUILD_NVLINK)
     target_compile_definitions(_slime_c PRIVATE -DBUILD_NVLINK)
@@ -37,6 +38,7 @@ if (BUILD_INTRA_OPS OR BUILD_INTER_OPS)
     target_compile_definitions(_slime_c PRIVATE "-DTORCH_API_INCLUDE_EXTENSION_H")
     target_compile_definitions(_slime_c PRIVATE "-DTORCH_EXTENSION_NAME=_slime_c")
     list(APPEND _slime_c_link_libraries ${_slime_c_link_libraries} _slime_ops ${TORCH_LIBRARIES})
+    set(BIND_INSTALL_RPATH "\${ORIGIN}:${Torch_DIR}/lib")
 endif()
 
 target_link_libraries(_slime_c PRIVATE ${_slime_c_link_libraries})
@@ -45,7 +47,7 @@ set_target_properties(
     _slime_c
     PROPERTIES
     BUILD_WITH_INSTALL_RPATH TRUE
-    INSTALL_RPATH "\${ORIGIN}"
+    INSTALL_RPATH ${BIND_INSTALL_RPATH}
 )
 
 install(
