@@ -14,7 +14,7 @@ class DLSlimeQGather:
         # 根据模式选择不同的Buffer类
         if mode == "inter":
             self.buffer = _slime_c.AllGatherInterLLBuffer(
-                64, 576, torch.bfloat16, 8, self.rank, False
+                64, 576, torch.bfloat16, 8, self.rank, True
             )
         elif mode == "intra":
             self.buffer = _slime_c.AllGatherIntraLLBuffer(
@@ -78,9 +78,7 @@ def main():
     gather = DLSlimeQGather(rank, args.mode)
 
     input_tensor = (
-        torch.ones(2, 8, 1152 * 2, dtype=torch.bfloat16, device=f"cuda:{rank}")
-        * rank
-        * 0
+        torch.ones(2, 32, 576, dtype=torch.bfloat16, device=f"cuda:{rank}") * rank * 0
     )
 
     # 预热
@@ -106,7 +104,7 @@ def main():
             with_modules=True,
         ) as prof:
             input_tensor.copy_(
-                torch.ones(2, 8, 1152 * 2, dtype=torch.bfloat16, device=f"cuda:{rank}")
+                torch.ones(2, 32, 576, dtype=torch.bfloat16, device=f"cuda:{rank}")
                 * rank
             )
             for i in range(10):
@@ -129,8 +127,7 @@ def main():
 
         torch.cuda.synchronize()
         input_tensor.copy_(
-            torch.ones(2, 8, 1152 * 2, dtype=torch.bfloat16, device=f"cuda:{rank}")
-            * rank
+            torch.ones(2, 32, 576, dtype=torch.bfloat16, device=f"cuda:{rank}") * rank
         )
         with torch.profiler.profile(
             activities=[
