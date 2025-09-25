@@ -24,8 +24,13 @@ class DLSlimeQGather:
         dist.all_gather_object(all_buffer_info, buffer_info)
         self.buffer.connect_full_mesh(all_buffer_info)
 
-    def forward(self, input_tensor: torch.Tensor) -> torch.Tensor:
-        return self.buffer.all_gather_ll(input_tensor)
+    def forward(self, input_tensor: torch.Tensor, hook_mode = False) -> torch.Tensor:
+        if hook_mode:
+            t, hook = self.buffer.all_gather_ll_hook(input_tensor)
+            hook()
+        else:
+            self.buffer.all_gather_ll(input_tensor)
+        return t
 
 
 def main():
@@ -68,7 +73,8 @@ def main():
     # 预热
     for _ in range(10):
         output = gather.forward(input_tensor)
-    torch.cuda.synchronize()
+        dist.barrier()
+        torch.cuda.synchronize()
     
     profiler_output = os.path.join(output_dir, f'rank_{rank}_profile')
     if args.eager_mode:
@@ -100,7 +106,9 @@ def main():
         with torch.cuda.stream(stream):
             with torch.cuda.graph(graph, stream=stream):
                 output = gather.forward(input_tensor)
+                output.add_(0)
 
+        torch.cuda.synchronize()
         input_tensor.copy_(torch.ones(2, 8, 1152 * 2, dtype=torch.bfloat16, device=f'cuda:{rank}') * rank)
         with torch.profiler.profile(
                 activities=[torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA],

@@ -2,6 +2,8 @@
 
 #include <cstdint>
 #include <vector>
+#include <functional>
+#include <tuple>
 
 #include <torch/torch.h>
 
@@ -34,6 +36,7 @@ public:
     int allocSymBuffer();
 
     torch::Tensor allGatherLL(torch::Tensor q);
+    std::tuple<torch::Tensor, std::function<void()>> allGatherLLHook(torch::Tensor q);
 
 private:
     int8_t* sym_buffer_;

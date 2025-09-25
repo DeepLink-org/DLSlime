@@ -12,6 +12,7 @@
 #include <ATen/cuda/CUDADataType.h>
 #include <torch/torch.h>
 
+#include "all_gather_inter_ll.h"
 #include "ops/ibgda_device.cuh"
 #include "ops/launch.cuh"
 #include "ops/nvshmem_api.cuh"
@@ -28,7 +29,8 @@ __global__ __launch_bounds__(1024, 1) void all_gather_inter_ll_kernel(int8_t* q_
                                                                       int32_t msg_size,
                                                                       int32_t itemsize,
                                                                       int32_t world_size,
-                                                                      int32_t rank)
+                                                                      int32_t rank,
+                                                                      int32_t phases)
 {
 
     // Vectorize Optimization
@@ -49,6 +51,10 @@ __global__ __launch_bounds__(1024, 1) void all_gather_inter_ll_kernel(int8_t* q_
     const int num_msg_per_warp     = msg_size * itemsize;
     const int num_vec_msg_per_warp = num_msg_per_warp / VEC_SIZE;
 
+    if ((phases & ALL_GATHER_LL_SEND_PHASE) == 0)
+        goto ALL_GATHER_LL_RECV;
+
+ALL_GATHER_LL_SEND:
     // Step 1. Write Q to buffer
     for (int q_idx = q_idx_base; q_idx < q_size; q_idx += num_sms * msg_size * itemsize) {
 
@@ -109,8 +115,13 @@ __global__ __launch_bounds__(1024, 1) void all_gather_inter_ll_kernel(int8_t* q_
     }
     __syncthreads();
 
+    if ((phases & ALL_GATHER_LL_RECV_PHASE) == 0)
+        return;
+
+ALL_GATHER_LL_RECV:
     // Step 4. sync
     if (blockIdx.x == 0 and threadIdx.x < world_size) {
+
         while (deep_ep::ld_acquire_global(sym_signal_ptr + threadIdx.x) != num_sms)
             ;
         sym_signal_ptr[threadIdx.x] = 0;
@@ -124,7 +135,8 @@ void all_gather_inter_ll(torch::Tensor q,
                          int32_t       msg_size,
                          int32_t       itemsize,
                          int32_t       world_size,
-                         int32_t       rank)
+                         int32_t       rank,
+                         int           phase)
 {
 
     int8_t* q_ptr = reinterpret_cast<int8_t*>(q.data_ptr());
@@ -146,7 +158,8 @@ void all_gather_inter_ll(torch::Tensor q,
                   msg_size,
                   itemsize,
                   world_size,
-                  rank);
+                  rank,
+                  phase);
 
     cudaError_t err = cudaGetLastError();
     if (err != cudaSuccess) {

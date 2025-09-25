@@ -199,6 +199,7 @@ PYBIND11_MODULE(_slime_c, m)
         .def(py::init<int32_t, int32_t, torch::Dtype, int32_t, int32_t>())
         .def("buffer_info", &slime::AllGatherInterLLBuffer::bufferInfo)
         .def("connect_full_mesh", &slime::AllGatherInterLLBuffer::connectFullMesh)
-        .def("all_gather_ll", &slime::AllGatherInterLLBuffer::allGatherLL);
+        .def("all_gather_ll", &slime::AllGatherInterLLBuffer::allGatherLL)
+        .def("all_gather_ll_hook", &slime::AllGatherInterLLBuffer::allGatherLLHook);
 #endif
 }

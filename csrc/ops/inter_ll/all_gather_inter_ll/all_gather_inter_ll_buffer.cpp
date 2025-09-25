@@ -1,12 +1,13 @@
 #include <stdexcept>
 
-#include "c10/core/ScalarType.h"
+#include <c10/core/ScalarType.h>
+#include <torch/types.h>
+
 #include "logging.h"
 #include "ops/nvshmem_api.cuh"
 
 #include "all_gather_inter_ll.h"
 #include "all_gather_inter_ll_buffer.h"
-#include "torch/types.h"
 
 namespace slime {
 
@@ -59,12 +60,42 @@ int AllGatherInterLLBuffer::connectFullMesh(std::vector<json> all_buffer_info)
     return 0;
 }
 
+std::tuple<torch::Tensor, std::function<void()>> AllGatherInterLLBuffer::allGatherLLHook(torch::Tensor q)
+{
+
+    SLIME_ASSERT(q.dtype() == dtype_, "unmatched data type!");
+
+    auto launcher = [=](int phase) {
+        all_gather_inter_ll(q, sym_buffer_, sym_signal_, max_bs_, msg_size_, itemsize(), world_size_, rank_, phase);
+    };
+
+    launcher(ALL_GATHER_LL_SEND_PHASE);
+
+    auto options = torch::TensorOptions().dtype(dtype_).device(torch::kCUDA);
+    auto torch_buffer =
+        torch::from_blob(reinterpret_cast<void*>(sym_buffer_), {world_size_, max_bs_, msg_size_}, options);
+
+    std::function<void()> recv_hook = [=]() {
+        launcher(LOW_LATENCY_RECV_PHASE);
+    };
+
+    return {torch_buffer, recv_hook};
+}
+
 torch::Tensor AllGatherInterLLBuffer::allGatherLL(torch::Tensor q)
 {
 
     SLIME_ASSERT(q.dtype() == dtype_, "unmatched data type!");
 
-    all_gather_inter_ll(q, sym_buffer_, sym_signal_, max_bs_, msg_size_, itemsize(), world_size_, rank_);
+    all_gather_inter_ll(q,
+                        sym_buffer_,
+                        sym_signal_,
+                        max_bs_,
+                        msg_size_,
+                        itemsize(),
+                        world_size_,
+                        rank_,
+                        ALL_GATHER_LL_SEND_PHASE | ALL_GATHER_LL_RECV_PHASE);
 
     auto options = torch::TensorOptions().dtype(dtype_).device(torch::kCUDA);
 
