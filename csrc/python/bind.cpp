@@ -197,7 +197,7 @@ PYBIND11_MODULE(_slime_c, m)
 #ifdef BUILD_INTER_OPS
     py::class_<slime::AllGatherInterLLBuffer>(m, "AllGatherInterLLBuffer")
         .def(py::init<int32_t, int32_t, torch::Dtype, int32_t, int32_t>())
-        .def("buffer_info", &slime::AllGatherInterLLBuffer::buffer_info)
+        .def("buffer_info", &slime::AllGatherInterLLBuffer::bufferInfo)
         .def("connect_full_mesh", &slime::AllGatherInterLLBuffer::connectFullMesh)
         .def("all_gather_ll", &slime::AllGatherInterLLBuffer::allGatherLL);
 #endif

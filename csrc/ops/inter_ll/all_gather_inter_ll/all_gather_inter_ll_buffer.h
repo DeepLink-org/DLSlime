@@ -26,11 +26,12 @@ public:
 
     int32_t itemsize();
 
-    json buffer_info();
+    json bufferInfo();
 
     int connectFullMesh(std::vector<json> all_ipc_info);
 
-    int allocBuffer();
+    int allocIpcBuffer();
+    int allocSymBuffer();
 
     torch::Tensor allGatherLL(torch::Tensor q);
 

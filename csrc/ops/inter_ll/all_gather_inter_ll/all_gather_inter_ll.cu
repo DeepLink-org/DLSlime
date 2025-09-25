@@ -41,6 +41,8 @@ __global__ __launch_bounds__(1024, 1) void all_gather_inter_ll_kernel(int8_t* q_
     const int warp_id = threadIdx.x / 32;
     const int lane_id = deep_ep::get_lane_id();
 
+    const int dst_rank = warp_id;
+
     const int q_idx_base = sm_id * msg_size * itemsize;
     const int q_size     = max_bs * msg_size * itemsize;
 
@@ -50,7 +52,7 @@ __global__ __launch_bounds__(1024, 1) void all_gather_inter_ll_kernel(int8_t* q_
     // Step 1. Write Q to buffer
     for (int q_idx = q_idx_base; q_idx < q_size; q_idx += num_sms * msg_size * itemsize) {
 
-        if (warp_id == rank) {
+        if (dst_rank == rank) {
             int8_t*   q_ptr_for_write          = q_ptr + q_idx;
             vec_t*    vec_q_ptr_for_write      = reinterpret_cast<vec_t*>(q_ptr_for_write);
             const int buffer_idx               = q_idx + q_size * rank;
@@ -71,21 +73,39 @@ __global__ __launch_bounds__(1024, 1) void all_gather_inter_ll_kernel(int8_t* q_
 
     // Step 2. Buffer Broadcast
     for (int q_idx = q_idx_base; q_idx < q_size; q_idx += num_sms * msg_size * itemsize) {
-        if (warp_id != rank) {
+        if (dst_rank != rank) {
             const int       buffer_idx           = q_idx + q_size * rank;
             const uintptr_t buffer_ptr_for_write = reinterpret_cast<uintptr_t>(sym_buffer_ptr + buffer_idx);
-            deep_ep::nvshmemi_ibgda_put_nbi_warp(
-                buffer_ptr_for_write, buffer_ptr_for_write, num_msg_per_warp, warp_id, sm_id % 2, lane_id, 0);
+            const uintptr_t dst_buffer_p2p_ptr   = deep_ep::nvshmemi_get_p2p_ptr(buffer_ptr_for_write, rank, dst_rank);
+            if (dst_buffer_p2p_ptr == 0) {
+                deep_ep::nvshmemi_ibgda_put_nbi_warp(
+                    buffer_ptr_for_write, buffer_ptr_for_write, num_msg_per_warp, dst_rank, sm_id % 2, lane_id, 0);
+            }
+            else {
+                vec_t* vec_buffer_ptr_for_write         = reinterpret_cast<vec_t*>(buffer_ptr_for_write);
+                vec_t* vec_dst_buffer_p2p_ptr_for_write = reinterpret_cast<vec_t*>(dst_buffer_p2p_ptr);
+                UNROLLED_WARP_COPY(8,
+                                   lane_id,
+                                   num_vec_msg_per_warp,
+                                   vec_dst_buffer_p2p_ptr_for_write,
+                                   vec_buffer_ptr_for_write,
+                                   deep_ep::ld_nc_global,
+                                   deep_ep::st_na_global);
+            }
         }
     }
     __syncwarp();
 
     // Step 3. Write Signal
     if (lane_id == 0) {
-        if (warp_id != rank)
-            deep_ep::nvshmemi_ibgda_amo_nonfetch_add(sym_signal_ptr + rank, 1, warp_id, sm_id % 2);
+        const uintptr_t signal_ptr_for_write = reinterpret_cast<uintptr_t>(sym_signal_ptr + rank);
+        const uintptr_t dst_signal_p2p_ptr =
+            deep_ep::nvshmemi_get_p2p_ptr(reinterpret_cast<uintptr_t>(signal_ptr_for_write), rank, dst_rank);
+
+        if (dst_signal_p2p_ptr == 0)
+            deep_ep::nvshmemi_ibgda_amo_nonfetch_add(sym_signal_ptr + rank, 1, dst_rank, sm_id % 2);
         else
-            deep_ep::atomic_add_release_global(sym_signal_ptr + rank, 1);
+            deep_ep::atomic_add_release_global(reinterpret_cast<int*>(dst_signal_p2p_ptr), 1);
     }
     __syncthreads();
 

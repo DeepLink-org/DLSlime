@@ -28,7 +28,7 @@ int32_t AllGatherInterLLBuffer::itemsize()
     return torch::elementSize(dtype_);
 }
 
-int AllGatherInterLLBuffer::allocBuffer()
+int AllGatherInterLLBuffer::allocSymBuffer()
 {
     int32_t buffer_size = getBufferSize();
 
@@ -40,7 +40,7 @@ int AllGatherInterLLBuffer::allocBuffer()
     return 0;
 }
 
-json AllGatherInterLLBuffer::buffer_info()
+json AllGatherInterLLBuffer::bufferInfo()
 {
     json info{};
     info["nvshmem_info"] = {{"unique_id", nvshmem_api::get_unique_id()}};
@@ -53,7 +53,7 @@ int AllGatherInterLLBuffer::connectFullMesh(std::vector<json> all_buffer_info)
     auto unique_ids   = all_buffer_info[root_rank]["nvshmem_info"]["unique_id"];
     int  nvshmem_rank = nvshmem_api::init(unique_ids, rank_, world_size_);
     nvshmem_api::barrier();
-    allocBuffer();
+    allocSymBuffer();
     nvshmem_api::barrier();
     SLIME_ASSERT(nvshmem_rank == rank_, "nvshmem_rank != rank_");
     return 0;
