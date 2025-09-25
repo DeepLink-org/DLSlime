@@ -56,7 +56,7 @@ if (BUILD_INTER_OPS)
     set(
         INTER_OPS_INCLUDE_DIRS
         ${NVSHMEM_INCLUDE_DIR}
-        /usr/local/cuda/include
+        ${CUDAToolkit_INCLUDE_DIRS}
     )
     list(APPEND OPS_INCLUDE_DIRS ${INTER_OPS_INCLUDE_DIRS})
     set(

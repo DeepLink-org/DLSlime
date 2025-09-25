@@ -12,6 +12,7 @@
 #include "ops/exception.cuh"
 
 #include "all_gather_intra_ll.h"
+#include "torch/types.h"
 
 using json = nlohmann::json;
 
@@ -20,7 +21,10 @@ namespace slime {
 class AllGatherIntraLLBuffer {
 
 public:
-    AllGatherIntraLLBuffer(int32_t max_bs, int32_t msg_size, int32_t itemsize, int32_t world_size, int32_t rank);
+    AllGatherIntraLLBuffer(
+        int32_t max_bs, int32_t msg_size, torch::Dtype dtype, int32_t world_size, int32_t rank);
+
+    int32_t itemsize();
 
     int32_t get_buffer_size();
 
@@ -44,7 +48,9 @@ private:
 
     int32_t max_bs_;
     int32_t msg_size_;
-    int32_t itemsize_;
+
+    torch::Dtype dtype_;
+
     int32_t world_size_;
     int32_t rank_;
 };

@@ -1,5 +1,6 @@
 #include <torch/torch.h>
 
+#include "c10/core/ScalarType.h"
 #include "logging.h"
 
 #include "all_gather_intra_ll_buffer.h"
@@ -7,18 +8,25 @@
 namespace slime {
 
 AllGatherIntraLLBuffer::AllGatherIntraLLBuffer(
-    int32_t max_bs, int32_t msg_size, int32_t itemsize, int32_t world_size, int32_t rank):
-    max_bs_(max_bs), msg_size_(msg_size), itemsize_(itemsize), world_size_(world_size), rank_(rank)
+    int32_t max_bs, int32_t msg_size, torch::Dtype dtype, int32_t world_size, int32_t rank):
+    max_bs_(max_bs), msg_size_(msg_size), dtype_(dtype), world_size_(world_size), rank_(rank)
 {
 
-    SLIME_ASSERT((msg_size * itemsize) % 16 == 0, "By now, msg size must be divided by 16");
+    SLIME_ASSERT((msg_size * itemsize()) % 16 == 0, "By now, msg size must be divided by 16");
+
+    SLIME_LOG_INFO("Torch ItemSize: " << torch::elementSize(dtype));
 
     allocBuffer();
 }
 
+int32_t AllGatherIntraLLBuffer::itemsize()
+{
+    return torch::elementSize(dtype_);
+}
+
 int32_t AllGatherIntraLLBuffer::get_buffer_size()
 {
-    return max_bs_ * msg_size_ * itemsize_ * world_size_;
+    return max_bs_ * msg_size_ * itemsize() * world_size_;
 }
 
 int AllGatherIntraLLBuffer::allocBuffer()
@@ -90,8 +98,15 @@ int AllGatherIntraLLBuffer::connectFullMesh(std::vector<json> all_buffer_info)
 
 torch::Tensor AllGatherIntraLLBuffer::allGatherLL(torch::Tensor q)
 {
-    all_gather_intra_ll(q, buffer_ptrs_, signal_ptrs_, max_bs_, msg_size_, itemsize_, world_size_, rank_);
-    return torch::from_blob(reinterpret_cast<void*>(local_buffer_), {world_size_, max_bs_, msg_size_}, q.options());
+
+    SLIME_ASSERT(q.dtype() == dtype_, "unmatched data type!");
+
+    all_gather_intra_ll(q, buffer_ptrs_, signal_ptrs_, max_bs_, msg_size_, itemsize(), world_size_, rank_);
+
+    // assuming device is already set
+    auto options = torch::TensorOptions().dtype(dtype_).device(torch::kCUDA);
+
+    return torch::from_blob(reinterpret_cast<void*>(local_buffer_), {world_size_, max_bs_, msg_size_}, options);
 }
 
 }  // namespace slime

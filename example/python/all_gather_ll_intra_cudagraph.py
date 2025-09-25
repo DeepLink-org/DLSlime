@@ -25,7 +25,7 @@ class DLSlimeQGather:
 
     def __init__(self, rank: int):
         self.rank = rank
-        self.buffer = _slime_c.AllGatherInterLLBuffer(64, 576, 2, 8, self.rank)
+        self.buffer = _slime_c.AllGatherIntraLLBuffer(64, 576, torch.bfloat16, 8, self.rank)
         buffer_info = self.buffer.buffer_info()
         all_buffer_info = [None for _ in range(8)]
         dist.all_gather_object(all_buffer_info, buffer_info)

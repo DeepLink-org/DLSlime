@@ -31,12 +31,17 @@
 #include "engine/rdma/utils.h"
 #endif
 
+#if defined(BUILD_INTRA_OPS) || defined(BUILD_INTER_OPS)
+#include <torch/torch.h>
+
 #ifdef BUILD_INTRA_OPS
 #include "ops/intra_ll/all_gather_intra_ll/all_gather_intra_ll_buffer.h"
 #endif
 
 #ifdef BUILD_INTER_OPS
 #include "ops/inter_ll/all_gather_inter_ll/all_gather_inter_ll_buffer.h"
+#endif
+
 #endif
 
 #include "json.hpp"
@@ -183,7 +188,7 @@ PYBIND11_MODULE(_slime_c, m)
 
 #ifdef BUILD_INTRA_OPS
     py::class_<slime::AllGatherIntraLLBuffer>(m, "AllGatherIntraLLBuffer")
-        .def(py::init<int32_t, int32_t, int32_t, int32_t, int32_t>())
+        .def(py::init<int32_t, int32_t, torch::Dtype, int32_t, int32_t>())
         .def("buffer_info", &slime::AllGatherIntraLLBuffer::buffer_info)
         .def("connect_full_mesh", &slime::AllGatherIntraLLBuffer::connectFullMesh)
         .def("all_gather_ll", &slime::AllGatherIntraLLBuffer::allGatherLL);
@@ -191,10 +196,9 @@ PYBIND11_MODULE(_slime_c, m)
 
 #ifdef BUILD_INTER_OPS
     py::class_<slime::AllGatherInterLLBuffer>(m, "AllGatherInterLLBuffer")
-        .def(py::init<int32_t, int32_t, int32_t, int32_t, int32_t>())
+        .def(py::init<int32_t, int32_t, torch::Dtype, int32_t, int32_t>())
         .def("buffer_info", &slime::AllGatherInterLLBuffer::buffer_info)
         .def("connect_full_mesh", &slime::AllGatherInterLLBuffer::connectFullMesh)
         .def("all_gather_ll", &slime::AllGatherInterLLBuffer::allGatherLL);
-#endif 
-
+#endif
 }
