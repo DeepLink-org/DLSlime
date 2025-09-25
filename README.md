@@ -2,9 +2,10 @@
 <p align="center"> <img src="docs/imgs/assets/logo.svg" alt="" width="300"> </p>
 </div>
 <p align="center">
+  <a href="docs/roadmap.md"><img src="docs/imgs/assets/roadmap.svg" width="16" height="16" style="vertical-align: middle;"> Roadmap </a> |
   <a href="https://join.slack.com/t/dlslime/shared_invite/zt-3e9zvercw-a89KI_Ig8N1UTaol_q6MXg"><img src="docs/imgs/assets/slack.svg" width="16" height="16" style="vertical-align: middle;"> Slack </a> |
   <a href="docs/imgs/assets/wechat_qrcode.jpg"><img src="docs/imgs/assets/wechat.svg" width="16" height="16" style="vertical-align: middle;"> WeChat Group </a> |
-  <a href="https://zhuanlan.zhihu.com/p/1950701795149067622"><img src="docs/imgs/assets/zhihu.svg" width="16" height="16" style="vertical-align: middle;"> Zhihu </a> 
+  <a href="https://zhuanlan.zhihu.com/p/1950701795149067622"><img src="docs/imgs/assets/zhihu.svg" width="16" height="16" style="vertical-align: middle;"> Zhihu </a>
 </p>
 <h1 align="center"> Flexible & Efficient Heterogeneous Transfer Toolkit </h1>
 
@@ -126,6 +127,8 @@ The `FLAG` can be
 | `BUILD_NVSHMEM`      | Build NVShmem Transfer Engine         | NVIDIA   |     OFF |
 | `BUILD_TORCH_PLUGIN` | Build DLSlime as a torch backend      | Hetero   |     OFF |
 | `USE_GLOO_BACKEND`   | Use GLOO RDMA Send/Recv torch backend | Hetero   |     OFF |
+| `BUILD_INTRA_OPS`    | Use INTRA Collective OPS              | GPGPU    |     OFF |
+| `BUILD_INTER_OPS`    | Use INTER Collective OPS (NVSHMEM)    | NVIDIA   |     OFF |
 
 > \[!Note\]
 > Please enable `USE_MECA` when using DLSlime as a torch backend in Metax platform.

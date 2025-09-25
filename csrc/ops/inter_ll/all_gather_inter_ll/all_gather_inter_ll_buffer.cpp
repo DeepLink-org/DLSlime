@@ -1,0 +1,118 @@
+#include <stdexcept>
+
+#include <c10/core/ScalarType.h>
+#include <torch/types.h>
+
+#include "logging.h"
+#include "ops/nvshmem_api.cuh"
+
+#include "all_gather_inter_ll.h"
+#include "all_gather_inter_ll_buffer.h"
+
+namespace slime {
+
+AllGatherInterLLBuffer::AllGatherInterLLBuffer(
+    int32_t max_bs, int32_t msg_size, torch::Dtype dtype, int32_t world_size, int32_t rank):
+    max_bs_(max_bs), msg_size_(msg_size), dtype_(dtype), world_size_(world_size), rank_(rank)
+{
+    cudaSetDevice(local_rank());
+    SLIME_ASSERT((msg_size * itemsize()) % 16 == 0, "By now, msg size must be divided by 16");
+}
+
+AllGatherInterLLBuffer::AllGatherInterLLBuffer(
+    int32_t max_bs, int32_t msg_size, torch::Dtype dtype, int32_t world_size, int32_t rank, bool rdma_only):
+    AllGatherInterLLBuffer(max_bs, msg_size, dtype, world_size, rank)
+{
+    rdma_only_ = rdma_only;
+}
+
+int32_t AllGatherInterLLBuffer::getBufferSize()
+{
+    return max_bs_ * msg_size_ * itemsize() * world_size_;
+}
+
+int32_t AllGatherInterLLBuffer::local_rank()
+{
+    // TODO (JimyMa): By now, Assume local world size is 8
+    return rank_ % 8;
+}
+
+int32_t AllGatherInterLLBuffer::itemsize()
+{
+    return torch::elementSize(dtype_);
+}
+
+int AllGatherInterLLBuffer::allocSymBuffer()
+{
+    int32_t buffer_size = getBufferSize();
+
+    sym_buffer_ = reinterpret_cast<int8_t*>(nvshmem_api::alloc(buffer_size, nvshmem_alignment));
+    sym_signal_ = reinterpret_cast<int*>(nvshmem_api::alloc(world_size_ * sizeof(int), nvshmem_alignment));
+    cudaMemset(sym_buffer_, 0, buffer_size);
+    cudaMemset(sym_signal_, 0, world_size_ * sizeof(int));
+
+    return 0;
+}
+
+json AllGatherInterLLBuffer::bufferInfo()
+{
+    json info{};
+    info["nvshmem_info"] = {{"unique_id", nvshmem_api::get_unique_id()}};
+
+    return info;
+}
+
+int AllGatherInterLLBuffer::connectFullMesh(std::vector<json> all_buffer_info)
+{
+    auto unique_ids   = all_buffer_info[root_rank]["nvshmem_info"]["unique_id"];
+    int  nvshmem_rank = nvshmem_api::init(unique_ids, rank_, world_size_);
+    nvshmem_api::barrier();
+    allocSymBuffer();
+    nvshmem_api::barrier();
+    SLIME_ASSERT(nvshmem_rank == rank_, "nvshmem_rank != rank_");
+    return 0;
+}
+
+std::tuple<torch::Tensor, std::function<void()>> AllGatherInterLLBuffer::allGatherLLHook(torch::Tensor q)
+{
+
+    SLIME_ASSERT(q.dtype() == dtype_, "unmatched data type!");
+
+    auto launcher = [=](int phase) {
+        all_gather_inter_ll(
+            q, sym_buffer_, sym_signal_, max_bs_, msg_size_, itemsize(), world_size_, rank_, phase, rdma_only_);
+    };
+
+    launcher(ALL_GATHER_LL_SEND_PHASE);
+
+    auto options = torch::TensorOptions().dtype(dtype_).device(torch::kCUDA);
+    auto torch_buffer =
+        torch::from_blob(reinterpret_cast<void*>(sym_buffer_), {world_size_, max_bs_, msg_size_}, options);
+
+    std::function<void()> recv_hook = [=]() { launcher(LOW_LATENCY_RECV_PHASE); };
+
+    return {torch_buffer, recv_hook};
+}
+
+torch::Tensor AllGatherInterLLBuffer::allGatherLL(torch::Tensor q)
+{
+
+    SLIME_ASSERT(q.dtype() == dtype_, "unmatched data type!");
+
+    all_gather_inter_ll(q,
+                        sym_buffer_,
+                        sym_signal_,
+                        max_bs_,
+                        msg_size_,
+                        itemsize(),
+                        world_size_,
+                        rank_,
+                        ALL_GATHER_LL_SEND_PHASE | ALL_GATHER_LL_RECV_PHASE,
+                        rdma_only_);
+
+    auto options = torch::TensorOptions().dtype(dtype_).device(torch::kCUDA);
+
+    return torch::from_blob(reinterpret_cast<void*>(sym_buffer_), {world_size_, max_bs_, msg_size_}, options);
+}
+
+}  // namespace slime

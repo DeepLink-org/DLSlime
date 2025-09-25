@@ -1,6 +1,3 @@
-#include "ops/launch.cuh"
-#include "ops/utils.cuh"
-
 #include <algorithm>
 #include <cstdint>
 #include <stdexcept>
@@ -15,18 +12,21 @@
 #include <ATen/cuda/CUDADataType.h>
 #include <torch/torch.h>
 
+#include "ops/launch.cuh"
+#include "ops/utils.cuh"
+
 namespace slime {
 
 #define MAX_SMS 128
 
-__global__ __launch_bounds__(1024, 1) void all_gather_ll_kernel(int8_t*  q_ptr,
-                                                                int8_t** ipc_buffer_ptr,
-                                                                int**    ipc_signal_ptr,
-                                                                int32_t  max_bs,
-                                                                int32_t  msg_size,
-                                                                int32_t  itemsize,
-                                                                int32_t  world_size,
-                                                                int32_t  rank)
+__global__ __launch_bounds__(1024, 1) void all_gather_intra_ll_kernel(int8_t*  q_ptr,
+                                                                      int8_t** ipc_buffer_ptr,
+                                                                      int**    ipc_signal_ptr,
+                                                                      int32_t  max_bs,
+                                                                      int32_t  msg_size,
+                                                                      int32_t  itemsize,
+                                                                      int32_t  world_size,
+                                                                      int32_t  rank)
 {
 
     const int num_sms = std::min(MAX_SMS, max_bs);
@@ -73,20 +73,20 @@ __global__ __launch_bounds__(1024, 1) void all_gather_ll_kernel(int8_t*  q_ptr,
     // Step 3. sync
     int* local_signal_ptr = ipc_signal_ptr[rank];
     if (blockIdx.x == 0 and threadIdx.x < world_size) {
-        while (deep_ep::ld_acquire_global(local_signal_ptr + threadIdx.x) != num_sms);
+        while (deep_ep::ld_acquire_global(local_signal_ptr + threadIdx.x) != num_sms)
+            ;
         local_signal_ptr[threadIdx.x] = 0;
     }
-
 }
 
-void all_gather_ll(torch::Tensor q,
-                   int8_t**      ipc_buffer_ptr,
-                   int**         ipc_signal_ptr,
-                   int32_t       max_bs,
-                   int32_t       msg_size,
-                   int32_t       itemsize,
-                   int32_t       world_size,
-                   int32_t       rank)
+void all_gather_intra_ll(torch::Tensor q,
+                         int8_t**      ipc_buffer_ptr,
+                         int**         ipc_signal_ptr,
+                         int32_t       max_bs,
+                         int32_t       msg_size,
+                         int32_t       itemsize,
+                         int32_t       world_size,
+                         int32_t       rank)
 {
 
     int8_t* q_ptr = reinterpret_cast<int8_t*>(q.data_ptr());
@@ -100,7 +100,7 @@ void all_gather_ll(torch::Tensor q,
     auto stream = at::cuda::getCurrentCUDAStream();
     SETUP_LAUNCH_CONFIG(grid_dim, block_dim, stream);
     LAUNCH_KERNEL(&cfg,
-                  all_gather_ll_kernel,
+                  all_gather_intra_ll_kernel,
                   q_ptr,
                   ipc_buffer_ptr,
                   ipc_signal_ptr,
@@ -114,7 +114,6 @@ void all_gather_ll(torch::Tensor q,
     if (err != cudaSuccess) {
         throw std::runtime_error(cudaGetErrorString(err));
     }
-
 }
 
 }  // namespace slime
