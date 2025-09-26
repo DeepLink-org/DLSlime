@@ -7,24 +7,27 @@ import torch.distributed as dist
 from dlslime import _slime_c
 
 
+bs = 64
+
+
 class DLSlimeQGather:
 
-    def __init__(self, rank: int, mode: str):
+    def __init__(self, world_size, rank: int, mode: str, rdma_only: False):
         self.rank = rank
         # 根据模式选择不同的Buffer类
         if mode == "inter":
             self.buffer = _slime_c.AllGatherInterLLBuffer(
-                64, 576, torch.bfloat16, 8, self.rank, True
+                bs, 576, torch.bfloat16, world_size, self.rank, rdma_only
             )
         elif mode == "intra":
             self.buffer = _slime_c.AllGatherIntraLLBuffer(
-                64, 576, torch.bfloat16, 8, self.rank
+                bs, 576, torch.bfloat16, world_size, self.rank
             )
         else:
             raise ValueError(f"Unsupported Mode: {mode}，please use 'inter' or 'intra'")
 
         buffer_info = self.buffer.buffer_info()
-        all_buffer_info = [None for _ in range(8)]
+        all_buffer_info = [None for _ in range(world_size)]
         dist.all_gather_object(all_buffer_info, buffer_info)
         self.buffer.connect_full_mesh(all_buffer_info)
 
@@ -45,6 +48,7 @@ def main():
     )
     parser.add_argument("--eager-mode", action="store_true", help="--eager-mode")
     parser.add_argument("--hook-mode", action="store_true", help="--hook-mode")
+    parser.add_argument("--rdma-only", action="store_true", help="rdma-only")
     args = parser.parse_args()
 
     assert not (
@@ -53,9 +57,9 @@ def main():
 
     if args.mode == "inter":
         # NVSHMEM ENVS
-        os.environ["NVSHMEM_DISABLE_P2P"] = "1"
+        os.environ["NVSHMEM_DISABLE_P2P"] = "0"
         os.environ["NVSHMEM_IB_ENABLE_IBGDA"] = "1"
-        os.environ["NVSHMEM_IBGDA_NUM_RC_PER_PE"] = "1"
+        os.environ["NVSHMEM_IBGDA_NUM_RC_PER_PE"] = "8"
         # Make sure QP depth is always larger than the number of on-flight WRs, so that we can skip WQ slot check
         os.environ["NVSHMEM_QP_DEPTH"] = os.environ.get("NVSHMEM_QP_DEPTH", "1024")
 
@@ -67,18 +71,27 @@ def main():
         # NOTES: NVSHMEM initialization requires at least 256 MiB
         os.environ["NVSHMEM_CUMEM_GRANULARITY"] = f"{2 **29}"
 
-    dist.init_process_group(backend="nccl")
-    rank = dist.get_rank()
-    torch.cuda.set_device(rank)
+    # Get SPMD Info
+    rank = int(os.environ["RANK"])
+    local_rank = int(os.environ["LOCAL_RANK"])
+    world_size = int(os.environ["WORLD_SIZE"])
+    local_world_size = nnodes = int(os.environ["LOCAL_WORLD_SIZE"])
+    master_addr = os.environ["MASTER_ADDR"]
+    master_port = os.environ["MASTER_PORT"]
+
+    dist.init_process_group(backend="gloo")
+    torch.cuda.set_device(rank % 8)
 
     output_dir = "./"
     os.makedirs(output_dir, exist_ok=True)
 
     # 根据选择的模式初始化gather
-    gather = DLSlimeQGather(rank, args.mode)
+    gather = DLSlimeQGather(world_size, rank, args.mode, args.rdma_only)
 
     input_tensor = (
-        torch.ones(2, 32, 576, dtype=torch.bfloat16, device=f"cuda:{rank}") * rank * 0
+        torch.ones(bs, 576, dtype=torch.bfloat16, device=f"cuda:{local_rank}")
+        * rank
+        * 0
     )
 
     # 预热
@@ -86,6 +99,8 @@ def main():
         output = gather.forward(input_tensor, args.hook_mode)
         dist.barrier()
         torch.cuda.synchronize()
+
+    print("warmup done.")
 
     profiler_output = os.path.join(output_dir, f"rank_{rank}_profile")
     if args.eager_mode:
@@ -95,7 +110,7 @@ def main():
                 torch.profiler.ProfilerActivity.CPU,
                 torch.profiler.ProfilerActivity.CUDA,
             ],
-            schedule=torch.profiler.schedule(wait=1, warmup=3, active=5, repeat=1),
+            schedule=torch.profiler.schedule(wait=1, warmup=3, active=100, repeat=1),
             on_trace_ready=torch.profiler.tensorboard_trace_handler(profiler_output),
             record_shapes=True,
             profile_memory=True,
@@ -104,10 +119,10 @@ def main():
             with_modules=True,
         ) as prof:
             input_tensor.copy_(
-                torch.ones(2, 32, 576, dtype=torch.bfloat16, device=f"cuda:{rank}")
+                torch.ones(bs, 576, dtype=torch.bfloat16, device=f"cuda:{local_rank}")
                 * rank
             )
-            for i in range(10):
+            for i in range(500):
                 torch.profiler.record_function(f"forward_start_{i}")
                 dist.barrier()
                 output = gather.forward(input_tensor, args.hook_mode)
@@ -117,7 +132,7 @@ def main():
     else:
         # 默认模式：使用CUDA Graph
         graph = torch.cuda.CUDAGraph()
-        device = torch.device(f"cuda:{rank}")
+        device = torch.device(f"cuda:{local_rank}")
         stream = torch.cuda.Stream(device=device)
 
         with torch.cuda.stream(stream):
@@ -126,15 +141,17 @@ def main():
                 output.add_(0)
 
         torch.cuda.synchronize()
+        dist.barrier()
         input_tensor.copy_(
-            torch.ones(2, 32, 576, dtype=torch.bfloat16, device=f"cuda:{rank}") * rank
+            torch.ones(bs, 576, dtype=torch.bfloat16, device=f"cuda:{local_rank}")
+            * rank
         )
         with torch.profiler.profile(
             activities=[
                 torch.profiler.ProfilerActivity.CPU,
                 torch.profiler.ProfilerActivity.CUDA,
             ],
-            schedule=torch.profiler.schedule(wait=1, warmup=3, active=5, repeat=1),
+            schedule=torch.profiler.schedule(wait=1, warmup=3, active=100, repeat=1),
             on_trace_ready=torch.profiler.tensorboard_trace_handler(profiler_output),
             record_shapes=True,
             profile_memory=True,
@@ -142,11 +159,11 @@ def main():
             with_flops=True,
             with_modules=True,
         ) as prof:
-            for i in range(10):
+            for i in range(500):
                 torch.profiler.record_function(f"replay_start_{i}")
-                dist.barrier()
                 graph.replay()
                 torch.profiler.record_function(f"replay_end_{i}")
+                dist.barrier()
                 torch.cuda.synchronize()
                 prof.step()
 

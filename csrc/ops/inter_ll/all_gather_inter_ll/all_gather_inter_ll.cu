@@ -55,7 +55,6 @@ __global__ __launch_bounds__(1024, 1) void all_gather_inter_ll_kernel(int8_t* q_
     if ((phases & ALL_GATHER_LL_SEND_PHASE) == 0)
         goto ALL_GATHER_LL_RECV;
 
-ALL_GATHER_LL_SEND:
     // Step 1. Write Q to buffer
     for (int q_idx = q_idx_base; q_idx < q_size; q_idx += num_sms * msg_size * itemsize) {
 
@@ -84,7 +83,7 @@ ALL_GATHER_LL_SEND:
             const int       buffer_idx           = q_idx + q_size * rank;
             const uintptr_t buffer_ptr_for_write = reinterpret_cast<uintptr_t>(sym_buffer_ptr + buffer_idx);
             const uintptr_t dst_buffer_p2p_ptr   = deep_ep::nvshmemi_get_p2p_ptr(buffer_ptr_for_write, rank, dst_rank);
-            if (dst_buffer_p2p_ptr == 0) {
+            if (dst_buffer_p2p_ptr == 0 or rdma_only) {
                 deep_ep::nvshmemi_ibgda_put_nbi_warp(
                     buffer_ptr_for_write, buffer_ptr_for_write, num_msg_per_warp, dst_rank, sm_id % 2, lane_id, 0);
             }
@@ -109,7 +108,7 @@ ALL_GATHER_LL_SEND:
         const uintptr_t dst_signal_p2p_ptr =
             deep_ep::nvshmemi_get_p2p_ptr(reinterpret_cast<uintptr_t>(signal_ptr_for_write), rank, dst_rank);
 
-        if (dst_signal_p2p_ptr == 0)
+        if (dst_signal_p2p_ptr == 0 or (dst_rank != rank and rdma_only))
             deep_ep::nvshmemi_ibgda_amo_nonfetch_add(sym_signal_ptr + rank, 1, dst_rank, sm_id % 2);
         else
             deep_ep::atomic_add_release_global(reinterpret_cast<int*>(dst_signal_p2p_ptr), 1);
