@@ -13,8 +13,8 @@ Under folder `/csrc/engine/ascend_direct`
 
 ## Dependencies
 
-CANN version >= 8.2 including ADXL
-NPU HDK driver version tested on 25.2.0
+- CANN version >= 8.2 including ADXL
+- NPU HDK driver version tested on 25.2.0
 
 ## Benchmark
 
@@ -42,11 +42,12 @@ On target device:
 ./bin/ascend_direct_perf --mode=initiator --localhost="10.201.20.25" --local_port=16777 --remote_host="10.201.20.25" --remote_port=16789 --device_id=2
 ```
 
- The test makes initiator read data from target. `localhost` and `remote_host` specify the IP address of
- the two communication devices. `device_id` set the local NPU used to do the test.
- Then our test binds `local_port` and `remote_port` to zmq sockets to exchange meta data.
- Once the meta is ready, `local_port` + 1 and `remote_port` + 1 are used to do ADXL rdma connection and transport.
- Finally you could see perf result like these from the initiator output:
+ - The test makes initiator read data from target.
+ - `localhost` and `remote_host` specify the IP address of the two communication devices.
+ - `device_id` set the local NPU used to do the test.
+ - Then our test binds `local_port` and `remote_port` to zmq sockets to exchange meta data.
+ - Once the meta is ready, `local_port` + 1 and `remote_port` + 1 are used to do ADXL rdma connection and transport.
+ - Finally you could see perf result like these from the initiator output:
 
 ```
 Block iteration 0 test completed: duration 98188us, block size 32KB, total size 1024KB, throughput 0.01 GB/s
