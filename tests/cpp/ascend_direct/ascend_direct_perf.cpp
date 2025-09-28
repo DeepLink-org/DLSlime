@@ -5,7 +5,7 @@
 #include <zmq.hpp>
 
 #include "acl/acl.h"
-#include "engine/ascend_direct_transport/ascend_direct_transport.h"
+#include "engine/ascend_direct/ascend_direct_transport.h"
 #include "logging.h"
 
 DEFINE_string(localhost, "100.97.164.197", "local IP");
