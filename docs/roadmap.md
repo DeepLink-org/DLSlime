@@ -1,18 +1,18 @@
 ## Overview
 
-- Links
+### Links
 
-DLSlime is dedicated to supporting efficient transmission over a variety of different links, including but not limited to IBVerbs, CUDA IPC, TCP Socket, PCIE, NVShmem, Ascend (Direct) ...
+DLSlime is dedicated to supporting efficient transmission over a variety of different links, including but not limited to IBVerbs, CUDA IPC, TCP Socket, PCIE, NVShmem, Ascend (Direct), NVME-oF ...
 
-- Transfer Engine
+### Transfer Engine
 
 DLSlime provides a flexible and efficient P2P Transfer Engine, enabling AI-workload-aware customized functions such as Prefill-Decode separation and checkpoint transmission.
 
-- Collective Ops
+### Collective Ops
 
-Referring to [DeepEP](https://github.com/deeplink-org/DeepEP.git), DLSlime provides a buffer-based collective communication library that achieves ultra-low latency collective communications.
+Referring to [DeepEP](https://github.com/deeplink-org/DeepEP.git), DLSlime provides a buffer-based collective communication library that achieves ultra-low latency and SM-free collective communications.
 
-- Torch Wrapper
+### Torch Wrapper
 
 To meet the heterogeneous requirements of SPMD programs such as heterogeneous pipeline parallel training, a Torch communication backend is provided.
 
@@ -34,6 +34,8 @@ To meet the heterogeneous requirements of SPMD programs such as heterogeneous pi
   - ⏳ High performance data offloading
 - Ascend
   - ✅ Ascned direct transfer engine
+- NVME-oF
+  - 💭 Planning
 - UB Mesh
   - 💭 Planning
 

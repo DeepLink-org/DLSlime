@@ -20,7 +20,7 @@
 
 namespace slime {
 
-#define MAX_SMS 128
+#define MAX_SMS int64_t{128}
 
 __device__ void coalescing_load(int8_t* src, int8_t* des, int length)
 {
@@ -51,12 +51,13 @@ __device__ void coalescing_load(int8_t* src, int8_t* des, int length)
 __global__ __launch_bounds__(1024, 1) void all_gather_inter_ll_kernel(int8_t* q_ptr,
                                                                       int8_t* sym_buffer_ptr,
                                                                       int*    sym_signal_ptr,
-                                                                      int32_t max_bs,
-                                                                      int32_t msg_size,
-                                                                      int32_t itemsize,
-                                                                      int32_t world_size,
-                                                                      int32_t rank,
-                                                                      int32_t phases,
+                                                                      int64_t max_bs,
+                                                                      int64_t msg_size,
+                                                                      int64_t itemsize,
+                                                                      int64_t world_size,
+                                                                      int64_t rank,
+                                                                      int phases,
+                                                                      int64_t tag,
                                                                       bool    rdma_only)
 {
 
@@ -72,12 +73,12 @@ __global__ __launch_bounds__(1024, 1) void all_gather_inter_ll_kernel(int8_t* q_
 
     const int dst_rank = warp_id;
 
-    const int q_idx_base = sm_id * msg_size * itemsize;
-    const int q_size     = max_bs * msg_size * itemsize;
+    const int q_idx_base                  = sm_id * msg_size * itemsize;
+    const int q_size                      = max_bs * msg_size * itemsize;
+    const int buffer_size_per_concurrency = world_size * q_size;
 
     const int num_msg_per_warp     = msg_size * itemsize;
     const int num_vec_msg_per_warp = num_msg_per_warp / VEC_SIZE;
-    int cnt = 0;
 
     if ((phases & ALL_GATHER_LL_SEND_PHASE) == 0)
         goto ALL_GATHER_LL_RECV;
@@ -88,7 +89,7 @@ __global__ __launch_bounds__(1024, 1) void all_gather_inter_ll_kernel(int8_t* q_
         if (dst_rank == rank) {
             int8_t*   q_ptr_for_write          = q_ptr + q_idx;
             vec_t*    vec_q_ptr_for_write      = reinterpret_cast<vec_t*>(q_ptr_for_write);
-            const int buffer_idx               = q_idx + q_size * rank;
+            const int buffer_idx               = tag * buffer_size_per_concurrency + q_idx + q_size * rank;
             int8_t*   buffer_ptr_for_write     = sym_buffer_ptr + buffer_idx;
             vec_t*    vec_buffer_ptr_for_write = reinterpret_cast<vec_t*>(buffer_ptr_for_write);
 
@@ -107,8 +108,7 @@ __global__ __launch_bounds__(1024, 1) void all_gather_inter_ll_kernel(int8_t* q_
     // Step 2. Buffer Broadcast
     for (int q_idx = q_idx_base; q_idx < q_size; q_idx += num_sms * msg_size * itemsize) {
         if (dst_rank != rank) {
-            const int slot_id = cnt * num_sms * world_size + sm_id * world_size + dst_rank;
-            const int       buffer_idx           = q_idx + q_size * rank;
+            const int       buffer_idx           = tag * buffer_size_per_concurrency + q_idx + q_size * rank;
             const uintptr_t buffer_ptr_for_write = reinterpret_cast<uintptr_t>(sym_buffer_ptr + buffer_idx);
             const uintptr_t dst_buffer_p2p_ptr   = deep_ep::nvshmemi_get_p2p_ptr(buffer_ptr_for_write, rank, dst_rank);
             if (dst_buffer_p2p_ptr == 0 or rdma_only) {
@@ -127,20 +127,21 @@ __global__ __launch_bounds__(1024, 1) void all_gather_inter_ll_kernel(int8_t* q_
                                    deep_ep::st_na_global);
             }
         }
-        cnt += 1;
     }
     __syncwarp();
 
     // Step 3. Write Signal
     if (lane_id == 0) {
-        const uintptr_t signal_ptr_for_write = reinterpret_cast<uintptr_t>(sym_signal_ptr + rank);
+        const uintptr_t signal_ptr_for_write = reinterpret_cast<uintptr_t>(sym_signal_ptr + tag * world_size + rank);
         const uintptr_t dst_signal_p2p_ptr =
             deep_ep::nvshmemi_get_p2p_ptr(reinterpret_cast<uintptr_t>(signal_ptr_for_write), rank, dst_rank);
 
-        if (dst_signal_p2p_ptr == 0 or (dst_rank != rank and rdma_only))
-            deep_ep::nvshmemi_ibgda_amo_nonfetch_add(sym_signal_ptr + rank, 1, dst_rank, sm_id % 8);
-        else
+        if (dst_signal_p2p_ptr == 0 or (dst_rank != rank and rdma_only)) {
+            deep_ep::nvshmemi_ibgda_amo_nonfetch_add(sym_signal_ptr + tag * world_size + rank, 1, dst_rank, sm_id % 8);
+        }
+        else {
             deep_ep::atomic_add_release_global(reinterpret_cast<int*>(dst_signal_p2p_ptr), 1);
+        }
     }
     __syncthreads();
 
@@ -150,10 +151,10 @@ __global__ __launch_bounds__(1024, 1) void all_gather_inter_ll_kernel(int8_t* q_
 ALL_GATHER_LL_RECV:
     // Step 4. sync
     if (blockIdx.x == 0 and threadIdx.x < world_size) {
-
-        while (deep_ep::ld_acquire_global(sym_signal_ptr + threadIdx.x) != num_sms)
+        const int* sym_signal_ptr_for_write = sym_signal_ptr + tag * world_size + threadIdx.x;
+        while (deep_ep::ld_acquire_global(sym_signal_ptr_for_write) != num_sms)
             ;
-        sym_signal_ptr[threadIdx.x] = 0;
+        sym_signal_ptr[tag * world_size + threadIdx.x] = 0;
     }
     return;
 }
@@ -161,18 +162,19 @@ ALL_GATHER_LL_RECV:
 void all_gather_inter_ll(torch::Tensor q,
                          int8_t*       sym_buffer_ptr,
                          int*          sym_signal_ptr,
-                         int32_t       max_bs,
-                         int32_t       msg_size,
-                         int32_t       itemsize,
-                         int32_t       world_size,
-                         int32_t       rank,
+                         int64_t       max_bs,
+                         int64_t       msg_size,
+                         int64_t       itemsize,
+                         int64_t       world_size,
+                         int64_t       rank,
                          int           phase,
+                         int64_t       tag,
                          bool          rdma_only)
 {
 
     int8_t* q_ptr = reinterpret_cast<int8_t*>(q.data_ptr());
 
-    int num_sms   = std::min(128, max_bs);
+    int num_sms   = std::min(int64_t{128}, max_bs);
     int num_warps = world_size;
 
     int grid_dim  = num_sms;
@@ -191,6 +193,7 @@ void all_gather_inter_ll(torch::Tensor q,
                   world_size,
                   rank,
                   phase,
+                  tag,
                   rdma_only);
 
     cudaError_t err = cudaGetLastError();

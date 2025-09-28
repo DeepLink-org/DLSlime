@@ -1,9 +1,9 @@
 #pragma once
 
 #include <cstdint>
-#include <vector>
 #include <functional>
 #include <tuple>
+#include <vector>
 
 #include <torch/torch.h>
 
@@ -22,36 +22,48 @@ class AllGatherInterLLBuffer {
     static constexpr int32_t root_rank         = 0;
 
 public:
-    AllGatherInterLLBuffer(int32_t max_bs, int32_t msg_size, torch::Dtype dtype, int32_t world_size, int32_t rank);
-    AllGatherInterLLBuffer(int32_t max_bs, int32_t msg_size, torch::Dtype dtype, int32_t world_size, int32_t rank, bool rdma_only);
+    AllGatherInterLLBuffer(int64_t      max_bs,
+                           int64_t      msg_size,
+                           torch::Dtype dtype,
+                           int64_t      world_size,
+                           int64_t      rank,
+                           int64_t      num_concurrency);
+    AllGatherInterLLBuffer(int64_t      max_bs,
+                           int64_t      msg_size,
+                           torch::Dtype dtype,
+                           int64_t      world_size,
+                           int64_t      rank,
+                           int64_t      num_concurrency,
+                           bool         rdma_only);
 
-    int32_t getBufferSize();
+    size_t getBufferSize();
 
-    int32_t itemsize();
+    int64_t itemsize();
 
-    int32_t local_rank();
+    int64_t localRank();
 
     json bufferInfo();
 
     int connectFullMesh(std::vector<json> all_ipc_info);
 
-    int allocIpcBuffer();
     int allocSymBuffer();
 
-    torch::Tensor allGatherLL(torch::Tensor q);
-    std::tuple<torch::Tensor, std::function<void()>> allGatherLLHook(torch::Tensor q);
+    torch::Tensor                                    allGatherLL(torch::Tensor q, int32_t tag = 0);
+    std::tuple<torch::Tensor, std::function<void()>> allGatherLLHook(torch::Tensor q, int32_t tag = 0);
 
 private:
     int8_t* sym_buffer_;
     int*    sym_signal_;
 
-    int32_t max_bs_;
-    int32_t msg_size_;
+    int64_t max_bs_;
+    int64_t msg_size_;
 
     torch::Dtype dtype_;
 
-    int32_t world_size_;
-    int32_t rank_;
+    int64_t world_size_;
+    int64_t rank_;
+
+    int64_t num_concurrency_;
 
     bool rdma_only_{false};
 };
