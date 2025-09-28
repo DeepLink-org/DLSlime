@@ -1,13 +1,16 @@
 ## Overview
 
 - Links
-  DLSlime is dedicated to supporting efficient transmission over a variety of different links, including but not limited to IBVerbs, CUDA IPC, TCP Socket, PCIE, NVShmem, Ascend (Direct), ...
+
+DLSlime is dedicated to supporting efficient transmission over a variety of different links, including but not limited to IBVerbs, CUDA IPC, TCP Socket, PCIE, NVShmem, Ascend (Direct), ...
 
 - Transfer Engine
-  DLSlime provides a flexible and efficient P2P Transfer Engine, enabling AI-workload-aware customized functions such as Prefill-Decode separation and checkpoint transmission.
+
+DLSlime provides a flexible and efficient P2P Transfer Engine, enabling AI-workload-aware customized functions such as Prefill-Decode separation and checkpoint transmission.
 
 - Collective Ops
-  Referring to [DeepEP](https://github.com/deeplink-org/DeepEP.git), DLSlime provides a buffer-based collective communication library that achieves ultra-low latency collective communications.
+
+Referring to [DeepEP](https://github.com/deeplink-org/DeepEP.git), DLSlime provides a buffer-based collective communication library that achieves ultra-low latency collective communications.
 
 ## Transfer Engine Roadmap
 
