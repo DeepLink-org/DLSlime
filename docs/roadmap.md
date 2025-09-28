@@ -16,7 +16,7 @@ Referring to [DeepEP](https://github.com/deeplink-org/DeepEP.git), DLSlime provi
 
 - Ascend
   - ✅ Ascned direct transfer engine
-- IBVerbs Transfer Engine (@HaoLiuu)
+- IBVerbs Transfer Engine
   - ✅ SendRecv Endpoint
   - ✅ RDMA Read/Write Endpoint
 - NVShmem
