@@ -90,8 +90,46 @@ py::object alloc_dlpack_tensor(slime::NVShmemContext& self, size_t size, size_t 
 
 #endif
 
+#ifdef BUILD_RDMA
+#define BUILD_RDMA_ENABLED true
+#else
+#define BUILD_RDMA_ENABLED false
+#endif
+
+#ifdef BUILD_NVSHMEM
+#define BUILD_NVSHMEM_ENABLED true
+#else
+#define BUILD_NVSHMEM_ENABLED false
+#endif
+
+#ifdef BUILD_NVLINK
+#define BUILD_NVLINK_ENABLED true
+#else
+#define BUILD_NVLINK_ENABLED false
+#endif
+
+#ifdef BUILD_INTRA_OPS
+#define BUILD_INTRA_OPS_ENABLED true
+#else
+#define BUILD_INTRA_OPS_ENABLED false
+#endif
+
+#ifdef BUILD_INTER_OPS
+#define BUILD_INTER_OPS_ENABLED true
+#else
+#define BUILD_INTER_OPS_ENABLED false
+#endif
+
+#define EXPOSE_BUILD_FLAG(m, flag) m.attr("_"#flag) = flag##_ENABLED
+
 PYBIND11_MODULE(_slime_c, m)
 {
+    EXPOSE_BUILD_FLAG(m, BUILD_RDMA);
+    EXPOSE_BUILD_FLAG(m, BUILD_NVSHMEM);
+    EXPOSE_BUILD_FLAG(m, BUILD_NVLINK);
+    EXPOSE_BUILD_FLAG(m, BUILD_INTRA_OPS);
+    EXPOSE_BUILD_FLAG(m, BUILD_INTER_OPS);
+
     py::enum_<slime::OpCode>(m, "OpCode")
         .value("READ", slime::OpCode::READ)
         .value("WRITE", slime::OpCode::WRITE)

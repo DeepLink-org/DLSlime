@@ -9,7 +9,6 @@
 </p>
 <h1 align="center"> Flexible & Efficient Heterogeneous Transfer Toolkit </h1>
 
-
 ## Getting Started
 
 DLSlime offers a set of peer-to-peer communication interfaces. For instance, consider the task of batched slice assignment from a remote tensor to a local tensor. You can accomplish this using the following APIs.
@@ -119,16 +118,17 @@ mkdir -p DLSlime/build && cmake -DFLAG=<ON|OFF> ..
 
 The `FLAG` can be
 
-| Flag                 | Description                           | Platform | default |
-| :------------------- | :------------------------------------ | :------- | ------: |
-| `BUILD_RDMA`         | Build RDMA Transfer Engine            | Hetero   |      ON |
-| `BUILD_PYTHON`       | Build Python wrapper                  | Hetero   |      ON |
-| `BUILD_NVLINK`       | Build NVLINK Transfer Engine          | GPGPU    |     OFF |
-| `BUILD_NVSHMEM`      | Build NVShmem Transfer Engine         | NVIDIA   |     OFF |
-| `BUILD_TORCH_PLUGIN` | Build DLSlime as a torch backend      | Hetero   |     OFF |
-| `USE_GLOO_BACKEND`   | Use GLOO RDMA Send/Recv torch backend | Hetero   |     OFF |
-| `BUILD_INTRA_OPS`    | Use INTRA Collective OPS              | GPGPU    |     OFF |
-| `BUILD_INTER_OPS`    | Use INTER Collective OPS (NVSHMEM)    | NVIDIA   |     OFF |
+| Flag                  | Description                           | Platform | default |
+| :-------------------- | :------------------------------------ | :------- | ------: |
+| `BUILD_RDMA`          | Build RDMA Transfer Engine            | Hetero   |      ON |
+| `BUILD_PYTHON`        | Build Python wrapper                  | Hetero   |      ON |
+| `BUILD_NVLINK`        | Build NVLINK Transfer Engine          | GPGPU    |     OFF |
+| `BUILD_NVSHMEM`       | Build NVShmem Transfer Engine         | NVIDIA   |     OFF |
+| `BUILD_ASCEND_DIRECT` | Build Ascend Direct Transfer Engine   | ASCEND   |     OFF |
+| `BUILD_TORCH_PLUGIN`  | Build DLSlime as a torch backend      | Hetero   |     OFF |
+| `USE_GLOO_BACKEND`    | Use GLOO RDMA Send/Recv torch backend | Hetero   |     OFF |
+| `BUILD_INTRA_OPS`     | Use INTRA Collective OPS              | GPGPU    |     OFF |
+| `BUILD_INTER_OPS`     | Use INTER Collective OPS (NVSHMEM)    | NVIDIA   |     OFF |
 
 > \[!Note\]
 > Please enable `USE_MECA` when using DLSlime as a torch backend in Metax platform.

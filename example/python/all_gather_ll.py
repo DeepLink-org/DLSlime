@@ -6,8 +6,8 @@ import torch.distributed as dist
 
 from dlslime import _slime_c
 
-
-bs = 64
+bs = 128
+msg_size = 4_194_304 // 2 // 16 * 2
 
 
 class DLSlimeQGather:
@@ -17,11 +17,11 @@ class DLSlimeQGather:
         # 根据模式选择不同的Buffer类
         if mode == "inter":
             self.buffer = _slime_c.AllGatherInterLLBuffer(
-                bs, 576, torch.bfloat16, world_size, self.rank, rdma_only
+                bs, msg_size, torch.bfloat16, world_size, self.rank, rdma_only
             )
         elif mode == "intra":
             self.buffer = _slime_c.AllGatherIntraLLBuffer(
-                bs, 576, torch.bfloat16, world_size, self.rank
+                bs, msg_size, torch.bfloat16, world_size, self.rank
             )
         else:
             raise ValueError(f"Unsupported Mode: {mode}，please use 'inter' or 'intra'")
@@ -38,6 +38,15 @@ class DLSlimeQGather:
         else:
             t = self.buffer.all_gather_ll(input_tensor)
         return t
+
+
+# Get SPMD Info
+rank = int(os.environ["RANK"])
+local_rank = int(os.environ["LOCAL_RANK"])
+world_size = int(os.environ["WORLD_SIZE"])
+local_world_size = nnodes = int(os.environ["LOCAL_WORLD_SIZE"])
+master_addr = os.environ["MASTER_ADDR"]
+master_port = os.environ["MASTER_PORT"]
 
 
 def main():
@@ -59,7 +68,7 @@ def main():
         # NVSHMEM ENVS
         os.environ["NVSHMEM_DISABLE_P2P"] = "0"
         os.environ["NVSHMEM_IB_ENABLE_IBGDA"] = "1"
-        os.environ["NVSHMEM_IBGDA_NUM_RC_PER_PE"] = "8"
+        os.environ["NVSHMEM_IBGDA_NUM_RC_PER_PE"] = str(8)
         # Make sure QP depth is always larger than the number of on-flight WRs, so that we can skip WQ slot check
         os.environ["NVSHMEM_QP_DEPTH"] = os.environ.get("NVSHMEM_QP_DEPTH", "1024")
 
@@ -71,15 +80,7 @@ def main():
         # NOTES: NVSHMEM initialization requires at least 256 MiB
         os.environ["NVSHMEM_CUMEM_GRANULARITY"] = f"{2 **29}"
 
-    # Get SPMD Info
-    rank = int(os.environ["RANK"])
-    local_rank = int(os.environ["LOCAL_RANK"])
-    world_size = int(os.environ["WORLD_SIZE"])
-    local_world_size = nnodes = int(os.environ["LOCAL_WORLD_SIZE"])
-    master_addr = os.environ["MASTER_ADDR"]
-    master_port = os.environ["MASTER_PORT"]
-
-    dist.init_process_group(backend="gloo")
+    dist.init_process_group(backend="cpu:gloo,cuda:nccl")
     torch.cuda.set_device(rank % 8)
 
     output_dir = "./"
@@ -89,7 +90,7 @@ def main():
     gather = DLSlimeQGather(world_size, rank, args.mode, args.rdma_only)
 
     input_tensor = (
-        torch.ones(bs, 576, dtype=torch.bfloat16, device=f"cuda:{local_rank}")
+        torch.ones(bs, msg_size, dtype=torch.bfloat16, device=f"cuda:{local_rank}")
         * rank
         * 0
     )
@@ -102,7 +103,7 @@ def main():
 
     print("warmup done.")
 
-    profiler_output = os.path.join(output_dir, f"rank_{rank}_profile")
+    profiler_output = os.path.join(output_dir, "profiler")
     if args.eager_mode:
         # Eager mode
         with torch.profiler.profile(
@@ -119,7 +120,9 @@ def main():
             with_modules=True,
         ) as prof:
             input_tensor.copy_(
-                torch.ones(bs, 576, dtype=torch.bfloat16, device=f"cuda:{local_rank}")
+                torch.ones(
+                    bs, msg_size, dtype=torch.bfloat16, device=f"cuda:{local_rank}"
+                )
                 * rank
             )
             for i in range(500):
@@ -128,9 +131,9 @@ def main():
                 output = gather.forward(input_tensor, args.hook_mode)
                 torch.profiler.record_function(f"forward_end_{i}")
                 torch.cuda.synchronize()
-                prof.step()
+                if i % 10 == 0:
+                    prof.step()
     else:
-        # 默认模式：使用CUDA Graph
         graph = torch.cuda.CUDAGraph()
         device = torch.device(f"cuda:{local_rank}")
         stream = torch.cuda.Stream(device=device)
@@ -139,11 +142,12 @@ def main():
             with torch.cuda.graph(graph, stream=stream):
                 output = gather.forward(input_tensor, args.hook_mode)
                 output.add_(0)
+        print("capture done")
 
         torch.cuda.synchronize()
         dist.barrier()
         input_tensor.copy_(
-            torch.ones(bs, 576, dtype=torch.bfloat16, device=f"cuda:{local_rank}")
+            torch.ones(bs, msg_size, dtype=torch.bfloat16, device=f"cuda:{local_rank}")
             * rank
         )
         with torch.profiler.profile(
@@ -152,22 +156,26 @@ def main():
                 torch.profiler.ProfilerActivity.CUDA,
             ],
             schedule=torch.profiler.schedule(wait=1, warmup=3, active=100, repeat=1),
-            on_trace_ready=torch.profiler.tensorboard_trace_handler(profiler_output),
+            on_trace_ready=torch.profiler.tensorboard_trace_handler(
+                dir_name=profiler_output, worker_name=f"trace_rank_{rank}"
+            ),
             record_shapes=True,
             profile_memory=True,
             with_stack=True,
             with_flops=True,
             with_modules=True,
         ) as prof:
-            for i in range(500):
+            for i in range(50):
                 torch.profiler.record_function(f"replay_start_{i}")
                 graph.replay()
                 torch.profiler.record_function(f"replay_end_{i}")
                 dist.barrier()
                 torch.cuda.synchronize()
-                prof.step()
+                if i % 10 == 0:
+                    prof.step()
 
-    print(output)
+    print(output, output.shape)
+    dist.barrier()
     dist.destroy_process_group()
 
 
