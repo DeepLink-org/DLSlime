@@ -22,32 +22,6 @@ namespace slime {
 
 #define MAX_SMS int64_t{128}
 
-__device__ void coalescing_load(int8_t* src, int8_t* des, int length)
-{
-    size_t warp_id = threadIdx.x / 32;
-    size_t lane_id = threadIdx.x % 32;
-
-    // Step 1. Vectorized and Coalesced Data Copy
-    constexpr int VEC_SIZE = 16;
-    using vec_t            = int4;
-
-    int global_thread_idx = blockDim.x * blockIdx.x + threadIdx.x;
-    int grid_stride       = gridDim.x * blockDim.x;
-
-    size_t const vec_len = length / VEC_SIZE;
-    vec_t*       vec_src = reinterpret_cast<vec_t*>(src);
-    vec_t*       vec_des = reinterpret_cast<vec_t*>(des);
-
-    for (int i = global_thread_idx; i < vec_len; i += grid_stride) {
-        vec_des[i] = vec_src[i];
-    }
-
-    // handle tail part
-    for (size_t i = vec_len * VEC_SIZE + global_thread_idx; i < length; i += grid_stride) {
-        des[i] = src[i];
-    }
-}
-
 __global__ __launch_bounds__(1024, 1) void all_gather_inter_ll_kernel(int8_t* q_ptr,
                                                                       int8_t* sym_buffer_ptr,
                                                                       int*    sym_signal_ptr,
