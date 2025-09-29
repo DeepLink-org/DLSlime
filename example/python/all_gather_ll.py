@@ -4,7 +4,6 @@ import os
 import torch
 import torch.distributed as dist
 
-from dlslime import _slime_c
 from dlslime.buffer.inter.all_gather_inter_ll_buffer import AllGatherInterLLBuffer
 from dlslime.buffer.intra.all_gather_intra_ll_buffer import AllGatherIntraLLBuffer
 
@@ -29,7 +28,6 @@ torch.cuda.set_device(local_rank)
 
 
 def main():
-    # 解析命令行参数
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--mode", type=str, default="intra", choices=["inter", "intra"], help="--mode"
@@ -50,7 +48,6 @@ def main():
     output_dir = "./"
     os.makedirs(output_dir, exist_ok=True)
 
-    # 根据选择的模式初始化gather
     if args.mode == "inter":
         gather_buffer = AllGatherInterLLBuffer(
             bs,

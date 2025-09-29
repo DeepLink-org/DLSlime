@@ -20,7 +20,11 @@
 
 namespace slime {
 
-#define MAX_SMS int64_t{128}
+#define MAX_SMS                                                                                                        \
+    int64_t                                                                                                            \
+    {                                                                                                                  \
+        128                                                                                                            \
+    }
 
 __global__ __launch_bounds__(1024, 1) void all_gather_inter_ll_kernel(int8_t* q_ptr,
                                                                       int8_t* sym_buffer_ptr,
@@ -30,7 +34,7 @@ __global__ __launch_bounds__(1024, 1) void all_gather_inter_ll_kernel(int8_t* q_
                                                                       int64_t itemsize,
                                                                       int64_t world_size,
                                                                       int64_t rank,
-                                                                      int phases,
+                                                                      int     phases,
                                                                       int64_t tag,
                                                                       bool    allow_nvlink)
 {
