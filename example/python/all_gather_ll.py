@@ -17,9 +17,11 @@ local_world_size = int(os.environ["LOCAL_WORLD_SIZE"])
 master_addr = os.environ["MASTER_ADDR"]
 master_port = os.environ["MASTER_PORT"]
 
+os.environ["NVSHMEM_SYMMETRIC_SIZE "] = "1g"
 
-bs = 64
-msg_size = 4_194_304 // 2 // 16 * 2
+
+bs = 16
+msg_size = 16384
 
 
 shape = [bs, msg_size]

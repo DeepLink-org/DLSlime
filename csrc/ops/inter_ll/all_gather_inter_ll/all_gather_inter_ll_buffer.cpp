@@ -55,11 +55,13 @@ int64_t AllGatherInterLLBuffer::itemsize()
 
 int AllGatherInterLLBuffer::allocSymBuffer()
 {
-    int32_t buffer_size = getBufferSize();
+    size_t buffer_size = getBufferSize();
 
-    sym_buffer_ = reinterpret_cast<int8_t*>(nvshmem_api::alloc(buffer_size, nvshmem_alignment));
+    sym_buffer_          = reinterpret_cast<int8_t*>(nvshmem_api::alloc(buffer_size, nvshmem_alignment));
+    SLIME_ASSERT(sym_buffer_ != NULL, "failure of symbuffer allocation!");
     nvshmem_api::barrier();
     sym_signal_ = reinterpret_cast<int*>(nvshmem_api::alloc(world_size_ * sizeof(int), nvshmem_alignment));
+    SLIME_ASSERT(sym_signal_ != NULL, "failure of symsignal allocation!");
     nvshmem_api::barrier();
     cudaMemset(sym_buffer_, 0, buffer_size);
     cudaMemset(sym_signal_, 0, world_size_ * sizeof(int));
