@@ -15,7 +15,7 @@ class AllGatherInterLLBuffer:
         rank: int,
         world_size: int,
         num_concurrency: int = 1,
-        rdma_only: bool = True,
+        allow_nvlink: bool = True,
         qp_num: int = 8,
     ):
         self.bs = bs
@@ -25,7 +25,7 @@ class AllGatherInterLLBuffer:
         self.rank = rank
         self.world_size = world_size
 
-        self.rdma_only = rdma_only
+        self.allow_nvlink = allow_nvlink
 
         setup_nvshmem_env(qp_num=qp_num)
 
@@ -36,7 +36,7 @@ class AllGatherInterLLBuffer:
             self.world_size,
             self.rank,
             num_concurrency,
-            rdma_only,
+            allow_nvlink,
         )
 
     @property

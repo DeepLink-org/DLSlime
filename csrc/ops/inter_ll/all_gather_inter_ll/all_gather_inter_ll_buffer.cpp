@@ -30,10 +30,10 @@ AllGatherInterLLBuffer::AllGatherInterLLBuffer(int64_t      max_bs,
                                                int64_t      world_size,
                                                int64_t      rank,
                                                int64_t      num_concurrency,
-                                               bool         rdma_only):
+                                               bool         allow_nvlink):
     AllGatherInterLLBuffer(max_bs, msg_size, dtype, world_size, rank, num_concurrency)
 {
-    rdma_only_ = rdma_only;
+    allow_nvlink_ = allow_nvlink;
 }
 
 size_t AllGatherInterLLBuffer::getBufferSize()
@@ -95,7 +95,7 @@ std::tuple<torch::Tensor, std::function<void()>> AllGatherInterLLBuffer::allGath
 
     auto launcher = [=](int phase) {
         all_gather_inter_ll(
-            q, sym_buffer_, sym_signal_, max_bs_, msg_size_, itemsize(), world_size_, rank_, phase, tag, rdma_only_);
+            q, sym_buffer_, sym_signal_, max_bs_, msg_size_, itemsize(), world_size_, rank_, phase, tag, allow_nvlink_);
     };
 
     launcher(ALL_GATHER_LL_SEND_PHASE);
@@ -127,7 +127,7 @@ torch::Tensor AllGatherInterLLBuffer::allGatherLL(torch::Tensor q, int32_t tag)
                         rank_,
                         ALL_GATHER_LL_SEND_PHASE | ALL_GATHER_LL_RECV_PHASE,
                         tag,
-                        rdma_only_);
+                        allow_nvlink_);
 
     auto options = torch::TensorOptions().dtype(dtype_).device(torch::kCUDA);
 

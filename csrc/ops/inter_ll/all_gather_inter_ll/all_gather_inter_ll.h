@@ -20,6 +20,6 @@ void all_gather_inter_ll(torch::Tensor q,
                          int64_t       rank,
                          int           phase,
                          int64_t       tag,
-                         bool          rdma_only);
+                         bool          allow_nvlink);
 
 }  // namespace slime

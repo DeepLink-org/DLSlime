@@ -34,7 +34,7 @@ public:
                            int64_t      world_size,
                            int64_t      rank,
                            int64_t      num_concurrency,
-                           bool         rdma_only);
+                           bool         allow_nvlink);
 
     size_t getBufferSize();
 
@@ -65,7 +65,7 @@ private:
 
     int64_t num_concurrency_;
 
-    bool rdma_only_{false};
+    bool allow_nvlink_{false};
 };
 
 }  // namespace slime

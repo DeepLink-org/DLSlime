@@ -29,7 +29,7 @@ torch.cuda.set_device(local_rank)
 
 
 class AllGatherInterLLGemm(torch.nn.Module):
-    def __init__(self, bs, msg_size, dtype, rank, world_size, rdma_only):
+    def __init__(self, bs, msg_size, dtype, rank, world_size, allow_nvlink):
         super().__init__()
 
         # set num_concurrency to 2 for ag gemm overlapping
@@ -40,7 +40,7 @@ class AllGatherInterLLGemm(torch.nn.Module):
             rank,
             world_size,
             num_concurrency=2,
-            rdma_only=rdma_only,
+            allow_nvlink=allow_nvlink,
         )
 
         # connect full mesh
@@ -51,8 +51,8 @@ class AllGatherInterLLGemm(torch.nn.Module):
 
         self.linear = torch.nn.Linear(msg_size, msg_size, dtype=dtype)
 
-    def forward(self, x1: torch.Tensor, x2: torch.Tensor):
-        t0, hook0 = self.gather_buffer.all_gather_ll_hook(x1, tag=0)
+    def forward(self, x0: torch.Tensor, x1: torch.Tensor):
+        t0, hook0 = self.gather_buffer.all_gather_ll_hook(x0, tag=0)
         hook0()
 
         t1, hook1 = self.gather_buffer.all_gather_ll_hook(x1, tag=1)
@@ -68,7 +68,7 @@ def main():
     # 解析命令行参数
     parser = argparse.ArgumentParser()
     parser.add_argument("--eager-mode", action="store_true", help="--eager-mode")
-    parser.add_argument("--rdma-only", action="store_true", help="rdma-only")
+    parser.add_argument("--allow-nvlink", action="store_true", help="rdma-only")
     args = parser.parse_args()
 
     dist.init_process_group(backend="nccl")
@@ -80,7 +80,7 @@ def main():
 
     ag_gemm = (
         AllGatherInterLLGemm(
-            bs, msg_size, dtype, rank, world_size, rdma_only=args.rdma_only
+            bs, msg_size, dtype, rank, world_size, allow_nvlink=args.allow_nvlink
         )
         .cuda()
         .eval()

@@ -53,7 +53,7 @@ def main():
     # 根据选择的模式初始化gather
     if args.mode == "inter":
         gather_buffer = AllGatherInterLLBuffer(
-            bs, msg_size, dtype, rank, world_size, 2, args.rdma_only
+            bs, msg_size, dtype, rank, world_size, 2, args.allow_nvlink
         )
     else:
         gather_buffer = AllGatherIntraLLBuffer(bs, msg_size, dtype, rank, world_size)
