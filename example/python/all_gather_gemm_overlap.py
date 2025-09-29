@@ -4,9 +4,7 @@ import os
 import torch
 import torch.distributed as dist
 
-from dlslime import _slime_c
 from dlslime.buffer.inter.all_gather_inter_ll_buffer import AllGatherInterLLBuffer
-from dlslime.buffer.intra.all_gather_intra_ll_buffer import AllGatherIntraLLBuffer
 
 
 # Get SPMD Info
@@ -16,6 +14,8 @@ world_size = int(os.environ["WORLD_SIZE"])
 local_world_size = int(os.environ["LOCAL_WORLD_SIZE"])
 master_addr = os.environ["MASTER_ADDR"]
 master_port = os.environ["MASTER_PORT"]
+
+os.environ["NVSHMEM_SYMMETRIC_SIZE "] = "1g"
 
 
 bs = 16
@@ -28,20 +28,48 @@ device = f"cuda:{local_rank}"
 torch.cuda.set_device(local_rank)
 
 
+class AllGatherInterLLGemm(torch.nn.Module):
+    def __init__(self, bs, msg_size, dtype, rank, world_size, rdma_only):
+        super().__init__()
+
+        # set num_concurrency to 2 for ag gemm overlapping
+        self.gather_buffer = AllGatherInterLLBuffer(
+            bs,
+            msg_size,
+            dtype,
+            rank,
+            world_size,
+            num_concurrency=2,
+            rdma_only=rdma_only,
+        )
+
+        # connect full mesh
+        buffer_info = self.gather_buffer.buffer_info
+        all_buffer_info = [None for _ in range(world_size)]
+        dist.all_gather_object(all_buffer_info, buffer_info)
+        self.gather_buffer.connect_full_mesh(all_buffer_info)
+
+        self.linear = torch.nn.Linear(msg_size, msg_size, dtype=dtype)
+
+    def forward(self, x1: torch.Tensor, x2: torch.Tensor):
+        t0, hook0 = self.gather_buffer.all_gather_ll_hook(x1, tag=0)
+        hook0()
+
+        t1, hook1 = self.gather_buffer.all_gather_ll_hook(x1, tag=1)
+        y0 = self.linear(t0)
+        hook1()
+
+        y1 = self.linear(t1)
+
+        return y0, y1
+
+
 def main():
     # 解析命令行参数
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--mode", type=str, default="intra", choices=["inter", "intra"], help="--mode"
-    )
     parser.add_argument("--eager-mode", action="store_true", help="--eager-mode")
-    parser.add_argument("--hook-mode", action="store_true", help="--hook-mode")
     parser.add_argument("--rdma-only", action="store_true", help="rdma-only")
     args = parser.parse_args()
-
-    assert not (
-        args.hook_mode and args.mode == "intra"
-    ), "Only Inter Mode can support recv hook"
 
     dist.init_process_group(backend="nccl")
     gpu_group = dist.new_group(ranks=list(range(world_size)), backend="nccl")
@@ -50,36 +78,23 @@ def main():
     output_dir = "./"
     os.makedirs(output_dir, exist_ok=True)
 
-    # 根据选择的模式初始化gather
-    if args.mode == "inter":
-        gather_buffer = AllGatherInterLLBuffer(
-            bs, msg_size, dtype, rank, world_size, 2, args.rdma_only
+    ag_gemm = (
+        AllGatherInterLLGemm(
+            bs, msg_size, dtype, rank, world_size, rdma_only=args.rdma_only
         )
-    else:
-        gather_buffer = AllGatherIntraLLBuffer(bs, msg_size, dtype, rank, world_size)
+        .cuda()
+        .eval()
+    )
 
-    buffer_info = gather_buffer.buffer_info
-    all_buffer_info = [None for _ in range(world_size)]
-    dist.all_gather_object(all_buffer_info, buffer_info)
-    gather_buffer.connect_full_mesh(all_buffer_info)
-
-    input_tensor = torch.zeros(bs, msg_size, dtype=dtype, device=device)
+    x0 = torch.zeros(bs, msg_size, dtype=dtype, device=device)
+    x1 = torch.zeros(bs, msg_size, dtype=dtype, device=device)
 
     print("warmup begin")
     for _ in range(10):
-        output = gather_buffer.all_gather_ll(input_tensor, tag=1)
+        output = ag_gemm(x0, x1)
         dist.barrier(group=gpu_group, device_ids=[local_rank])
         torch.cuda.synchronize()
     print("warmup done.")
-
-    def forward(x: torch.Tensor):
-        if args.hook_mode:
-            output, hook = gather_buffer.all_gather_ll_hook(x, tag=1)
-            hook()
-        else:
-            output = gather_buffer.all_gather_ll(x, tag=1)
-        output.add_(0)
-        return output
 
     # CUDA Graph
     if not args.eager_mode:
@@ -88,12 +103,13 @@ def main():
         print("cuda graph capture begin")
         with torch.cuda.stream(stream):
             with torch.cuda.graph(cuda_graph, stream=stream):
-                forward(input_tensor)
+                output = ag_gemm(x0, x1)
         dist.barrier(group=gpu_group, device_ids=[local_rank])
         torch.cuda.synchronize()
         print("cuda graph capture done")
 
-    input_tensor.copy_(torch.ones(bs, msg_size, dtype=dtype, device=device) * rank)
+    x0.copy_(torch.ones(bs, msg_size, dtype=dtype, device=device) * rank)
+    x1.copy_(torch.ones(bs, msg_size, dtype=dtype, device=device) * rank)
 
     # profiling
     output_dir = "./"
@@ -118,7 +134,7 @@ def main():
         for i in range(100):
             torch.profiler.record_function(f"start_{i}")
             if args.eager_mode:
-                output = forward(input_tensor)
+                output = ag_gemm(x0, x1)
             else:
                 cuda_graph.replay()
             torch.profiler.record_function(f"end_{i}")
@@ -129,7 +145,7 @@ def main():
             if i % 10 == 0:
                 prof.step()
 
-    print(output, output.shape)
+    print(output)
     dist.barrier(group=gpu_group, device_ids=[local_rank])
     dist.destroy_process_group()
 
