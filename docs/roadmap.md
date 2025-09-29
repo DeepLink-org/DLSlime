@@ -49,10 +49,12 @@ To meet the heterogeneous requirements of SPMD programs such as heterogeneous pi
   - ⏳ All2All
 - NVShmem
   - ⏳ Send/Recv
-  - 🚧 AllGather
+  - ✅ AllGather
+  - ⏳ AllReduce
+  - ⏳ All2All
 - CUDA IPC
   - ✅ AllGather
-  - ✅ High performance AllGather using CUDA Multi-Mem
+  - ⚡ High performance AllGather using CUDA Multi-Mem
 
 ## Torch Wrapper
 
