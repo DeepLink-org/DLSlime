@@ -86,8 +86,12 @@ python example/python/p2p_nvshmem_ibgda_sendrecv.py --rank 0 --world-size 2
 python example/python/p2p_nvshmem_ibgda_sendrecv.py --rank 1 --world-size 2
 ```
 
+### Huawei Ascend Direct Mode
+
+See: [Huawei README](docs/huawei_ascend/README.md)
+
 > \[!Caution\]
-> DLSlime NVShmem transfer engine is in the experimental stage.
+> DLSlime NVShmem transfer engine and Huawei Ascond Direct mode are in the experimental stage.
 
 ### Collective Ops
 
@@ -153,16 +157,17 @@ mkdir -p DLSlime/build && cmake -DFLAG=<ON|OFF> ..
 
 The `FLAG` can be
 
-| Flag                 | Description                           | Platform | default |
-| :------------------- | :------------------------------------ | :------- | ------: |
-| `BUILD_RDMA`         | Build RDMA Transfer Engine            | Hetero   |      ON |
-| `BUILD_PYTHON`       | Build Python wrapper                  | Hetero   |      ON |
-| `BUILD_NVLINK`       | Build NVLINK Transfer Engine          | GPGPU    |     OFF |
-| `BUILD_NVSHMEM`      | Build NVShmem Transfer Engine         | NVIDIA   |     OFF |
-| `BUILD_TORCH_PLUGIN` | Build DLSlime as a torch backend      | Hetero   |     OFF |
-| `USE_GLOO_BACKEND`   | Use GLOO RDMA Send/Recv torch backend | Hetero   |     OFF |
-| `BUILD_INTRA_OPS`    | Use INTRA Collective OPS              | GPGPU    |     OFF |
-| `BUILD_INTER_OPS`    | Use INTER Collective OPS (NVSHMEM)    | NVIDIA   |     OFF |
+| Flag                     | Description                           | Platform | default |
+| :----------------------- | :------------------------------------ | :------- | ------: |
+| `BUILD_RDMA`             | Build RDMA Transfer Engine            | Hetero   |      ON |
+| `BUILD_PYTHON`           | Build Python wrapper                  | Hetero   |      ON |
+| `BUILD_NVLINK`           | Build NVLINK Transfer Engine          | GPGPU    |     OFF |
+| `BUILD_NVSHMEM`          | Build NVShmem Transfer Engine         | NVIDIA   |     OFF |
+| `BUILD_ASCEND_DIRECT`    | Build Ascend direct transport         | ASCEND   |     OFF |
+| `BUILD_TORCH_PLUGIN`     | Build DLSlime as a torch backend      | Hetero   |     OFF |
+| `USE_GLOO_BACKEND`       | Use GLOO RDMA Send/Recv torch backend | Hetero   |     OFF |
+| `BUILD_INTRA_OPS`        | Use INTRA Collective OPS              | GPGPU    |     OFF |
+| `BUILD_INTER_OPS`        | Use INTER Collective OPS (NVSHMEM)    | NVIDIA   |     OFF |
 
 > \[!Note\]
 > Please enable `USE_MECA` when using DLSlime as a torch backend in Metax platform.
