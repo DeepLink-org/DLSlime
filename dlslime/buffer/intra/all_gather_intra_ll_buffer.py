@@ -27,8 +27,10 @@ class AllGatherIntraLLBuffer:
     def connect_full_mesh(self, all_buffer_info):
         return self._buffer.connect_full_mesh(all_buffer_info)
 
-    def all_gather_ll(self, x: torch.Tensor) -> torch.Tensor:
+    def all_gather_ll(self, x: torch.Tensor, tag=0) -> torch.Tensor:
+        assert tag == 0, "Unsupported Multi concurrency"
         return self._buffer.all_gather_ll(x)
 
-    def all_gather_ll_hook(self, x: torch.Tensor) -> torch.Tensor:
+    def all_gather_ll_hook(self, x: torch.Tensor, tag=0) -> torch.Tensor:
+        assert tag == 0, "Unsupported Multi concurrency"
         raise NotImplementedError("hook_mode is not supported in IntraNodeBuffer")

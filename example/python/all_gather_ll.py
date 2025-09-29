@@ -53,7 +53,13 @@ def main():
     # 根据选择的模式初始化gather
     if args.mode == "inter":
         gather_buffer = AllGatherInterLLBuffer(
-            bs, msg_size, dtype, rank, world_size, 2, args.allow_nvlink
+            bs,
+            msg_size,
+            dtype,
+            rank,
+            world_size,
+            num_concurrency=1,
+            allow_nvlink=args.allow_nvlink,
         )
     else:
         gather_buffer = AllGatherIntraLLBuffer(bs, msg_size, dtype, rank, world_size)
@@ -67,17 +73,17 @@ def main():
 
     print("warmup begin")
     for _ in range(10):
-        output = gather_buffer.all_gather_ll(input_tensor, tag=1)
+        output = gather_buffer.all_gather_ll(input_tensor, tag=0)
         dist.barrier(group=gpu_group, device_ids=[local_rank])
         torch.cuda.synchronize()
     print("warmup done.")
 
     def forward(x: torch.Tensor):
         if args.hook_mode:
-            output, hook = gather_buffer.all_gather_ll_hook(x, tag=1)
+            output, hook = gather_buffer.all_gather_ll_hook(x, tag=0)
             hook()
         else:
-            output = gather_buffer.all_gather_ll(x, tag=1)
+            output = gather_buffer.all_gather_ll(x, tag=0)
         output.add_(0)
         return output
 

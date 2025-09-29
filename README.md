@@ -17,7 +17,9 @@ DLSlime offers a set of peer-to-peer communication interfaces. For instance, con
 
 Here are some examples of DLSlime interface.
 
-### RDMA RC Mode
+### P2P Communication
+
+#### RDMA RC Mode
 
 - RDMA RC Read (Sync / Async mode)
 
@@ -60,7 +62,7 @@ python example/python/p2p_rdma_rc_send_recv_torch.py --rank 0
 python example/python/p2p_rdma_rc_send_recv_torch.py --rank 1
 ```
 
-### NVLink Mode
+#### NVLink Mode
 
 ```
 # initiator
@@ -72,7 +74,7 @@ python example/python/p2p_nvlink.py --initiator-url "127.0.0.1:6006" --target-ur
 python example/python/p2p_nvlink.py --initiator-url "127.0.0.1:6006" --target-url "127.0.0.1:6007" --role target
 ```
 
-### NVShmem Mode
+#### NVShmem Mode
 
 ```
 # send
@@ -86,6 +88,39 @@ python example/python/p2p_nvshmem_ibgda_sendrecv.py --rank 1 --world-size 2
 
 > \[!Caution\]
 > DLSlime NVShmem transfer engine is in the experimental stage.
+
+### Collective Ops
+
+#### Intra Node
+
+##### AllGather
+
+```shell
+torchrun --nnodes 1 --master-addr 10.130.8.143 --node-rank 0 --nproc-per-node 8 --master-port 6007 example/python/all_gather_ll.py --mode intra
+```
+
+#### Inter Node
+
+##### AllGather
+
+```shell
+# Node 0
+torchrun --nnodes 2 --master-addr 10.130.8.143 --node-rank 0 --nproc-per-node 8 --master-port 6007 example/python/all_gather_ll.py --mode inter
+# Node 1
+torchrun --nnodes 2 --master-addr 10.130.8.143 --node-rank 1 --nproc-per-node 8 --master-port 6007 example/python/all_gather_ll.py --mode inter
+```
+
+##### AllGather Gemm Overlapping
+
+```shell
+# Node 0
+torchrun --nnodes 2 --master-addr 10.130.8.143 --node-rank 0 --nproc-per-node 8 --master-port 6007 example/python/all_gather_gemm_overlap.py
+# Node 1
+torchrun --nnodes 2 --master-addr 10.130.8.143 --node-rank 1 --nproc-per-node 8 --master-port 6007 example/python/all_gather_gemm_overlap.py
+```
+
+> \[!Note\]
+> The intra- and inter examples example above enables CUDA Graph by default. --eager-mode falls back to eager mode.
 
 ## Install
 
