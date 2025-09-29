@@ -120,7 +120,7 @@ torchrun --nnodes 2 --master-addr 10.130.8.143 --node-rank 1 --nproc-per-node 8 
 ```
 
 > \[!Note\]
-> The intra- and inter examples example above enables CUDA Graph by default. --eager-mode falls back to eager mode.
+> The intra- and inter- examples example above enables CUDA Graph by default. --eager-mode falls back to eager mode.
 
 ## Install
 
