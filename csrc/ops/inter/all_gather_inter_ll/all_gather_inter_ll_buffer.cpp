@@ -12,28 +12,16 @@
 namespace slime {
 
 AllGatherInterLLBuffer::AllGatherInterLLBuffer(
-    int64_t max_bs, int64_t msg_size, torch::Dtype dtype, int64_t world_size, int64_t rank, int64_t num_concurrency):
+    int64_t max_bs, int64_t msg_size, torch::Dtype dtype, int64_t world_size, int64_t rank, int64_t num_concurrency, bool allow_nvlink):
     max_bs_(max_bs),
     msg_size_(msg_size),
     dtype_(dtype),
     world_size_(world_size),
     rank_(rank),
-    num_concurrency_(num_concurrency)
+    num_concurrency_(num_concurrency),
+    allow_nvlink_(allow_nvlink)
 {
-    cudaSetDevice(localRank());
     SLIME_ASSERT((msg_size * itemsize()) % 16 == 0, "By now, msg size must be divided by 16");
-}
-
-AllGatherInterLLBuffer::AllGatherInterLLBuffer(int64_t      max_bs,
-                                               int64_t      msg_size,
-                                               torch::Dtype dtype,
-                                               int64_t      world_size,
-                                               int64_t      rank,
-                                               int64_t      num_concurrency,
-                                               bool         allow_nvlink):
-    AllGatherInterLLBuffer(max_bs, msg_size, dtype, world_size, rank, num_concurrency)
-{
-    allow_nvlink_ = allow_nvlink;
 }
 
 size_t AllGatherInterLLBuffer::getBufferSize()
@@ -57,7 +45,7 @@ int AllGatherInterLLBuffer::allocSymBuffer()
 {
     size_t buffer_size = getBufferSize();
 
-    sym_buffer_          = reinterpret_cast<int8_t*>(nvshmem_api::alloc(buffer_size, nvshmem_alignment));
+    sym_buffer_ = reinterpret_cast<int8_t*>(nvshmem_api::alloc(buffer_size, nvshmem_alignment));
     SLIME_ASSERT(sym_buffer_ != NULL, "failure of symbuffer allocation!");
     nvshmem_api::barrier();
     sym_signal_ = reinterpret_cast<int*>(nvshmem_api::alloc(world_size_ * sizeof(int), nvshmem_alignment));
@@ -79,12 +67,13 @@ json AllGatherInterLLBuffer::bufferInfo()
 
 int AllGatherInterLLBuffer::connectFullMesh(std::vector<json> all_buffer_info)
 {
-    auto unique_ids   = all_buffer_info[root_rank]["nvshmem_info"]["unique_id"];
-    int  nvshmem_rank = nvshmem_api::init(unique_ids, rank_, world_size_);
+    auto unique_id    = all_buffer_info[root_rank]["nvshmem_info"]["unique_id"];
+    int  nvshmem_rank = nvshmem_api::init(unique_id, rank_, world_size_);
     nvshmem_api::barrier();
     allocSymBuffer();
     nvshmem_api::barrier();
-    SLIME_ASSERT(nvshmem_rank == rank_, "nvshmem_rank != rank_");
+    if (rank_ == 0)
+        SLIME_ASSERT(nvshmem_rank == rank_, "nvshmem_rank (" << nvshmem_rank << ") != rank_ (" << rank_ << ")");
     return 0;
 }
 

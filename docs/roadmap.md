@@ -6,7 +6,7 @@ DLSlime is dedicated to supporting efficient transmission over a variety of diff
 
 ### Transfer Engine
 
-DLSlime provides a flexible and efficient P2P Transfer Engine, enabling AI-workload-aware customized functions such as Prefill-Decode separation and checkpoint transmission.
+DLSlime provides a flexible and efficient P2P Transfer Engine, enabling AI-workload-aware customized functions such as Prefill-Decode disaggregation and checkpoint transmission.
 
 ### Collective Ops
 
@@ -16,7 +16,7 @@ Referring to [DeepEP](https://github.com/deeplink-org/DeepEP.git), DLSlime provi
 
 To meet the heterogeneous requirements of SPMD programs such as heterogeneous pipeline parallel training, a Torch communication backend is provided.
 
-## Transfer Engine Roadmap
+## Transfer Engine
 
 - IBVerbs Transfer Engine
   - ✅ SendRecv Endpoint
@@ -30,10 +30,12 @@ To meet the heterogeneous requirements of SPMD programs such as heterogeneous pi
 - CUDA IPC
   - ✅ support CUDAIPC Read/Write Endpoint
 - PCIE
-  - ⏳ High performance Shared Memory transfer engine
-  - ⏳ High performance data offloading
+  - ⏳ Shared Memory transfer engine
+  - ⏳ data offloading
 - Ascend
   - ✅ Ascned direct transfer engine
+- OpenShmem
+  - 💭 Planning
 - NVME-oF
   - 💭 Planning
 - UB Mesh
@@ -55,6 +57,9 @@ To meet the heterogeneous requirements of SPMD programs such as heterogeneous pi
 - CUDA IPC
   - ✅ AllGather
   - ⚡ High performance AllGather using CUDA Multi-Mem
+  - ⏳ AllGather
+  - ⏳ AllReduce
+  - ⏳ All2All
 
 ## Torch Wrapper
 

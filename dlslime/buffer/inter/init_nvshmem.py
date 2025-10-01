@@ -1,10 +1,10 @@
 import os
 
 
-def setup_nvshmem_env(qp_num: int = 8):
+def setup_nvshmem_env(qp_num: int = 8, allow_nvlink: bool = False):
     # NVSHMEM ENVS
     # Adapted from https://github.com/Deepseek-ai/DeepEP.git
-    os.environ["NVSHMEM_DISABLE_P2P"] = "0"
+    os.environ["NVSHMEM_DISABLE_P2P"] = "0" if allow_nvlink else "1"
     os.environ["NVSHMEM_IB_ENABLE_IBGDA"] = "1"
     os.environ["NVSHMEM_IBGDA_NUM_RC_PER_PE"] = str(qp_num)
     # Make sure QP depth is always larger than the number of on-flight WRs, so that we can skip WQ slot check

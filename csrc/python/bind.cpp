@@ -31,15 +31,19 @@
 #include "engine/rdma/utils.h"
 #endif
 
-#if defined(BUILD_INTRA_OPS) || defined(BUILD_INTER_OPS)
+#if defined(BUILD_INTRA_OPS) || defined(BUILD_INTER_OPS) || defined(BUILD_IBVERBS_OPS)
 #include <torch/torch.h>
 
 #ifdef BUILD_INTRA_OPS
-#include "ops/intra_ll/all_gather_intra_ll/all_gather_intra_ll_buffer.h"
+#include "ops/intra/all_gather_intra_ll/all_gather_intra_ll_buffer.h"
 #endif
 
 #ifdef BUILD_INTER_OPS
-#include "ops/inter_ll/all_gather_inter_ll/all_gather_inter_ll_buffer.h"
+#include "ops/inter/all_gather_inter_ll/all_gather_inter_ll_buffer.h"
+#endif
+
+#ifdef BUILD_IBVERBS_OPS
+#include "ops/ibverbs/m2n_ibverbs_rc_ll/m2n_ibverbs_rc_ll_buffer.h"
 #endif
 
 #endif
@@ -108,6 +112,12 @@ py::object alloc_dlpack_tensor(slime::NVShmemContext& self, size_t size, size_t 
 #define BUILD_NVLINK_ENABLED false
 #endif
 
+#ifdef BUILD_IBVERBS_OPS
+#define BUILD_IBVERBS_OPS_ENABLED true
+#else
+#define BUILD_IBVERBS_OPS_ENABLED false
+#endif
+
 #ifdef BUILD_INTRA_OPS
 #define BUILD_INTRA_OPS_ENABLED true
 #else
@@ -120,13 +130,14 @@ py::object alloc_dlpack_tensor(slime::NVShmemContext& self, size_t size, size_t 
 #define BUILD_INTER_OPS_ENABLED false
 #endif
 
-#define EXPOSE_BUILD_FLAG(m, flag) m.attr("_"#flag) = flag##_ENABLED
+#define EXPOSE_BUILD_FLAG(m, flag) m.attr("_" #flag) = flag##_ENABLED
 
 PYBIND11_MODULE(_slime_c, m)
 {
     EXPOSE_BUILD_FLAG(m, BUILD_RDMA);
     EXPOSE_BUILD_FLAG(m, BUILD_NVSHMEM);
     EXPOSE_BUILD_FLAG(m, BUILD_NVLINK);
+    EXPOSE_BUILD_FLAG(m, BUILD_IBVERBS_OPS);
     EXPOSE_BUILD_FLAG(m, BUILD_INTRA_OPS);
     EXPOSE_BUILD_FLAG(m, BUILD_INTER_OPS);
 
@@ -222,6 +233,14 @@ PYBIND11_MODULE(_slime_c, m)
         .def("endpoint_info", &slime::NVLinkContext::endpoint_info)
         .def("connect", &slime::NVLinkContext::connect)
         .def("read_batch", &slime::NVLinkContext::read_batch);
+#endif
+
+#ifdef BUILD_IBVERBS_OPS
+    py::class_<slime::M2NIBVerbsRCLLBuffer>(m, "M2NIBVerbsRCLLBuffer")
+        .def(py::init<int64_t, int64_t, std::string, int64_t, int64_t, int64_t, int64_t, int64_t>())
+        .def(py::init<int64_t, int64_t, std::string, int64_t, int64_t, int64_t, int64_t, int64_t, int64_t>())
+        .def("connect_full_mesh", &slime::M2NIBVerbsRCLLBuffer::connectFullMesh)
+        .def("buffer_info", &slime::M2NIBVerbsRCLLBuffer::bufferInfo);
 #endif
 
 #ifdef BUILD_INTRA_OPS

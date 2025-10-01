@@ -383,7 +383,7 @@ void RDMAContext::stop_future()
         cq_thread_.join();
     }
 }
-
+namespace {
 void split_assign_by_max_length(OpCode           opcode,
                                 AssignmentBatch& batch,
                                 AssignmentBatch& batch_split_after_max_length,
@@ -426,6 +426,7 @@ void nsplit_assign_by_step(OpCode                        opcode,
     int    step  = (bsize + nstep - 1) / nstep;
     split_assign_by_step(opcode, batch, batch_nsplit, step);
 }
+}  // namespace
 
 std::shared_ptr<RDMASchedulerAssignment>
 RDMAContext::submit(OpCode opcode, AssignmentBatch& batch, callback_fn_t callback, int qpi, int32_t imm_data)

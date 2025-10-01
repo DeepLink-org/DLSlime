@@ -27,12 +27,6 @@ public:
                            torch::Dtype dtype,
                            int64_t      world_size,
                            int64_t      rank,
-                           int64_t      num_concurrency);
-    AllGatherInterLLBuffer(int64_t      max_bs,
-                           int64_t      msg_size,
-                           torch::Dtype dtype,
-                           int64_t      world_size,
-                           int64_t      rank,
                            int64_t      num_concurrency,
                            bool         allow_nvlink);
 

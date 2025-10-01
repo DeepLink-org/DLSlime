@@ -24,11 +24,24 @@ set(OPS_SRC)
 set(OPS_INCLUDE_DIRS ${TORCH_INCLUDE_DIRS})
 set(OPS_LIBRARIES ${TORCH_LIBRARIES})
 
+if (BUILD_IBVERBS_OPS)
+    set(
+        IBVERBS_OPS_SRC
+        ibverbs/m2n_ibverbs_rc_ll/m2n_ibverbs_rc_ll_buffer.cpp
+    )
+    list(APPEND OPS_SRC ${IBVERBS_OPS_SRC})
+    set(
+        IBVERBS_OPS_LIBRARIES
+        _slime_rdma
+    )
+    list(APPEND OPS_LIBRARIES ${IBVERBS_OPS_LIBRARIES})
+endif()
+
 if (BUILD_INTRA_OPS)
     set(
         INTRA_OPS_SRC
-        intra_ll/all_gather_intra_ll/all_gather_intra_ll.cu
-        intra_ll/all_gather_intra_ll/all_gather_intra_ll_buffer.cpp
+        intra/all_gather_intra_ll/all_gather_intra_ll.cu
+        intra/all_gather_intra_ll/all_gather_intra_ll_buffer.cpp
     )
     list(APPEND OPS_SRC ${INTRA_OPS_SRC})
     set(
@@ -48,8 +61,8 @@ if (BUILD_INTER_OPS)
 
     set(
         INTER_OPS_SRC
-        inter_ll/all_gather_inter_ll/all_gather_inter_ll.cu
-        inter_ll/all_gather_inter_ll/all_gather_inter_ll_buffer.cpp
+        inter/all_gather_inter_ll/all_gather_inter_ll.cu
+        inter/all_gather_inter_ll/all_gather_inter_ll_buffer.cpp
         nvshmem_runtime.cu
     )
     list(APPEND OPS_SRC ${INTER_OPS_SRC})
