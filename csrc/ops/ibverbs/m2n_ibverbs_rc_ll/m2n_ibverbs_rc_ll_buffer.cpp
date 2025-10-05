@@ -4,6 +4,8 @@
 #include <torch/torch.h>
 
 #include "ATen/ops/empty.h"
+#include "engine/assignment.h"
+#include "engine/rdma/rdma_assignment.h"
 #include "jring.h"
 #include "json.hpp"
 #include "logging.h"
@@ -24,7 +26,8 @@ M2NIBVerbsRCLLBuffer::M2NIBVerbsRCLLBuffer(int64_t     max_bs,
                                            int64_t     n_world_size,
                                            int64_t     rank,
                                            int64_t     num_concurrency,
-                                           int64_t     qp_num):
+                                           int64_t     qp_num,
+                                           std::string link_type):
     max_bs_(max_bs),
     msg_size_(msg_size),
     device_(device),
@@ -32,7 +35,8 @@ M2NIBVerbsRCLLBuffer::M2NIBVerbsRCLLBuffer(int64_t     max_bs,
     m_world_size_(m_world_size),
     n_world_size_(n_world_size),
     rank_(rank),
-    num_concurrency_(num_concurrency)
+    num_concurrency_(num_concurrency),
+    link_type_(link_type)
 {
 
     // Step 1: Alloc Buffer
@@ -47,10 +51,8 @@ M2NIBVerbsRCLLBuffer::M2NIBVerbsRCLLBuffer(int64_t     max_bs,
         auto selected_nic = nics[rank % nics.size()];
         // TODO (JimyMa): Affinity of nic and comp device
         rdma_context->init(selected_nic, 1, "RoCE");
-        rdma_context->register_memory_region("buffer_local_idx_" + std::to_string(rank_) + "_remote_idx_"
-                                                    + std::to_string(i),
-                                                reinterpret_cast<uintptr_t>(buffer_.data_ptr()),
-                                                getBufferSize());
+        rdma_context->register_memory_region(
+            "buffer", reinterpret_cast<uintptr_t>(buffer_.data_ptr()), getBufferSize());
         ctx_.emplace_back(rdma_context);
     }
 
@@ -64,17 +66,40 @@ M2NIBVerbsRCLLBuffer::M2NIBVerbsRCLLBuffer(int64_t     max_bs,
         recvQueuePut();
 }
 
-int M2NIBVerbsRCLLBuffer::recvQueuePut() {
+inline int64_t M2NIBVerbsRCLLBuffer::peerWorldSize()
+{
+    if (role_ == 0)
+        return n_world_size_;
+    else
+        return m_world_size_;
+}
+
+int M2NIBVerbsRCLLBuffer::recvQueuePut()
+{
+    // prepost a recv
+    RDMAAssignmentSharedPtrBatch assign_batch;
+
+    for (int i = 0; i < peerWorldSize(); ++i) {
+        auto batch = AssignmentBatch{};
+        // assign_batch.push_back(ctx_[i]->submit(OpCode::RECV, batch));
+    }
+
+    auto rdma_sch_assign = std::make_shared<RDMASchedulerAssignment>(assign_batch);
+
+    auto task = m2n_recv_task_t{.assign = rdma_sch_assign};
+    while (jring_mp_enqueue_bulk(posted_recv_queue_, &task, 1, nullptr) != 1) {}
     return 0;
 }
 
-m2n_recv_task_t M2NIBVerbsRCLLBuffer::recvQueueGet() {
+m2n_recv_task_t M2NIBVerbsRCLLBuffer::recvQueueGet()
+{
     m2n_recv_task_t task;
     jring_sc_dequeue_bulk(posted_recv_queue_, &task, 1, nullptr);
     return task;
 }
 
-M2NIBVerbsRCLLBuffer::~M2NIBVerbsRCLLBuffer() {
+M2NIBVerbsRCLLBuffer::~M2NIBVerbsRCLLBuffer()
+{
     free(posted_recv_queue_);
 }
 
@@ -90,7 +115,7 @@ size_t M2NIBVerbsRCLLBuffer::getBufferSize()
 int M2NIBVerbsRCLLBuffer::allocBuffer()
 {
     auto options = torch::TensorOptions().dtype(torch::kInt8).device(device_);
-    buffer_     = torch::empty({static_cast<int64_t>(getBufferSize())}, options);
+    buffer_      = torch::empty({static_cast<int64_t>(getBufferSize())}, options);
     return 0;
 }
 
@@ -115,6 +140,27 @@ int M2NIBVerbsRCLLBuffer::connectFullMesh(const std::vector<json>& all_buffer_in
     }
 
     return 0;
+}
+
+std::shared_ptr<RDMASchedulerAssignment> M2NIBVerbsRCLLBuffer::M2NRecv(int tag)
+{
+    m2n_recv_task_t task = recvQueueGet();
+    return task.assign;
+}
+
+std::shared_ptr<RDMASchedulerAssignment> M2NIBVerbsRCLLBuffer::M2NSend(int tag)
+{
+
+    RDMAAssignmentSharedPtrBatch assign_batch;
+
+    for (int i = 0; i < ctx_.size(); ++i) {
+        AssignmentBatch batch = {Assignment("buffer", 0, 0, msg_size_ * max_bs_)};
+        ctx_[i]->submit(OpCode::WRITE, batch, nullptr, -1, tag);
+    }
+
+    auto rdma_sch_assign = std::make_shared<RDMASchedulerAssignment>(assign_batch);
+
+    return rdma_sch_assign;
 }
 
 }  // namespace slime

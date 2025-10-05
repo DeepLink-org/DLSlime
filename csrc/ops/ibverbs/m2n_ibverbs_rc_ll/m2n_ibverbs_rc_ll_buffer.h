@@ -32,7 +32,8 @@ public:
                          int64_t     n_world_size,
                          int64_t     rank,
                          int64_t     num_concurrency,
-                         int64_t     qp_num = 2);
+                         int64_t     qp_num    = 2,
+                         std::string link_type = "RoCE");
 
     ~M2NIBVerbsRCLLBuffer();
 
@@ -44,18 +45,16 @@ public:
 
     int connectFullMesh(const std::vector<json>& all_buffer_info);
 
-    std::shared_ptr<RDMASchedulerAssignment> M2NRecv(int tag) {
-        m2n_recv_task_t task = recvQueueGet();
-        return task.assign;
-    }
+    std::shared_ptr<RDMASchedulerAssignment> M2NRecv(int tag);
 
     std::shared_ptr<RDMASchedulerAssignment> M2NSend(int tag);
 
 private:
-
     int recvQueuePut();
 
     m2n_recv_task_t recvQueueGet();
+
+    inline int64_t peerWorldSize();
 
     torch::Tensor buffer_;
 
@@ -74,6 +73,8 @@ private:
     int64_t rank_;
 
     int64_t num_concurrency_;
+
+    std::string link_type_;
 
     jring_t* posted_recv_queue_;
 };

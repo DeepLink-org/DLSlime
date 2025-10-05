@@ -127,7 +127,27 @@ public:
         rdma_assignment_batch_(std::move(rdma_assignment_batch))
     {
     }
+
     ~RDMASchedulerAssignment();
+
+    int merge(std::shared_ptr<RDMASchedulerAssignment> assign) {
+        if (!assign) {
+            return 0;
+        }
+
+        int original_size = rdma_assignment_batch_.size();
+
+        rdma_assignment_batch_.reserve(original_size + assign->rdma_assignment_batch_.size());
+        rdma_assignment_batch_.insert(
+            rdma_assignment_batch_.end(),
+            assign->rdma_assignment_batch_.begin(),
+            assign->rdma_assignment_batch_.end()
+        );
+
+        assign->rdma_assignment_batch_.clear();
+
+        return rdma_assignment_batch_.size() - original_size; // 返回合并的元素数量
+    }
 
     void query();
     void wait();

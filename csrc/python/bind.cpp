@@ -239,8 +239,20 @@ PYBIND11_MODULE(_slime_c, m)
     py::class_<slime::M2NIBVerbsRCLLBuffer>(m, "M2NIBVerbsRCLLBuffer")
         .def(py::init<int64_t, int64_t, std::string, int64_t, int64_t, int64_t, int64_t, int64_t>())
         .def(py::init<int64_t, int64_t, std::string, int64_t, int64_t, int64_t, int64_t, int64_t, int64_t>())
+        .def(py::init<int64_t,
+                      int64_t,
+                      std::string,
+                      int64_t,
+                      int64_t,
+                      int64_t,
+                      int64_t,
+                      int64_t,
+                      int64_t,
+                      std::string>())
         .def("connect_full_mesh", &slime::M2NIBVerbsRCLLBuffer::connectFullMesh)
-        .def("buffer_info", &slime::M2NIBVerbsRCLLBuffer::bufferInfo);
+        .def("buffer_info", &slime::M2NIBVerbsRCLLBuffer::bufferInfo)
+        .def("m2n_send", &slime::M2NIBVerbsRCLLBuffer::M2NSend)
+        .def("m2n_send", &slime::M2NIBVerbsRCLLBuffer::M2NRecv);
 #endif
 
 #ifdef BUILD_INTRA_OPS
