@@ -24,7 +24,17 @@ class M2NIBVerbsRCLLBuffer:
         self.num_concurrency = num_concurrency
         self.qp_num = qp_num
 
-        self._buffer = _slime_c.M2NIBVerbsRCLLBuffer()
+        self._buffer = _slime_c.M2NIBVerbsRCLLBuffer(
+            max_bs,
+            msg_size,
+            device,
+            role,
+            m_world_size,
+            n_world_size,
+            rank,
+            num_concurrency,
+            qp_num,
+        )
 
     @property
     def buffer_info(self):

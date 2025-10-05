@@ -49,32 +49,13 @@ class AllGatherInterLLGemm(torch.nn.Module):
         dist.all_gather_object(all_buffer_info, buffer_info)
         self.gather_buffer.connect_full_mesh(all_buffer_info)
 
-        # set num_concurrency to 2 for ag gemm overlapping
-        self.gather_buffer_another = AllGatherInterLLBuffer(
-            bs,
-            msg_size,
-            dtype,
-            rank % 8,
-            world_size // 2,
-            num_concurrency=2,
-            allow_nvlink=allow_nvlink,
-        )
-
-        # connect full mesh
-        buffer_info = self.gather_buffer_another.buffer_info
-        all_buffer_info = [None for _ in range(world_size)]
-        dist.all_gather_object(all_buffer_info, buffer_info)
-        all_buffer_info = all_buffer_info[8:] if rank >= 8 else all_buffer_info[:8]
-        self.gather_buffer_another.connect_full_mesh(all_buffer_info)
-
         self.linear = torch.nn.Linear(msg_size, msg_size, dtype=dtype)
 
-    @torch.inference_mode()
     def forward(self, x0: torch.Tensor, x1: torch.Tensor):
         t0, hook0 = self.gather_buffer.all_gather_ll_hook(x0, tag=0)
         hook0()
 
-        t1, hook1 = self.gather_buffer_another.all_gather_ll_hook(x1, tag=1)
+        t1, hook1 = self.gather_buffer.all_gather_ll_hook(x1, tag=1)
         y0 = self.linear(t0)
         hook1()
 

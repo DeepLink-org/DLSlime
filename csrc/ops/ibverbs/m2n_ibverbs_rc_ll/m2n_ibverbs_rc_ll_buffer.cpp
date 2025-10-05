@@ -1,8 +1,10 @@
 #include <cstdint>
+#include <cstdlib>
 #include <sys/types.h>
 #include <torch/torch.h>
 
 #include "ATen/ops/empty.h"
+#include "jring.h"
 #include "json.hpp"
 #include "logging.h"
 
@@ -32,26 +34,48 @@ M2NIBVerbsRCLLBuffer::M2NIBVerbsRCLLBuffer(int64_t     max_bs,
     rank_(rank),
     num_concurrency_(num_concurrency)
 {
+
     // Step 1: Alloc Buffer
     allocBuffer();
 
     // Step 2. Init all RDMA Context
     size_t ctx_size = role == 0 ? m_world_size : n_world_size;
-    if (role == 0) {
-        for (int i = 0; i < ctx_size; ++i) {
-            auto rdma_context = std::make_shared<RDMAContext>(qp_num);
-            // TODO (JimyMa): Bynow, set link type to "RoCE", automatically in the future.
-            auto nics         = available_nic();
-            auto selected_nic = nics[rank % nics.size()];
-            // TODO (JimyMa): Affinity of nic and comp device
-            rdma_context->init(selected_nic, 1, "RoCE");
-            rdma_context->register_memory_region("buffer_local_idx_" + std::to_string(rank_) + "_remote_idx_"
-                                                     + std::to_string(i),
-                                                 reinterpret_cast<uintptr_t>(buffer_.data_ptr()),
-                                                 getBufferSize());
-            ctx_.emplace_back(rdma_context);
-        }
+    for (int i = 0; i < ctx_size; ++i) {
+        auto rdma_context = std::make_shared<RDMAContext>(qp_num);
+        // TODO (JimyMa): Bynow, set link type to "RoCE", automatically in the future.
+        auto nics         = available_nic();
+        auto selected_nic = nics[rank % nics.size()];
+        // TODO (JimyMa): Affinity of nic and comp device
+        rdma_context->init(selected_nic, 1, "RoCE");
+        rdma_context->register_memory_region("buffer_local_idx_" + std::to_string(rank_) + "_remote_idx_"
+                                                    + std::to_string(i),
+                                                reinterpret_cast<uintptr_t>(buffer_.data_ptr()),
+                                                getBufferSize());
+        ctx_.emplace_back(rdma_context);
     }
+
+    // Step 3: Init Recv Queue
+    jring_t* ring = reinterpret_cast<jring_t*>(aligned_alloc(sizeof(m2n_recv_task_t), num_concurrency_ + 16));
+    jring_init(ring, 16, sizeof(m2n_recv_task_t), 0, 0);
+    posted_recv_queue_ = ring;
+
+    // Step 4: Prepost Some recv
+    for (int i = 0; i < num_concurrency_; ++i)
+        recvQueuePut();
+}
+
+int M2NIBVerbsRCLLBuffer::recvQueuePut() {
+    return 0;
+}
+
+m2n_recv_task_t M2NIBVerbsRCLLBuffer::recvQueueGet() {
+    m2n_recv_task_t task;
+    jring_sc_dequeue_bulk(posted_recv_queue_, &task, 1, nullptr);
+    return task;
+}
+
+M2NIBVerbsRCLLBuffer::~M2NIBVerbsRCLLBuffer() {
+    free(posted_recv_queue_);
 }
 
 size_t M2NIBVerbsRCLLBuffer::getBufferSize()
@@ -91,10 +115,6 @@ int M2NIBVerbsRCLLBuffer::connectFullMesh(const std::vector<json>& all_buffer_in
     }
 
     return 0;
-}
-
-torch::Tensor& M2NIBVerbsRCLLBuffer::localBuffer() {
-    return buffer_;
 }
 
 }  // namespace slime

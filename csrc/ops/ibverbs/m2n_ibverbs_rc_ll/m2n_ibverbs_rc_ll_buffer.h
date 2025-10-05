@@ -10,15 +10,16 @@
 #include "engine/rdma/rdma_assignment.h"
 #include "engine/rdma/rdma_context.h"
 #include "engine/rdma/rdma_endpoint.h"
+#include "jring.h"
 #include "json.hpp"
 
 namespace slime {
 
 using json = nlohmann::json;
 
-typedef struct __attribute__((aligned(64))) M2NTask {
-
-} m2n_task_t;
+typedef struct __attribute__((aligned(64))) M2NRecvTask {
+    std::shared_ptr<RDMASchedulerAssignment> assign;
+} m2n_recv_task_t;
 
 class M2NIBVerbsRCLLBuffer {
 
@@ -33,6 +34,8 @@ public:
                          int64_t     num_concurrency,
                          int64_t     qp_num = 2);
 
+    ~M2NIBVerbsRCLLBuffer();
+
     size_t getBufferSize();
 
     int allocBuffer();
@@ -41,13 +44,19 @@ public:
 
     int connectFullMesh(const std::vector<json>& all_buffer_info);
 
-    int M2NRecv(int tag);
+    std::shared_ptr<RDMASchedulerAssignment> M2NRecv(int tag) {
+        m2n_recv_task_t task = recvQueueGet();
+        return task.assign;
+    }
 
-    int M2NSend(int tag);
-
-    torch::Tensor& localBuffer();
+    std::shared_ptr<RDMASchedulerAssignment> M2NSend(int tag);
 
 private:
+
+    int recvQueuePut();
+
+    m2n_recv_task_t recvQueueGet();
+
     torch::Tensor buffer_;
 
     std::vector<std::shared_ptr<RDMAContext>> ctx_;
@@ -66,6 +75,7 @@ private:
 
     int64_t num_concurrency_;
 
-    std::vector<std::queue<std::shared_ptr<m2n_task_t>>> posted_recv_queue_;
+    jring_t* posted_recv_queue_;
 };
+
 }  // namespace slime
