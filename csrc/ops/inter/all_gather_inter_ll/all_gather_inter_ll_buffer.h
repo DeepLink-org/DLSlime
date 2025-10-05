@@ -28,7 +28,7 @@ public:
                            int64_t      world_size,
                            int64_t      rank,
                            int64_t      num_concurrency,
-                           bool         allow_nvlink);
+                           bool         allow_nvlink = false);
 
     size_t getBufferSize();
 
