@@ -53,13 +53,13 @@ def main():
             bs,
             msg_size,
             dtype,
-            rank,
             world_size,
+            rank,
             num_concurrency=1,
             allow_nvlink=args.allow_nvlink,
         )
     else:
-        gather_buffer = AllGatherIntraLLBuffer(bs, msg_size, dtype, rank, world_size)
+        gather_buffer = AllGatherIntraLLBuffer(bs, msg_size, dtype, world_size, rank)
 
     buffer_info = gather_buffer.buffer_info
     all_buffer_info = [None for _ in range(world_size)]
