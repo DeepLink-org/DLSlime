@@ -7,7 +7,7 @@ from dlslime import _slime_c
 
 class AllGatherIntraLLBuffer:
     def __init__(
-        self, bs: int, msg_size: int, dtype: torch.dtype, rank: int, world_size: int
+        self, bs: int, msg_size: int, dtype: torch.dtype, world_size: int, rank: int
     ):
         self.bs = bs
         self.msg_size = msg_size
