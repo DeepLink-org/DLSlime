@@ -20,6 +20,9 @@
 # CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 # TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+# 
+# This code is adapted from:
+# https://github.com/ByteDance-Seed/Triton-distributed/blob/ff4b0d59be46f03ccc01f249206c9f372fcd9d4d/python/triton_dist/utils.py
 #
 ################################################################################
 
