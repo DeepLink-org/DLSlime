@@ -383,7 +383,7 @@ void RDMAContext::stop_future()
         cq_thread_.join();
     }
 }
-
+namespace {
 void split_assign_by_max_length(OpCode           opcode,
                                 AssignmentBatch& batch,
                                 AssignmentBatch& batch_split_after_max_length,
@@ -426,6 +426,7 @@ void nsplit_assign_by_step(OpCode                        opcode,
     int    step  = (bsize + nstep - 1) / nstep;
     split_assign_by_step(opcode, batch, batch_nsplit, step);
 }
+}  // namespace
 
 std::shared_ptr<RDMASchedulerAssignment>
 RDMAContext::submit(OpCode opcode, AssignmentBatch& batch, callback_fn_t callback, int qpi, int32_t imm_data)
@@ -528,8 +529,18 @@ int64_t RDMAContext::post_recv_batch(int qpi, RDMAAssignmentSharedPtr assign)
     int64_t             ret        = 0;
     size_t              batch_size = assign->batch_size();
     struct ibv_recv_wr* bad_wr     = nullptr;
-    struct ibv_recv_wr* wr         = new ibv_recv_wr[batch_size];
-    struct ibv_sge*     sge        = new ibv_sge[batch_size];
+    struct ibv_recv_wr* wr;
+    struct ibv_sge*     sge;
+    if (assign->batch_size() == 0) {
+        wr = new ibv_recv_wr{.wr_id   = (uintptr_t)(new callback_info_with_qpi_t{assign->callback_info_, qpi}),
+                             .next    = nullptr,
+                             .sg_list = nullptr,
+                             .num_sge = 0};
+    }
+    else {
+        wr  = new ibv_recv_wr[batch_size];
+        sge = new ibv_sge[batch_size];
+    }
     for (size_t i = 0; i < batch_size; ++i) {
 
         Assignment&    subassign = assign->batch_[i];

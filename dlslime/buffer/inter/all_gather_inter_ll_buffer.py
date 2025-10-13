@@ -27,9 +27,9 @@ class AllGatherInterLLBuffer:
 
         self.allow_nvlink = allow_nvlink
 
-        setup_nvshmem_env(qp_num=qp_num)
+        setup_nvshmem_env(qp_num=qp_num, allow_nvlink=allow_nvlink)
 
-        self._buffer = self.buffer = _slime_c.AllGatherInterLLBuffer(
+        self._buffer = _slime_c.AllGatherInterLLBuffer(
             self.bs,
             self.msg_size,
             self.dtype,

@@ -1,8 +1,6 @@
 add_subdirectory(engine)
 
-if (BUILD_INTRA_OPS OR BUILD_INTER_OPS)
-    add_subdirectory(ops)
-endif()
+add_subdirectory(ops)
 
 if (BUILD_PYTHON)
     add_subdirectory(python)

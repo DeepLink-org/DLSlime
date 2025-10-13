@@ -11,8 +11,9 @@ slime_option(BUILD_NVSHMEM             "Build NVSHMEM"                    OFF)
 slime_option(BUILD_ASCEND_DIRECT       "Build Ascend direct transport"    OFF)
 
 # Slime options for ops
-slime_option(BUILD_INTRA_OPS           "Build intra LL collective ops"    OFF)
-slime_option(BUILD_INTER_OPS           "Build inter LL collective ops"    OFF)
+slime_option(BUILD_IBVERBS_OPS         "Build ibverbs collective ops"     OFF)
+slime_option(BUILD_INTRA_OPS           "Build intra collective ops"       OFF)
+slime_option(BUILD_INTER_OPS           "Build inter collective ops"       OFF)
 
 # Slime options for custom python wrapper
 slime_option(BUILD_PYTHON              "Build python wrapper"             OFF)
@@ -24,6 +25,11 @@ slime_option(BUILD_TORCH_PLUGIN        "Build torch plugin"               OFF)
 # Slime options for test
 slime_option(BUILD_BENCH               "Build transfer engine benchmark"  OFF)
 slime_option(BUILD_TEST                "Build test"                       OFF)
+
+if(BUILD_IBVERBS_OPS AND NOT BUILD_RDMA)
+    message(STATUS "BUILD_IBVERBS_OPS requires BUILD_RDMA, enabling RDMA...")
+    set(BUILD_RDMA ON CACHE BOOL "Build RDMA" FORCE)
+endif()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -47,7 +53,7 @@ else()
     set(DLSLIME_INSTALL_PATH "lib")
 endif()
 
-if (BUILD_TORCH_PLUGIN OR BUILD_INTRA_OPS OR BUILD_INTER_OPS)
+if (BUILD_TORCH_PLUGIN OR BUILD_IBVERBS_OPS OR BUILD_INTRA_OPS OR BUILD_INTER_OPS)
     include(${CMAKE_CURRENT_LIST_DIR}/cmake/torch.cmake)
 endif()
 
