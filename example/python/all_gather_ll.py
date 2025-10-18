@@ -42,7 +42,7 @@ def main():
     )
     parser.add_argument("--eager-mode", action="store_true", help="--eager-mode")
     parser.add_argument("--hook-mode", action="store_true", help="--hook-mode")
-    parser.add_argument("--rdma-only", action="store_true", help="--rdma-only")
+    parser.add_argument("--allow-nvlink", action="store_true", help="--allow-nvlink")
     parser.add_argument("--with-mask", action="store_true", help="--with-mask")
     args = parser.parse_args()
 

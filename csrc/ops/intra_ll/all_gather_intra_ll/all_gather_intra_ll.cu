@@ -17,7 +17,7 @@
 
 namespace slime {
 
-#define MAX_SMS 32
+#define MAX_NUM_WARPS 24
 
 __global__ __launch_bounds__(1024, 1) void all_gather_intra_ll_kernel(int8_t*  q_ptr,
                                                                       int8_t** ipc_buffer_ptr,
@@ -31,7 +31,7 @@ __global__ __launch_bounds__(1024, 1) void all_gather_intra_ll_kernel(int8_t*  q
 {
 
     const int num_sms   = world_size;
-    const int num_warps = std::min(32, max_bs);
+    const int num_warps = std::min(MAX_NUM_WARPS, max_bs);
 
     const int sm_id   = blockIdx.x;
     const int warp_id = threadIdx.x / 32;
@@ -96,7 +96,7 @@ void all_gather_intra_ll(torch::Tensor                q,
     int32_t* mask_ptr = mask.has_value() ? (*mask).data_ptr<int32_t>() : nullptr;
 
     int num_sms   = world_size;
-    int num_warps = std::min(32, max_bs);
+    int num_warps = std::min(MAX_NUM_WARPS, max_bs);
 
     int grid_dim  = num_sms;
     int block_dim = num_warps * 32;
