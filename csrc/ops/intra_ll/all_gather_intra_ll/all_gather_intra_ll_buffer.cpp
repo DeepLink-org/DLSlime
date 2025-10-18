@@ -96,12 +96,12 @@ int AllGatherIntraLLBuffer::connectFullMesh(std::vector<json> all_buffer_info)
     return 0;
 }
 
-torch::Tensor AllGatherIntraLLBuffer::allGatherLL(torch::Tensor q)
+torch::Tensor AllGatherIntraLLBuffer::allGatherLL(torch::Tensor q, c10::optional<torch::Tensor> mask)
 {
 
     SLIME_ASSERT(q.dtype() == dtype_, "unmatched data type!");
 
-    all_gather_intra_ll(q, buffer_ptrs_, signal_ptrs_, max_bs_, msg_size_, itemsize(), world_size_, rank_);
+    all_gather_intra_ll(q, buffer_ptrs_, signal_ptrs_, max_bs_, msg_size_, itemsize(), world_size_, rank_, mask);
 
     // assuming device is already set
     auto options = torch::TensorOptions().dtype(dtype_).device(torch::kCUDA);

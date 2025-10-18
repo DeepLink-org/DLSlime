@@ -120,7 +120,7 @@ py::object alloc_dlpack_tensor(slime::NVShmemContext& self, size_t size, size_t 
 #define BUILD_INTER_OPS_ENABLED false
 #endif
 
-#define EXPOSE_BUILD_FLAG(m, flag) m.attr("_"#flag) = flag##_ENABLED
+#define EXPOSE_BUILD_FLAG(m, flag) m.attr("_" #flag) = flag##_ENABLED
 
 PYBIND11_MODULE(_slime_c, m)
 {
@@ -229,7 +229,11 @@ PYBIND11_MODULE(_slime_c, m)
         .def(py::init<int32_t, int32_t, torch::Dtype, int32_t, int32_t>())
         .def("buffer_info", &slime::AllGatherIntraLLBuffer::buffer_info)
         .def("connect_full_mesh", &slime::AllGatherIntraLLBuffer::connectFullMesh)
-        .def("all_gather_ll", &slime::AllGatherIntraLLBuffer::allGatherLL);
+        .def("all_gather_ll",
+             &slime::AllGatherIntraLLBuffer::allGatherLL,
+             py::arg("q"),
+             py::arg("mask") = py::none(),
+             "AllGather with optional mask");
 #endif
 
 #ifdef BUILD_INTER_OPS
