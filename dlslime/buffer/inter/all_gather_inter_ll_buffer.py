@@ -46,11 +46,11 @@ class AllGatherInterLLBuffer:
     def connect_full_mesh(self, all_buffer_info):
         return self._buffer.connect_full_mesh(all_buffer_info)
 
-    def all_gather_ll(self, input_: torch.Tensor, tag: int = 0) -> torch.Tensor:
+    def all_gather_ll(self, input_: torch.Tensor, tag: int = 0, mask=None) -> torch.Tensor:
         return self._buffer.all_gather_ll(input_, tag)
 
     def all_gather_ll_hook(
-        self, input_: torch.Tensor, tag: int = 0
+        self, input_: torch.Tensor, tag: int = 0, mask=None
     ) -> Tuple[torch.Tensor, Callable]:
         output, hook = self._buffer.all_gather_ll_hook(input_, tag)
         return output, hook

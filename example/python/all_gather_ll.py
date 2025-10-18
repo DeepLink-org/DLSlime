@@ -1,11 +1,16 @@
+import time
 import argparse
 import os
+from typing import Optional
+from pathlib import Path
 
 import torch
 import torch.distributed as dist
 
 from dlslime.buffer.inter.all_gather_inter_ll_buffer import AllGatherInterLLBuffer
 from dlslime.buffer.intra.all_gather_intra_ll_buffer import AllGatherIntraLLBuffer
+
+from dlslime.utils.json_merger import _merge_json
 
 
 # Get SPMD Info
@@ -17,8 +22,11 @@ master_addr = os.environ["MASTER_ADDR"]
 master_port = os.environ["MASTER_PORT"]
 
 
-bs = 16
+bs = 128
 msg_size = 16384
+
+
+valid_bs = 2
 
 
 shape = [bs, msg_size]
@@ -34,16 +42,29 @@ def main():
     )
     parser.add_argument("--eager-mode", action="store_true", help="--eager-mode")
     parser.add_argument("--hook-mode", action="store_true", help="--hook-mode")
-    parser.add_argument("--rdma-only", action="store_true", help="rdma-only")
+    parser.add_argument("--rdma-only", action="store_true", help="--rdma-only")
+    parser.add_argument("--with-mask", action="store_true", help="--with-mask")
     args = parser.parse_args()
 
     assert not (
         args.hook_mode and args.mode == "intra"
     ), "Only Inter Mode can support recv hook"
 
-    dist.init_process_group(backend="nccl")
+    assert not (
+        args.with_mask and args.mode == "inter"
+    ), "Only Intra Mode can support with mask"
+
+    dist.init_process_group(backend="cpu:gloo,cuda:nccl")
     gpu_group = dist.new_group(ranks=list(range(world_size)), backend="nccl")
     torch.cuda.set_device(rank % 8)
+
+    if rank == 0:
+        root_time = torch.tensor(int(time.perf_counter()), dtype=torch.int)
+    else:
+        root_time = torch.zeros(1, dtype=torch.int)
+
+    dist.broadcast(root_time, src=0)
+    root_time = int(root_time)
 
     output_dir = "./"
     os.makedirs(output_dir, exist_ok=True)
@@ -67,20 +88,24 @@ def main():
     gather_buffer.connect_full_mesh(all_buffer_info)
 
     input_tensor = torch.zeros(bs, msg_size, dtype=dtype, device=device)
+    mask = None
+    if args.with_mask:
+        mask = torch.zeros(bs, world_size, dtype=torch.int32, device=device)
+        mask[0:valid_bs, :] = 1
 
     print("warmup begin")
     for _ in range(10):
-        output = gather_buffer.all_gather_ll(input_tensor, tag=0)
+        output = gather_buffer.all_gather_ll(input_tensor, tag=0, mask=mask)
         dist.barrier(group=gpu_group, device_ids=[local_rank])
         torch.cuda.synchronize()
     print("warmup done.")
 
-    def forward(x: torch.Tensor):
+    def forward(x: torch.Tensor, mask: Optional[torch.Tensor]):
         if args.hook_mode:
-            output, hook = gather_buffer.all_gather_ll_hook(x, tag=0)
+            output, hook = gather_buffer.all_gather_ll_hook(x, tag=0, mask=mask)
             hook()
         else:
-            output = gather_buffer.all_gather_ll(x, tag=0)
+            output = gather_buffer.all_gather_ll(x, tag=0, mask=mask)
         output.add_(0)
         return output
 
@@ -91,7 +116,7 @@ def main():
         print("cuda graph capture begin")
         with torch.cuda.stream(stream):
             with torch.cuda.graph(cuda_graph, stream=stream):
-                forward(input_tensor)
+                forward(input_tensor, mask=mask)
         dist.barrier(group=gpu_group, device_ids=[local_rank])
         torch.cuda.synchronize()
         print("cuda graph capture done")
@@ -101,7 +126,8 @@ def main():
     # profiling
     output_dir = "./"
     os.makedirs(output_dir, exist_ok=True)
-    profiler_output = os.path.join(output_dir, "profiler")
+    profiler_per_rank_output = Path(os.path.join(output_dir, f"profiler_{root_time}", "per_rank"))
+    profiler_merged_output = Path(os.path.join(output_dir, f"profiler_{root_time}", f"profiler_{root_time}_merged.json"))
 
     with torch.profiler.profile(
         activities=[
@@ -110,7 +136,7 @@ def main():
         ],
         schedule=torch.profiler.schedule(wait=1, warmup=3, active=100, repeat=1),
         on_trace_ready=torch.profiler.tensorboard_trace_handler(
-            dir_name=profiler_output, worker_name=f"trace_rank_{rank}"
+            dir_name=profiler_per_rank_output, worker_name=f"trace_rank_{rank}"
         ),
         record_shapes=True,
         profile_memory=True,
@@ -134,6 +160,14 @@ def main():
 
     print(output, output.shape)
     dist.barrier(group=gpu_group, device_ids=[local_rank])
+    dist.barrier()
+    json_files_to_merge: List[Path] = list(profiler_per_rank_output.rglob('*.json'))
+    _merge_json(
+        to_merge_files=json_files_to_merge,
+        output_json=profiler_merged_output,
+        compress=False,
+        version=2
+    )
     dist.destroy_process_group()
 
 
