@@ -5,7 +5,7 @@
 #include "engine/rdma/rdma_common.h"
 #include "engine/rdma/rdma_context.h"
 
-#include "utils/logging.h"
+#include "logging.h"
 
 #include <atomic>
 #include <mutex>

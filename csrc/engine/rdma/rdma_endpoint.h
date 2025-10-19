@@ -3,7 +3,10 @@
 #include "engine/rdma/rdma_context.h"
 
 #include <atomic>
+#include <bits/stdint-uintn.h>
 #include <condition_variable>
+#include <cstddef>
+#include <functional>
 #include <infiniband/verbs.h>
 #include <memory>
 #include <mutex>
@@ -33,32 +36,166 @@ typedef struct MetaData {
 
 } __attribute__((packed)) meta_data_t;
 
-struct RDMASendRecvTask {
 
-    RDMASendRecvTask(std::shared_ptr<RDMAEndpoint> rdma_endpoint, uint32_t task_id);
-    RDMASendRecvTask(std::shared_ptr<RDMAEndpoint> rdma_endpoint, OpCode rmda_opcode, uint32_t task_id);
 
-    ~RDMASendRecvTask();
+/**
+ * RDMAEndPointTask - RDMA endpoint task management
+ * 
+ * Manages RDMA "pre" (RECV) operations from submission to completion.
+ * 
+ * Workflow:
+ * 1. RDMAEndPointTask enqueued --> initiates meta_recv or data_recv (based on operation type)
+ * 2. Poll queue head's is_finished status repeatedly
+ * 3. When is_finished == true --> pop RDMAEndPointTask from queue and 
+ *    forward information to meta queue
+ * 
+ * Components:
+ * 1. rdma_endpoint   - For submit operations
+ * 2. rdma_buffer     - For DATA RECV pre post
+ * 3. AssignmentBatch - 
+ * 4. callback        - Callback function in RDMAContext for handling is_finished status
+ * 5. is_finished     - Flag indicating whether the task is completed
+ */
+struct RDMAEndPointTask
+{
+    
+    // Delete default and copy constructors to enforce specific construction
+    RDMAEndPointTask() = delete;
+    RDMAEndPointTask(const RDMAEndPointTask&) = delete;
+    
+    /**
+     * Constructor for RECV operations
+     * @param task_id Unique task identifier
+     * @param rdma_opcode RDMA operation code 
+     * @param rdma_endpoint RDMA endpoint for operation submission
+     **/
+    RDMAEndPointTask(uint32_t task_id, 
+                     OpCode rdma_opcode = OpCode::RECV, 
+                     std::shared_ptr<RDMAEndpoint> rdma_endpoint = nullptr);
 
-    int makeAssignmentBatch();
-    int makeMetaMR();
-    int makeDataMR();
-    int makeRemoteDataMR();
-    int makeDummyAssignmentBatch();
+     /**
+     * Constructor for SEND operations
+     * @param task_id Unique task identifier
+     * @param rdma_opcode RDMA operation code (default: SEND)
+     * @param rdma_endpoint RDMA endpoint for operation submission
+     * @param rdma_buffer RDMA buffer for data transmission
+     */
+    RDMAEndPointTask(uint32_t task_id, 
+                     OpCode rdma_opcode = OpCode::SEND, 
+                     std::shared_ptr<RDMAEndpoint> rdma_endpoint = nullptr, 
+                     std::shared_ptr<RDMABuffer> rdma_buffer = nullptr);
 
-    void configurationTask(std::shared_ptr<RDMABuffer> rdma_buffer, uint32_t unique_slot_id, OpCode rmda_opcode);
+    ~RDMAEndPointTask();
 
-    uint32_t task_id_;
-    uint32_t unique_slot_id_;
-    OpCode   rdma_operation_;
 
-    std::shared_ptr<RDMABuffer>   rdma_buffer_;
-    std::shared_ptr<RDMAEndpoint> rdma_endpoint_;
-    AssignmentBatch               meta_assignment_batch_;
-    AssignmentBatch               dum_meta_assignment_batch_;
-    AssignmentBatch               data_assignment_batch_;
-    AssignmentBatch               dum_data_assignment_batch_;
+
+
+
+    std::shared_ptr<RDMAEndpoint> rdma_endpoint_{nullptr}; // Used for submit the assignment_batch_ to RDMAContext
+    std::shared_ptr<RDMABuffer>   rdma_buffer_{nullptr}; // Used for the data pre post recv
+    std::function<void()>         callback_; // Store the callback
+    AssignmentBatch               assignment_batch_; 
+    std::atomic<bool>             is_finished_; // The indicator of the if the recv is finished
 };
+
+
+
+
+
+
+
+
+
+
+
+/**
+ * ProxyQueue - The Queue template which is used in the proxy
+ *
+ * Workflow:
+ *
+ * Components:
+ *
+ */
+template<typename T>
+class ProxyQueue
+{
+private:
+    std::queue<T> queue_;
+    mutable std::mutex mutex_;
+    std::condition_variable cv_;
+
+public:
+
+    ProxyQueue() = default;
+    ProxyQueue(const ProxyQueue&) = delete;
+    ProxyQueue& operator=(const ProxyQueue&) = delete;
+
+
+    void enqueue(T element)
+    {
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            queue_.push(std::move(element));
+        }
+        cv_.notify_one();
+    }
+
+    T dequeue()
+    {
+        std::unique_lock<std::mutex> lock(mutex_);
+        cv_.wait(lock, [this] { return !queue_.empty();});
+
+        T element = std::move(queue_.front());
+        queue_.pop();
+        return element;
+    }
+
+
+    bool fetchQueue(T& element)
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (queue_.empty())
+            return false;
+            
+        element = std::move(queue_.front());
+        queue_.pop();
+        return true;
+    }
+
+
+    template<typename a, typename p>
+    bool fetchQueue(T& element, const std::chrono::duration<a, p> &time_out)
+    {
+        std::unique_lock<std::mutex> lock(mutex_);
+        if (!cv_.wait_for(lock, time_out, [this] { return !queue_.empty(); }))
+        {
+            return false;
+        }
+        element = std::move(queue_.front());
+        queue_.pop();
+        return true;
+    }
+
+    bool empty() const
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return queue_.empty();
+    }
+
+    size_t size() const 
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return queue_.size();
+    }
+};
+
+
+
+
+
+
+
+
 
 class RDMASendRecvTaskPool {
 
@@ -145,11 +282,26 @@ public:
         return data_ctx_qp_num_;
     }
 
+
+
 private:
     void mainQueueThread(std::chrono::milliseconds timeout);
 
     void asyncRecvData(std::shared_ptr<RDMASendRecvTask> task);
     void asyncSendData(std::shared_ptr<RDMASendRecvTask> task);
+
+
+    std::queue<AssignmentBatch> meta_recv_queue;
+    std::queue<meta_data_t> meta_queue;
+    std::queue<RDMASendRecvTask> send_queue;
+
+
+    mutable std::mutex mutex_proxy
+   
+
+    
+
+
 
     std::shared_ptr<RDMASendRecvTaskPool> rdma_task_pool_;
 
@@ -177,5 +329,34 @@ private:
 
     bool RDMA_tasks_threads_running_;
 };
+
+
+// struct RDMASendRecvTask {
+
+//     RDMASendRecvTask(std::shared_ptr<RDMAEndpoint> rdma_endpoint, uint32_t task_id);
+//     RDMASendRecvTask(std::shared_ptr<RDMAEndpoint> rdma_endpoint, OpCode rdma_opcode, uint32_t task_id);
+
+//     ~RDMASendRecvTask();
+
+//     int makeAssignmentBatch();
+//     int makeMetaMR();
+//     int makeDataMR();
+//     int makeRemoteDataMR();
+//     int makeDummyAssignmentBatch();
+
+//     void configurationTask(std::shared_ptr<RDMABuffer> rdma_buffer, uint32_t unique_slot_id, OpCode rmda_opcode);
+
+//     uint32_t task_id_;
+//     uint32_t unique_slot_id_;
+//     OpCode   rdma_operation_;
+
+//     std::shared_ptr<RDMABuffer>   rdma_buffer_;
+//     std::shared_ptr<RDMAEndpoint> rdma_endpoint_;
+//     AssignmentBatch               meta_assignment_batch_;
+//     AssignmentBatch               dum_meta_assignment_batch_;
+//     AssignmentBatch               data_assignment_batch_;
+//     AssignmentBatch               dum_data_assignment_batch_;
+
+// };
 
 }  // namespace slime

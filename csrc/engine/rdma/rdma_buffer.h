@@ -47,12 +47,12 @@ public:
 
     ~RDMABuffer() = default;
 
-    const size_t batchSize()
+    const size_t batch_size()
     {
         return storage_view_batch_.size();
     }
 
-    const storage_view_batch_t& storageViewBatch()
+    const storage_view_batch_t& view_batch()
     {
         return storage_view_batch_;
     }
