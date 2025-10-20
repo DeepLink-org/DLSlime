@@ -38,15 +38,61 @@ typedef struct MetaData {
 
 
 
+// 管理收发两端的RDMABuffer
+// Send: 接收RDMABuffer构造一个RDMABufferQueueElement并入队SendWaitQueue。
+
+//       查询其对应的meta是否准备好，如果准备好则弹出执行RDMA WRITE WITH IMM DATA
+
+//       弹出的RDMABuffer入队SendCompletionQueue，等待其回调函数执行完成并修改完成标志位
+
+
+// Recv: 接收RDMABuffer构造一个RDMABufferQueueElement并入队RecvWaitQueue。
+
+//       查询其对应的预提交队列是否已有对应的元素，如果有则弹出，没有则循环等待，同时直接执行meta的 RDMA WRITE WITH IMM DATA
+ 
+//       弹出的RDMABuffer入队RecvCompletionQueue，等待其回调函数执行完成并修改完成标志位
+
+
+class RDMABufferQueueElement
+{
+private:
+
+    std::shared_ptr<RDMABuffer>   rdma_buffer_{nullptr};
+    std::function<void()>         callback_;
+    OpCode                        rdma_opcode_; 
+    uint32_t                      unique_slot_id_;
+    std::atomic<bool>             is_finished_;
+
+
+public:
+
+    RDMABufferQueueElement() = delete;
+    RDMABufferQueueElement(const RDMABufferQueueElement&) = delete;
+    RDMABufferQueueElement(uint32_t unique_slot_id, OpCode rdma_opcode);
+
+
+}
+
+
+
+// 预提交队列
+
+// Send: 生成metaRecvPrePostQueue，并预提交一定数量的RDMAPrePostQueueElement，所有元素使用dummy assignmentbatch 
+//       检查队头标志位，如果为true，则将该元素弹出并送入metaQueue? 同时补充新的RDMAPrePostQueueElement
+
+// Recv: 生成dataRecvPrePostQueue，并预提交一定数量的RDMAPrePostQueueElement，所有元素使用dummy assignmentbatch
+//       检查队头标志位，如果为true，同时修改RDMABuffer中的标志位，并补充新的RDMAPrePostQueueElement
+
+
 /**
- * RDMAEndPointTask - RDMA endpoint task management
+ * RDMAPrePostQueueElement - RDMA endpoint task management
  * 
  * Manages RDMA "pre" (RECV) operations from submission to completion.
  * 
  * Workflow:
- * 1. RDMAEndPointTask enqueued --> initiates meta_recv or data_recv (based on operation type)
+ * 1. RDMAPrePostQueueElement enqueued --> initiates meta_recv or data_recv (based on operation type)
  * 2. Poll queue head's is_finished status repeatedly
- * 3. When is_finished == true --> pop RDMAEndPointTask from queue and 
+ * 3. When is_finished == true --> pop RDMAPrePostQueueElement from queue and 
  *    forward information to meta queue
  * 
  * Components:
@@ -56,22 +102,43 @@ typedef struct MetaData {
  * 4. callback        - Callback function in RDMAContext for handling is_finished status
  * 5. is_finished     - Flag indicating whether the task is completed
  */
-struct RDMAEndPointTask
+class RDMAPrePostQueueElement
 {
-    
+
+private:
+
+    // set the indicator of the task
+    void setStatus(bool status);
+
+
+    void postRecvAssignment(std::shared_ptr<RDMAEndpoint> rdma_endpoint);
+
+
+
+
+    std::shared_ptr<RDMAEndpoint> rdma_endpoint_{nullptr}; // Used for submit the assignment_batch_ to RDMAContext
+    std::shared_ptr<RDMABuffer>   rdma_buffer_{nullptr}; // Used for the data pre post recv
+    std::function<void()>         callback_; // Store the callback
+    OpCode                        rdma_opcode_; 
+    AssignmentBatch               assignment_batch_; 
+    std::atomic<bool>             is_finished_; // The indicator of the if the recv is finished
+    mutable std::mutex            task_mutex_;
+
+public:
+
     // Delete default and copy constructors to enforce specific construction
-    RDMAEndPointTask() = delete;
-    RDMAEndPointTask(const RDMAEndPointTask&) = delete;
-    
+    RDMAPrePostQueueElement() = delete;
+    RDMAPrePostQueueElement(const RDMAPrePostQueueElement&) = delete;
+
     /**
      * Constructor for RECV operations
      * @param task_id Unique task identifier
      * @param rdma_opcode RDMA operation code 
      * @param rdma_endpoint RDMA endpoint for operation submission
      **/
-    RDMAEndPointTask(uint32_t task_id, 
-                     OpCode rdma_opcode = OpCode::RECV, 
-                     std::shared_ptr<RDMAEndpoint> rdma_endpoint = nullptr);
+    RDMAPrePostQueueElement(uint32_t task_id, 
+                            OpCode rdma_opcode = OpCode::RECV, 
+                            std::shared_ptr<RDMAEndpoint> rdma_endpoint = nullptr);
 
      /**
      * Constructor for SEND operations
@@ -80,23 +147,17 @@ struct RDMAEndPointTask
      * @param rdma_endpoint RDMA endpoint for operation submission
      * @param rdma_buffer RDMA buffer for data transmission
      */
-    RDMAEndPointTask(uint32_t task_id, 
-                     OpCode rdma_opcode = OpCode::SEND, 
-                     std::shared_ptr<RDMAEndpoint> rdma_endpoint = nullptr, 
-                     std::shared_ptr<RDMABuffer> rdma_buffer = nullptr);
+    RDMAPrePostQueueElement(uint32_t task_id, 
+                            OpCode rdma_opcode = OpCode::SEND, 
+                            std::shared_ptr<RDMAEndpoint> rdma_endpoint = nullptr, 
+                            std::shared_ptr<RDMABuffer> rdma_buffer = nullptr);
 
     ~RDMAEndPointTask();
 
+}
 
 
 
-
-    std::shared_ptr<RDMAEndpoint> rdma_endpoint_{nullptr}; // Used for submit the assignment_batch_ to RDMAContext
-    std::shared_ptr<RDMABuffer>   rdma_buffer_{nullptr}; // Used for the data pre post recv
-    std::function<void()>         callback_; // Store the callback
-    AssignmentBatch               assignment_batch_; 
-    std::atomic<bool>             is_finished_; // The indicator of the if the recv is finished
-};
 
 
 
@@ -188,6 +249,8 @@ public:
         return queue_.size();
     }
 };
+
+
 
 
 
@@ -289,6 +352,10 @@ private:
 
     void asyncRecvData(std::shared_ptr<RDMASendRecvTask> task);
     void asyncSendData(std::shared_ptr<RDMASendRecvTask> task);
+
+
+    ProxyQueue<RDMAEndPointTask> meta_recv_queue_;
+
 
 
     std::queue<AssignmentBatch> meta_recv_queue;
