@@ -70,6 +70,7 @@ public:
     RDMABufferQueueElement(const RDMABufferQueueElement&) = delete;
     RDMABufferQueueElement(uint32_t unique_slot_id, OpCode rdma_opcode);
 
+    bool isFinished();
 
 }
 
@@ -110,11 +111,7 @@ private:
     // set the indicator of the task
     void setStatus(bool status);
 
-
-    void postRecvAssignment(std::shared_ptr<RDMAEndpoint> rdma_endpoint);
-
-
-
+    void postRecvAssignment();
 
     std::shared_ptr<RDMAEndpoint> rdma_endpoint_{nullptr}; // Used for submit the assignment_batch_ to RDMAContext
     std::shared_ptr<RDMABuffer>   rdma_buffer_{nullptr}; // Used for the data pre post recv
@@ -149,24 +146,11 @@ public:
      */
     RDMAPrePostQueueElement(uint32_t task_id, 
                             OpCode rdma_opcode = OpCode::SEND, 
-                            std::shared_ptr<RDMAEndpoint> rdma_endpoint = nullptr, 
-                            std::shared_ptr<RDMABuffer> rdma_buffer = nullptr);
+                            std::shared_ptr<RDMAEndpoint> rdma_endpoint = nullptr);
 
     ~RDMAEndPointTask();
 
 }
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 /**
@@ -367,8 +351,24 @@ private:
    
 
     
+    ProxyQueue<RDMABufferQueueElement> send_wait_queue_;
+    ProxyQueue<RDMABufferQueueElement> send_completion_queue_;
+    
+    ProxyQueue<RDMABufferQueueElement> recv_wait_queue_;
+    ProxyQueue<RDMABufferQueueElement> recv_completion_queue_;
+    
+    ProxyQueue<RDMAPrePostQueueElement> meta_recv_pre_post_queue_;
+    ProxyQueue<RDMAPrePostQueueElement> data_recv_pre_post_queue_;
 
+    std::thread send_prepost_proxy_;
+    std::thread send_buffer_proxy_;
+    std::thread send_completion_proxy_;
 
+    std::thread recv_prepost_proxy_;
+    std::thread recv_buffer_proxy_;
+    std::thread recv_completion_proxy_;
+    
+    //meta 和 data 都用LRU实现
 
     std::shared_ptr<RDMASendRecvTaskPool> rdma_task_pool_;
 
