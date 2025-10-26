@@ -35,6 +35,8 @@ public:
 
     torch::Tensor allGatherLL(torch::Tensor q, c10::optional<torch::Tensor> mask = c10::nullopt);
 
+    torch::Tensor allToAllLL(torch::Tensor q, c10::optional<torch::Tensor> mask = c10::nullopt);
+
 private:
     int8_t** buffer_ptrs_;
     int**    signal_ptrs_;

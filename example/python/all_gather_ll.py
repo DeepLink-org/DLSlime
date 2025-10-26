@@ -1,7 +1,7 @@
 import time
 import argparse
 import os
-from typing import Optional
+from typing import Optional, List
 from pathlib import Path
 
 import torch
@@ -40,6 +40,7 @@ def main():
     parser.add_argument(
         "--mode", type=str, default="intra", choices=["inter", "intra"], help="--mode"
     )
+    parser.add_argument("--op-type", choices=["all-to-all", "all-gather"], default="all-gather", help="--op-type")
     parser.add_argument("--eager-mode", action="store_true", help="--eager-mode")
     parser.add_argument("--hook-mode", action="store_true", help="--hook-mode")
     parser.add_argument("--allow-nvlink", action="store_true", help="--allow-nvlink")
@@ -87,7 +88,10 @@ def main():
     dist.all_gather_object(all_buffer_info, buffer_info)
     gather_buffer.connect_full_mesh(all_buffer_info)
 
-    input_tensor = torch.zeros(bs, msg_size, dtype=dtype, device=device)
+    if args.op_type == "all-gather":
+        input_tensor = torch.zeros(bs, msg_size, dtype=dtype, device=device)
+    else:
+        input_tensor = torch.zeros(bs * world_size, msg_size, dtype=dtype, device=device)
     mask = None
     if args.with_mask:
         mask = torch.zeros(bs, world_size, dtype=torch.int32, device=device)
@@ -95,7 +99,10 @@ def main():
 
     print("warmup begin")
     for _ in range(10):
-        output = gather_buffer.all_gather_ll(input_tensor, tag=0, mask=mask)
+        if args.op_type == "all-gather":
+            output = gather_buffer.all_gather_ll(input_tensor, tag=0, mask=mask)
+        else:
+            output = gather_buffer.all_to_all_ll(input_tensor, tag=0, mask=mask)
         dist.barrier(group=gpu_group, device_ids=[local_rank])
         torch.cuda.synchronize()
     print("warmup done.")
@@ -105,7 +112,10 @@ def main():
             output, hook = gather_buffer.all_gather_ll_hook(x, tag=0, mask=mask)
             hook()
         else:
-            output = gather_buffer.all_gather_ll(x, tag=0, mask=mask)
+            if args.op_type == "all-gather":
+                output = gather_buffer.all_gather_ll(x, tag=0, mask=mask)
+            else:
+                output = gather_buffer.all_to_all_ll(x, tag=0, mask=mask)
         output.add_(0)
         return output
 
@@ -121,7 +131,10 @@ def main():
         torch.cuda.synchronize()
         print("cuda graph capture done")
 
-    input_tensor.copy_(torch.ones(bs, msg_size, dtype=dtype, device=device) * rank)
+    if args.op_type == "all-gather":
+        input_tensor.copy_(torch.ones(bs, msg_size, dtype=dtype, device=device) * rank)
+    else:
+        input_tensor.copy_(torch.ones(bs * world_size, msg_size, dtype=dtype, device=device) * rank)
 
     # profiling
     output_dir = "./"

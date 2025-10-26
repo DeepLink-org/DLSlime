@@ -233,6 +233,11 @@ PYBIND11_MODULE(_slime_c, m)
              &slime::AllGatherIntraLLBuffer::allGatherLL,
              py::arg("q"),
              py::arg("mask") = py::none(),
+             "AllGather with optional mask")
+        .def("all_to_all_ll",
+             &slime::AllGatherIntraLLBuffer::allToAllLL,
+             py::arg("buffer_ori"),
+             py::arg("mask") = py::none(),
              "AllGather with optional mask");
 #endif
 
