@@ -109,4 +109,17 @@ torch::Tensor AllGatherIntraLLBuffer::allGatherLL(torch::Tensor q, c10::optional
     return torch::from_blob(reinterpret_cast<void*>(local_buffer_), {world_size_, max_bs_, msg_size_}, options);
 }
 
+torch::Tensor AllGatherIntraLLBuffer::allToAllLL(torch::Tensor buffer_ori, c10::optional<torch::Tensor> mask)
+{
+
+    SLIME_ASSERT(buffer_ori.dtype() == dtype_, "unmatched data type!");
+
+    all_to_all_intra_ll(buffer_ori, buffer_ptrs_, signal_ptrs_, max_bs_, msg_size_, itemsize(), world_size_, rank_, mask);
+
+    // assuming device is already set
+    auto options = torch::TensorOptions().dtype(dtype_).device(torch::kCUDA);
+
+    return torch::from_blob(reinterpret_cast<void*>(local_buffer_), {world_size_, max_bs_, msg_size_}, options);
+}
+
 }  // namespace slime
