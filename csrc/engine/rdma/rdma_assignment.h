@@ -43,8 +43,9 @@ typedef struct callback_info {
     callback_info() = default;
     callback_info(OpCode opcode, size_t batch_size, callback_fn_t callback): opcode_(opcode), batch_size_(batch_size)
     {
-        if (callback)
+        if (callback) {
             callback_ = std::move(callback);
+        }
     }
 
     callback_fn_t callback_{[this](int code, int imm_data) {

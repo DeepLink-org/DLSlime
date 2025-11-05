@@ -4,6 +4,7 @@
 #include "engine/rdma/rdma_endpoint.h"
 
 #include <condition_variable>
+#include <cstdint>
 #include <infiniband/verbs.h>
 #include <map>
 #include <memory>
@@ -13,6 +14,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "logging.h"
 #include "rdma_common.h"
 
 namespace slime {
@@ -23,27 +25,34 @@ class RDMABuffer: public std::enable_shared_from_this<RDMABuffer> {
     friend class RDMAEndpoint;
 
 public:
+    RDMABuffer(std::shared_ptr<RDMAEndpoint> endpoint, uintptr_t ptr, size_t offset, size_t data_size):
+        endpoint_(endpoint), ptr_(ptr), offset_(offset), data_size_(data_size)
+    {
+        SLIME_LOG_DEBUG("New RDMABuffer and the Index of Current Buffer is: ", buffer_counter_);
+        buffer_counter_ += 1;
+    }
+
     RDMABuffer(std::shared_ptr<RDMAEndpoint> endpoint, storage_view_batch_t& batch):
         endpoint_(endpoint), storage_view_batch_(std::move(batch))
     {
     }
 
-    RDMABuffer(std::shared_ptr<RDMAEndpoint> endpoint,
-               std::vector<uintptr_t>        ptrs,
-               std::vector<size_t>           offset,
-               std::vector<size_t>           data_size)
-    {
+    // RDMABuffer(std::shared_ptr<RDMAEndpoint> endpoint,
+    //            std::vector<uintptr_t>        ptrs,
+    //            std::vector<size_t>           offset,
+    //            std::vector<size_t>           data_size)
+    // {
 
-        batch_size_ = ptrs.size();
-        ptrs_       = ptrs;
-        offset_     = offset;
-        data_size_  = data_size;
-        for (uint32_t i = 0; i < batch_size_; ++i) {
-            storage_view_t view{.data_ptr = ptrs[i], .storage_offset = offset[i], .length = data_size[i]};
-            storage_view_batch_.push_back(view);
-        }
-        endpoint_ = endpoint;
-    }
+    //     batch_size_ = ptrs.size();
+    //     ptrs_       = ptrs;
+    //     offset_     = offset;
+    //     data_size_  = data_size;
+    //     for (uint32_t i = 0; i < batch_size_; ++i) {
+    //         storage_view_t view{.data_ptr = ptrs[i], .storage_offset = offset[i], .length = data_size[i]};
+    //         storage_view_batch_.push_back(view);
+    //     }
+    //     endpoint_ = endpoint;
+    // }
 
     ~RDMABuffer() = default;
 
@@ -63,20 +72,20 @@ public:
     bool waitSend();
     bool waitRecv();
 
-    void send_done_callback();
-    void recv_done_callback();
-
-    void get_time();
+    void sendDoneCallback();
+    void recvDoneCallback();
 
 private:
-    storage_view_batch_t storage_view_batch_;
-
     std::shared_ptr<RDMAEndpoint> endpoint_;
-    std::vector<uintptr_t>        ptrs_;
-    std::vector<size_t>           offset_;
-    std::vector<size_t>           data_size_;
+    uintptr_t                     ptr_;
+    size_t                        offset_;
+    size_t                        data_size_;
 
-    size_t batch_size_;
+    std::vector<uintptr_t> ptrs_batch_;
+    std::vector<size_t>    offset_batch_;
+    std::vector<size_t>    data_size_batch_;
+
+    storage_view_batch_t storage_view_batch_;
 
     std::atomic<int> send_pending_{0};
     std::atomic<int> recv_pending_{0};
@@ -89,6 +98,8 @@ private:
 
     std::mutex send_mutex_;
     std::mutex recv_mutex_;
+
+    static inline size_t buffer_counter_{0};
 };
 
 }  // namespace slime
