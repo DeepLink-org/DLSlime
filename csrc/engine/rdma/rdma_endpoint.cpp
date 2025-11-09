@@ -147,9 +147,9 @@ RDMAEndpoint::~RDMAEndpoint()
 {
     try {
         proxyDestroy();
-        SLIME_LOG_INFO("RDMAEndpoint destroyed successfully");
         data_ctx_->stop_future();
         meta_ctx_->stop_future();
+        SLIME_LOG_INFO("RDMAEndpoint destroyed successfully");
     }
     catch (const std::exception& e) {
         SLIME_LOG_ERROR("Exception in RDMAEndpoint destructor: ", e.what());
@@ -281,10 +281,10 @@ void RDMAEndpoint::postDataWrite(RDMABufferQueueElement& element, std::shared_pt
 
     AssignmentBatch batch = AssignmentBatch{Assignment(MR_KEY, 0, 0, size)};
 
-    std::cout << "POST DATA WRITE" << std::endl;
-    std::cout << "addr: " << addr << std::endl;
-    std::cout << "size: " << size << std::endl;
-    std::cout << "rkey: " << rkey << std::endl;
+    // std::cout << "POST DATA WRITE" << std::endl;
+    // std::cout << "addr: " << addr << std::endl;
+    // std::cout << "size: " << size << std::endl;
+    // std::cout << "rkey: " << rkey << std::endl;
 
     auto is_finish_ptr = element.is_finished_ptr_;
     is_finish_ptr->store(false, std::memory_order_release);
@@ -345,9 +345,10 @@ void RDMAEndpoint::dataRecvQueueThread(std::chrono::milliseconds timeout)
     while (!stop_data_recv_queue_thread_.load(std::memory_order_acquire)) {
         uint32_t idx;
         if (data_recv_queue_.getFrontTaskId(idx)) {
-
+            // std::cout << "dataRecv idx" << idx << std::endl;
             bool found = data_recv_queue_.peekQueue(
                 idx, [](const auto& e) { return e.is_finished_ptr_->load(std::memory_order_acquire); });
+            // std::cout << "dataRecv found" << found << std::endl;
             if (found) {
                 RDMABufferQueueElement element = recv_buffer_mapping_[idx];
                 element.rdma_buffer_->recvDoneCallback();
@@ -392,6 +393,7 @@ void RDMAEndpoint::SendBufferQueueThread(std::chrono::milliseconds timeout)
                     send_finish_queue_.enqueue(element);
                     if (meta_slots_manager_->releaseSlot(idx)) {
                         addPreQueueElement(OpCode::SEND);
+                        // std::cout << "!!!!!!!!!!!!!!!!!" << std::endl;
                     }
                     else {
                         SLIME_LOG_ERROR("FAIL to release meta_slots_manager_");
@@ -421,14 +423,15 @@ void RDMAEndpoint::RecvBufferQueueThread(std::chrono::milliseconds timeout)
     while (!stop_recv_buffer_queue_thread_.load(std::memory_order_acquire)) {
         uint32_t idx;
         if (recv_buffer_queue_.getFrontTaskId(idx)) {
-            std::cout << "data_slots_manager_" << std::endl;
-            data_slots_manager_->printSlots();
+            // std::cout << "data_slots_manager_" << std::endl;
+            // data_slots_manager_->printSlots();
             if (data_slots_manager_->checkSlotReady(idx)) {
                 RDMABufferQueueElement element;
                 if (recv_buffer_queue_.fetchQueue(element)) {
                     postMetaWrite(element.unique_id_, element.rdma_buffer_);
                     recv_buffer_mapping_.emplace(idx, element);
                     data_slots_manager_->releaseSlot(idx);
+                    // data_slots_manager_->printSlots();
                 }
                 else {
                     SLIME_LOG_ERROR("FAIL to fetchQueue recv_buffer_queue_");
@@ -453,14 +456,17 @@ void RDMAEndpoint::SendFinishQueueThread(std::chrono::milliseconds timeout)
 
     while (!stop_wait_send_finish_queue_thread_.load(std::memory_order_acquire)) {
         uint32_t idx;
+        // std::cout << "send_finish_queue_ size: " << send_finish_queue_.size() << std::endl;
         if (send_finish_queue_.getFrontTaskId(idx)) {
+            // std::cout << "send_finish_queue_ idx: " << idx << std::endl;
             bool found = send_finish_queue_.peekQueue(
                 idx, [](const auto& e) { return e.is_finished_ptr_->load(std::memory_order_acquire); });
             if (found) {
-
+                // std::cout << "send  found" << std::endl;
                 RDMABufferQueueElement element;
                 if (send_finish_queue_.fetchQueue(element)) {
                     element.rdma_buffer_->sendDoneCallback();
+                    // std::cout << "sendDoneCallback" << std::endl;
                     SLIME_LOG_DEBUG(
                         "SUCCESS to send_finish_queue_ ", idx, " and the slot id ", idx % SLIME_STATUS_SLOT_SIZE);
                 }

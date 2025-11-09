@@ -34,9 +34,13 @@ public:
 
     ~RDMAMemoryPool()
     {
+        std::cout << mrs_.size() << std::endl;
         for (auto& mr : mrs_) {
+            std::cout << "mr: " << mr.first << std::endl;
             if (mr.second)
                 ibv_dereg_mr(mr.second);
+
+            std::cout << "!!!!! " << std::endl;
         }
         mrs_.clear();
     }
@@ -51,9 +55,10 @@ public:
     inline struct ibv_mr* get_mr(const std::string& mr_key)
     {
         std::unique_lock<std::mutex> lock(mrs_mutex_);
-        if (mrs_.find(mr_key) != mrs_.end())
+        if (mrs_.find(mr_key) != mrs_.end()) {
+            SLIME_LOG_DEBUG("mr_key: ", mr_key, " is found in mrs_");
             return mrs_[mr_key];
-
+        }
         SLIME_LOG_WARN("mr_key: ", mr_key, "not found in mrs_");
         return nullptr;
     }
@@ -61,9 +66,10 @@ public:
     inline remote_mr_t get_remote_mr(const std::string& mr_key)
     {
         std::unique_lock<std::mutex> lock(remote_mrs_mutex_);
-        if (remote_mrs_.find(mr_key) != remote_mrs_.end())
+        if (remote_mrs_.find(mr_key) != remote_mrs_.end()) {
+            SLIME_LOG_DEBUG("mr_key: ", mr_key, " is found in remote_mrs_");
             return remote_mrs_[mr_key];
-
+        }
         SLIME_LOG_WARN("mr_key: ", mr_key, " not found in remote_mrs_");
         return remote_mr_t();
     }

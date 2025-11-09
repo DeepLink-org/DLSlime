@@ -20,10 +20,6 @@ int RDMAMemoryPool::register_memory_region(const std::string& mr_key, uintptr_t 
     /* MemoryRegion Access Right = 777 */
     const static int access_rights = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_READ;
     ibv_mr*          mr            = ibv_reg_mr(pd_, (void*)data_ptr, length, access_rights);
-    // std::cout << "length: " << length << std::endl;
-    // std::cout << "data_ptr " << data_ptr << std::endl;
-    // std::cout << "mr_key " << mr_key << std::endl;
-    // std::cout << "mr:" << mr << std::endl;
     SLIME_ASSERT(mr, " Failed to register memory " << data_ptr);
 
     SLIME_LOG_DEBUG("Memory region: " << mr_key << ", " << (void*)data_ptr << " -- " << (void*)(data_ptr + length)

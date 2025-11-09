@@ -120,7 +120,7 @@ py::object alloc_dlpack_tensor(slime::NVShmemContext& self, size_t size, size_t 
 #define BUILD_INTER_OPS_ENABLED false
 #endif
 
-#define EXPOSE_BUILD_FLAG(m, flag) m.attr("_"#flag) = flag##_ENABLED
+#define EXPOSE_BUILD_FLAG(m, flag) m.attr("_" #flag) = flag##_ENABLED
 
 PYBIND11_MODULE(_slime_c, m)
 {
@@ -187,14 +187,11 @@ PYBIND11_MODULE(_slime_c, m)
     py::class_<slime::RDMAEndpoint, std::shared_ptr<slime::RDMAEndpoint>>(m, "rdma_endpoint")
         .def(py::init<const std::string&, uint8_t, const std::string&, size_t>())
         .def("context_connect", &slime::RDMAEndpoint::connect)
-        .def("get_data_context_info", &slime::RDMAEndpoint::getDataContextInfo)
-        .def("get_meta_context_info", &slime::RDMAEndpoint::getMetaContextInfo);
+        .def("get_data_context_info", &slime::RDMAEndpoint::dataCtxInfo)
+        .def("get_meta_context_info", &slime::RDMAEndpoint::metaCtxInfo);
 
     py::class_<slime::RDMABuffer, std::shared_ptr<slime::RDMABuffer>>(m, "rdma_buffer")
-        .def(py::init<std::shared_ptr<slime::RDMAEndpoint>,
-                      std::vector<uintptr_t>,
-                      std::vector<size_t>,
-                      std::vector<size_t>>())
+        .def(py::init<std::shared_ptr<slime::RDMAEndpoint>, uintptr_t, size_t, size_t>())
         .def("send", &slime::RDMABuffer::send)
         .def("recv", &slime::RDMABuffer::recv)
         .def("wait_send", &slime::RDMABuffer::waitSend)

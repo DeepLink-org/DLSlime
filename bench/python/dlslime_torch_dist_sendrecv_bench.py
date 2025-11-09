@@ -17,6 +17,7 @@ except ImportError as e:
     print(e, "please install dlslime backend first")
     exit()
 
+
 def benchmark_send_recv(args):
     # Initialize process group
     print("Initialize process group")
@@ -38,11 +39,11 @@ def benchmark_send_recv(args):
     if args.sizes:
         sizes = [int(s) for s in args.sizes]
     else:
-        sizes = [2**n for n in range(11, 26)]  # 256B to 256MB
+        sizes = [2**n for n in range(11, 12)]  # 256B to 256MB
 
     print("Prepare data sizes: ", sizes)
     benchmark_data = []
-    num = 2
+    num = 1
     print("Start to test the bench")
     for size in sizes:
         num_elements = max(1, size // 4)
@@ -50,6 +51,7 @@ def benchmark_send_recv(args):
             torch.ones(num_elements, device=device, dtype=torch.float32)
             for _ in range(num)
         ]
+        # print(send_batch[0])
         recv_batch = [
             torch.zeros(num_elements, device=device, dtype=torch.float32)
             for _ in range(num)
@@ -57,8 +59,8 @@ def benchmark_send_recv(args):
 
         if args.use_gpu:
             torch.cuda.synchronize()
-            
-        for _ in range(25):
+
+        for _ in range(args.iterations):
             all_work = []
             reqs = []
             for i in range(num):
@@ -76,7 +78,6 @@ def benchmark_send_recv(args):
         if args.use_gpu:
             torch.cuda.synchronize()
         start_time = time.time()
-        
         for _ in range(args.iterations):
             all_work = []
             for i in range(num):
@@ -84,7 +85,7 @@ def benchmark_send_recv(args):
                     send_op = dist.isend(send_batch[i], dst=1, group=slime_group)
                     all_work.extend([send_op])
                 else:
-                    recv_op = dist.irecv(recv_batch[i], src=0 ,group=slime_group)
+                    recv_op = dist.irecv(recv_batch[i], src=0, group=slime_group)
                     all_work.extend([recv_op])
 
             [w.wait() for w in all_work]
