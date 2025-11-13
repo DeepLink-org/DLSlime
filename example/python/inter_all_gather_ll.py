@@ -8,7 +8,6 @@ import torch
 import torch.distributed as dist
 
 from dlslime.buffer.inter.all_gather_inter_ll_buffer import AllGatherInterLLBuffer
-from dlslime.buffer.intra.all_gather_intra_ll_buffer import AllGatherIntraLLBuffer
 
 from dlslime.utils.json_merger import _merge_json
 
@@ -37,23 +36,10 @@ torch.cuda.set_device(local_rank)
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--mode", type=str, default="intra", choices=["inter", "intra"], help="--mode"
-    )
-    parser.add_argument("--op-type", choices=["all-to-all", "all-gather"], default="all-gather", help="--op-type")
     parser.add_argument("--eager-mode", action="store_true", help="--eager-mode")
     parser.add_argument("--hook-mode", action="store_true", help="--hook-mode")
     parser.add_argument("--allow-nvlink", action="store_true", help="--allow-nvlink")
-    parser.add_argument("--with-mask", action="store_true", help="--with-mask")
     args = parser.parse_args()
-
-    assert not (
-        args.hook_mode and args.mode == "intra"
-    ), "Only Inter Mode can support recv hook"
-
-    assert not (
-        args.with_mask and args.mode == "inter"
-    ), "Only Intra Mode can support with mask"
 
     dist.init_process_group(backend="cpu:gloo,cuda:nccl")
     gpu_group = dist.new_group(ranks=list(range(world_size)), backend="nccl")
@@ -70,52 +56,36 @@ def main():
     output_dir = "./"
     os.makedirs(output_dir, exist_ok=True)
 
-    if args.mode == "inter":
-        gather_buffer = AllGatherInterLLBuffer(
-            bs,
-            msg_size,
-            dtype,
-            world_size,
-            rank,
-            num_concurrency=1,
-            allow_nvlink=args.allow_nvlink,
-        )
-    else:
-        gather_buffer = AllGatherIntraLLBuffer(bs, msg_size, dtype, world_size, rank)
+    gather_buffer = AllGatherInterLLBuffer(
+        bs,
+        msg_size,
+        dtype,
+        world_size,
+        rank,
+        num_concurrency=1,
+        allow_nvlink=args.allow_nvlink,
+    )
 
     buffer_info = gather_buffer.buffer_info
     all_buffer_info = [None for _ in range(world_size)]
     dist.all_gather_object(all_buffer_info, buffer_info)
     gather_buffer.connect_full_mesh(all_buffer_info)
 
-    if args.op_type == "all-gather":
-        input_tensor = torch.zeros(bs, msg_size, dtype=dtype, device=device)
-    else:
-        input_tensor = torch.zeros(bs * world_size, msg_size, dtype=dtype, device=device)
-    mask = None
-    if args.with_mask:
-        mask = torch.zeros(bs, world_size, dtype=torch.int32, device=device)
-        mask[0:valid_bs, :] = 1
+    input_tensor = torch.zeros(bs, msg_size, dtype=dtype, device=device)
 
     print("warmup begin")
     for _ in range(10):
-        if args.op_type == "all-gather":
-            output = gather_buffer.all_gather_ll(input_tensor, tag=0, mask=mask)
-        else:
-            output = gather_buffer.all_to_all_ll(input_tensor, tag=0, mask=mask)
+        output = gather_buffer.all_gather_ll(input_tensor, tag=0)
         dist.barrier(group=gpu_group, device_ids=[local_rank])
         torch.cuda.synchronize()
     print("warmup done.")
 
-    def forward(x: torch.Tensor, mask: Optional[torch.Tensor]):
+    def forward(x: torch.Tensor):
         if args.hook_mode:
-            output, hook = gather_buffer.all_gather_ll_hook(x, tag=0, mask=mask)
+            output, hook = gather_buffer.all_gather_ll_hook(x, tag=0)
             hook()
         else:
-            if args.op_type == "all-gather":
-                output = gather_buffer.all_gather_ll(x, tag=0, mask=mask)
-            else:
-                output = gather_buffer.all_to_all_ll(x, tag=0, mask=mask)
+            output = gather_buffer.all_gather_ll(x, tag=0)
         output.add_(0)
         return output
 
@@ -126,7 +96,7 @@ def main():
         print("cuda graph capture begin")
         with torch.cuda.stream(stream):
             with torch.cuda.graph(cuda_graph, stream=stream):
-                forward(input_tensor, mask=mask)
+                forward(input_tensor)
         dist.barrier(group=gpu_group, device_ids=[local_rank])
         torch.cuda.synchronize()
         print("cuda graph capture done")

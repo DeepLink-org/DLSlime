@@ -18,6 +18,7 @@ function(install_system_library LIB_NAME INSTALL_DIR)
     message(STATUS "Will install ${LIB_NAME} to: ${INSTALL_DIR}")
 endfunction()
 
+message(??${DLSLIME_INSTALL_PATH})
 install_system_library(ibverbs ${DLSLIME_INSTALL_PATH})
 install_system_library(numa ${DLSLIME_INSTALL_PATH})
 

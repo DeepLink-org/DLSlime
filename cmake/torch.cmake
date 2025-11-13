@@ -19,11 +19,20 @@ run_python(TORCH_ENABLE_ABI
     "Failed to find torch ABI info"
 )
 
-run_python(
-    "Torch_PYBIND11_BUILD_ABI"
-    "import torch; print(torch._C._PYBIND11_BUILD_ABI)"
-    "Cannot get TORCH_PYBIND11_BUILD_ABI"
+run_python("TORCH_VERSION"
+    "import torch; print(torch.__version__)"
+    "Failed to get PyTorch version"
 )
+
+if (TORCH_VERSION VERSION_LESS "2.9")
+    run_python(
+        "Torch_PYBIND11_BUILD_ABI"
+        "import torch; print(torch._C._PYBIND11_BUILD_ABI)"
+        "Cannot get TORCH_PYBIND11_BUILD_ABI (required for PyTorch < 2.9)"
+    )
+else()
+    message(STATUS "PyTorch version >= 2.9, skipping Torch_PYBIND11_BUILD_ABI (not required)")
+endif()
 
 run_python("TORCH_WITH_CUDA" "import torch; print(torch.cuda.is_available())" "Cannot find torch DIR")
 
