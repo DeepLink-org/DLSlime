@@ -67,7 +67,7 @@ __global__ __launch_bounds__(1024, 1) void all_to_all_intra_ll_kernel(int8_t*  x
         int8_t* buffer_ptr_for_write     = ipc_buffer_ptr[sm_id] + buffer_idx;
         vec_t*  vec_buffer_ptr_for_write = reinterpret_cast<vec_t*>(buffer_ptr_for_write);
 
-        if (!mask or __ldg(mask + msg_idx * world_size + sm_id)) {
+        if (!mask or __ldg(mask + sm_id * max_bs + msg_idx)) {
             UNROLLED_WARP_COPY(8,
                                lane_id,
                                num_vec_msg_per_warp,
