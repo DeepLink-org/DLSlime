@@ -229,6 +229,7 @@ PYBIND11_MODULE(_slime_c, m)
         .def(py::init<int32_t, int32_t, int32_t, int32_t, int64_t>())
         .def("buffer_info", &slime::AllToAllIntraLLBuffer::buffer_info)
         .def("connect_full_mesh", &slime::AllToAllIntraLLBuffer::connectFullMesh)
+        .def("get_local_buffer", &slime::AllToAllIntraLLBuffer::getLocalBuffer)
         .def("get_buffer_size_hint", &slime::AllToAllIntraLLBuffer::get_buffer_size_hint)
         .def("set_max_bs", &slime::AllToAllIntraLLBuffer::setMaxBs)
         .def("all_to_all_ll",

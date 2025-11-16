@@ -22,13 +22,24 @@ class AllToAllIntraLLBuffer:
         self.world_size = world_size
 
         self._buffer = self.buffer = _slime_c.AllToAllIntraLLBuffer(
-            self.max_dispatch_per_msg, self.max_bs, self.rank, self.world_size, buffer_size
+            self.max_dispatch_per_msg,
+            self.max_bs,
+            self.rank,
+            self.world_size,
+            buffer_size,
         )
 
     @staticmethod
     def get_buffer_size_hint(max_dispatch_per_msg, max_bs, max_msg_size, itemsize):
         return _slime_c.AllToAllIntraLLBuffer.get_buffer_size_hint(
             max_bs, max_msg_size, itemsize, max_dispatch_per_msg
+        )
+
+    def get_local_buffer(
+        self, max_dispatch_per_msg, max_bs, max_msg_size, itemsize, dtype
+    ):
+        return self._buffer.get_local_buffer(
+            max_bs, max_msg_size, itemsize, max_dispatch_per_msg, dtype
         )
 
     @property
@@ -44,5 +55,7 @@ class AllToAllIntraLLBuffer:
         dist.all_gather_object(all_buffer_info, buffer_info, group=group)
         return self._buffer.connect_full_mesh(all_buffer_info)
 
-    def all_to_all_ll(self, x: torch.Tensor, is_transpose=False, mask=None) -> torch.Tensor:
+    def all_to_all_ll(
+        self, x: torch.Tensor, is_transpose=False, mask=None
+    ) -> torch.Tensor:
         return self._buffer.all_to_all_ll(x, is_transpose, mask)

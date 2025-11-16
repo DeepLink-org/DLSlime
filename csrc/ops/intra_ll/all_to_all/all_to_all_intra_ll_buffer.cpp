@@ -132,4 +132,15 @@ torch::Tensor AllToAllIntraLLBuffer::allToAllLL2D(torch::Tensor x, bool is_trans
     return torch::from_blob(reinterpret_cast<void*>(local_buffer_), {world_size_, max_bs_, msg_size}, options);
 }
 
+torch::Tensor AllToAllIntraLLBuffer::getLocalBuffer(int32_t max_bs,
+                                                    int32_t max_dispatch_per_msg,
+                                                    int32_t max_msg_size,
+                                                    int32_t itemsize,
+                                                    c10::ScalarType dtype)
+{
+    auto options = torch::TensorOptions().dtype(dtype).device(torch::kCUDA);
+
+    return torch::from_blob(reinterpret_cast<void*>(local_buffer_), {get_buffer_size_hint(max_bs, max_dispatch_per_msg, max_msg_size, itemsize)}, options);
+}
+
 }  // namespace slime
