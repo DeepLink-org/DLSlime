@@ -41,7 +41,7 @@ class AllToAllIntraLLBuffer:
     def connect_full_mesh(self, group: dist.ProcessGroup):
         buffer_info = self.buffer_info
         all_buffer_info = [None for _ in range(group.size())]
-        dist.all_gather_object(all_buffer_info, buffer_info)
+        dist.all_gather_object(all_buffer_info, buffer_info, group=group)
         return self._buffer.connect_full_mesh(all_buffer_info)
 
     def all_to_all_ll(self, x: torch.Tensor, is_transpose=False, mask=None) -> torch.Tensor:
