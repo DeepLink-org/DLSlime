@@ -35,7 +35,8 @@ class AllToAllIntraLLBuffer:
             max_bs, max_msg_size, itemsize, max_dispatch_per_msg
         )
 
-    def get_local_buffer(self):
+    @property
+    def local_buffer(self):
         return self._buffer.get_local_buffer()
 
     @property
