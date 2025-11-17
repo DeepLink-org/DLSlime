@@ -37,7 +37,7 @@ public:
     torch::Tensor
     allToAllLL2D(torch::Tensor q, bool is_transpose = false, c10::optional<torch::Tensor> mask = c10::nullopt);
 
-    torch::Tensor getLocalBuffer(int32_t max_bs, int32_t max_dispatch_per_msg, int32_t max_msg_size, int32_t itemsize, c10::ScalarType dtype);
+    torch::Tensor getLocalBuffer();
 
     int setMaxBs(int32_t bs)
     {
