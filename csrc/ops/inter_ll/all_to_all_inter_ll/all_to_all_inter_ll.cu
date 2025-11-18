@@ -12,7 +12,7 @@
 #include <ATen/cuda/CUDADataType.h>
 #include <torch/torch.h>
 
-#include "all_gather_inter_ll.h"
+#include "all_to_all_inter_ll.h"
 #include "ops/ibgda_device.cuh"
 #include "ops/launch.cuh"
 #include "ops/nvshmem_api.cuh"

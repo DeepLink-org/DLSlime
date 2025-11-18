@@ -6,8 +6,10 @@
 #include "logging.h"
 #include "ops/nvshmem_api.cuh"
 
-#include "all_gather_inter_ll.h"
-#include "all_gather_inter_ll_buffer.h"
+#include "all_to_all_inter_ll.h"
+#include "all_to_all_inter_ll_buffer.h"
+// #include "all_gather_inter_ll.h"
+// #include "all_gather_inter_ll_buffer.h"
 
 namespace slime {
 
