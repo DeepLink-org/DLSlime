@@ -114,15 +114,6 @@ int main(int argc, char** argv)
     size_t    data_sizes_buf_8 = data_buf_8.size();
     size_t    offset_buf_8     = 0;
 
-    // const uint32_t    batch_size_buf_1 = 2;
-    // std::vector<char> data_buf_1_0(1024, '1');
-    // std::vector<char> data_buf_1_1(2048, '2');
-
-    // std::vector<uintptr_t> ptrs_buf_1       = {reinterpret_cast<uintptr_t>(data_buf_1_0.data()),
-    //                                            reinterpret_cast<uintptr_t>(data_buf_1_1.data())};
-    // std::vector<size_t>    data_sizes_buf_1 = {data_buf_1_0.size(), data_buf_1_1.size()};
-    // std::vector<size_t>    offset_buf_1     = {0, 0};
-
     auto buf_0 = std::make_shared<RDMABuffer>(end_point, ptrs_buf_0, offset_buf_0, data_sizes_buf_0);
     auto buf_1 = std::make_shared<RDMABuffer>(end_point, ptrs_buf_1, offset_buf_1, data_sizes_buf_1);
     auto buf_2 = std::make_shared<RDMABuffer>(end_point, ptrs_buf_2, offset_buf_2, data_sizes_buf_2);
@@ -132,11 +123,10 @@ int main(int argc, char** argv)
     auto buf_6 = std::make_shared<RDMABuffer>(end_point, ptrs_buf_6, offset_buf_6, data_sizes_buf_6);
     auto buf_7 = std::make_shared<RDMABuffer>(end_point, ptrs_buf_7, offset_buf_7, data_sizes_buf_7);
     auto buf_8 = std::make_shared<RDMABuffer>(end_point, ptrs_buf_8, offset_buf_8, data_sizes_buf_8);
-    // auto buf_1 = std::make_shared<RDMABuffer>(end_point, ptrs_buf_1, offset_buf_1, data_sizes_buf_1);
+
 
     std::cout << "Launch EDNPOINT ..." << std::endl;
 
-    // buf_1->send();
     buf_0->send();
     buf_1->send();
     buf_2->send();

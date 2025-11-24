@@ -28,31 +28,12 @@ public:
     RDMABuffer(std::shared_ptr<RDMAEndpoint> endpoint, uintptr_t ptr, size_t offset, size_t data_size):
         endpoint_(endpoint), ptr_(ptr), offset_(offset), data_size_(data_size)
     {
-        SLIME_LOG_DEBUG("New RDMABuffer and the Index of Current Buffer is: ", buffer_counter_);
-        buffer_counter_ += 1;
     }
 
     RDMABuffer(std::shared_ptr<RDMAEndpoint> endpoint, storage_view_batch_t& batch):
         endpoint_(endpoint), storage_view_batch_(std::move(batch))
     {
     }
-
-    // RDMABuffer(std::shared_ptr<RDMAEndpoint> endpoint,
-    //            std::vector<uintptr_t>        ptrs,
-    //            std::vector<size_t>           offset,
-    //            std::vector<size_t>           data_size)
-    // {
-
-    //     batch_size_ = ptrs.size();
-    //     ptrs_       = ptrs;
-    //     offset_     = offset;
-    //     data_size_  = data_size;
-    //     for (uint32_t i = 0; i < batch_size_; ++i) {
-    //         storage_view_t view{.data_ptr = ptrs[i], .storage_offset = offset[i], .length = data_size[i]};
-    //         storage_view_batch_.push_back(view);
-    //     }
-    //     endpoint_ = endpoint;
-    // }
 
     ~RDMABuffer() = default;
 
@@ -98,8 +79,6 @@ private:
 
     std::mutex send_mutex_;
     std::mutex recv_mutex_;
-
-    static inline size_t buffer_counter_{0};
 };
 
 }  // namespace slime

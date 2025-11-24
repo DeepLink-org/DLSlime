@@ -21,7 +21,6 @@ namespace slime {
 RDMAEndpoint::RDMAEndpoint(const std::string& dev_name, size_t ib_port, const std::string& link_type, size_t qp_nums)
 {
 
-    // RDMAContext: submit the RDMA assignment
     SLIME_LOG_INFO("Init the Contexts and RDMA Devices...");
     data_ctx_ = std::make_shared<RDMAContext>(qp_nums, 0);
     meta_ctx_ = std::make_shared<RDMAContext>(1, 0);
@@ -87,14 +86,12 @@ void RDMAEndpoint::proxyInit()
     stop_send_buffer_queue_thread_.store(false, std::memory_order_release);
     stop_recv_buffer_queue_thread_.store(false, std::memory_order_release);
     stop_wait_send_finish_queue_thread_.store(false, std::memory_order_release);
-    // stop_wait_recv_finish_queue_thread_.store(false, std::memory_order_release);
 
     meta_recv_thread_   = std::thread([this]() { this->metaRecvQueueThread(std::chrono::milliseconds(0)); });
     data_recv_thread_   = std::thread([this]() { this->dataRecvQueueThread(std::chrono::milliseconds(0)); });
     send_buffer_thread_ = std::thread([this]() { this->SendBufferQueueThread(std::chrono::milliseconds(0)); });
     recv_buffer_thread_ = std::thread([this]() { this->RecvBufferQueueThread(std::chrono::milliseconds(0)); });
     send_finish_thread_ = std::thread([this]() { this->SendFinishQueueThread(std::chrono::milliseconds(0)); });
-    // recv_finish_thread_ = std::thread([this]() { this->RecvFinishQueueThread(std::chrono::milliseconds(0)); });
 
     SLIME_LOG_INFO("All Proxy Threads Started Successfully");
 }
@@ -108,7 +105,6 @@ void RDMAEndpoint::proxyDestroy()
     stop_send_buffer_queue_thread_.store(true, std::memory_order_release);
     stop_recv_buffer_queue_thread_.store(true, std::memory_order_release);
     stop_wait_send_finish_queue_thread_.store(true, std::memory_order_release);
-    // stop_wait_recv_finish_queue_thread_.store(true, std::memory_order_release);
 
     if (meta_recv_thread_.joinable()) {
         meta_recv_thread_.join();
@@ -134,11 +130,6 @@ void RDMAEndpoint::proxyDestroy()
         send_finish_thread_.join();
         SLIME_LOG_INFO("Send finish thread stopped");
     }
-
-    // if (recv_finish_thread_.joinable()) {
-    //     recv_finish_thread_.join();
-    //     SLIME_LOG_INFO("Recv finish thread stopped");
-    // }
 
     SLIME_LOG_INFO("All Proxy Threads Stopped Successfully");
 }
@@ -281,11 +272,6 @@ void RDMAEndpoint::postDataWrite(RDMABufferQueueElement& element, std::shared_pt
 
     AssignmentBatch batch = AssignmentBatch{Assignment(MR_KEY, 0, 0, size)};
 
-    // std::cout << "POST DATA WRITE" << std::endl;
-    // std::cout << "addr: " << addr << std::endl;
-    // std::cout << "size: " << size << std::endl;
-    // std::cout << "rkey: " << rkey << std::endl;
-
     auto is_finish_ptr = element.is_finished_ptr_;
     is_finish_ptr->store(false, std::memory_order_release);
     auto data_write_callback = [idx, is_finish_ptr](int status, int slot_id) mutable {
@@ -345,10 +331,8 @@ void RDMAEndpoint::dataRecvQueueThread(std::chrono::milliseconds timeout)
     while (!stop_data_recv_queue_thread_.load(std::memory_order_acquire)) {
         uint32_t idx;
         if (data_recv_queue_.getFrontTaskId(idx)) {
-            // std::cout << "dataRecv idx" << idx << std::endl;
             bool found = data_recv_queue_.peekQueue(
                 idx, [](const auto& e) { return e.is_finished_ptr_->load(std::memory_order_acquire); });
-            // std::cout << "dataRecv found" << found << std::endl;
             if (found) {
                 RDMABufferQueueElement element = recv_buffer_mapping_[idx];
                 element.rdma_buffer_->recvDoneCallback();
@@ -393,7 +377,6 @@ void RDMAEndpoint::SendBufferQueueThread(std::chrono::milliseconds timeout)
                     send_finish_queue_.enqueue(element);
                     if (meta_slots_manager_->releaseSlot(idx)) {
                         addPreQueueElement(OpCode::SEND);
-                        // std::cout << "!!!!!!!!!!!!!!!!!" << std::endl;
                     }
                     else {
                         SLIME_LOG_ERROR("FAIL to release meta_slots_manager_");
@@ -423,15 +406,12 @@ void RDMAEndpoint::RecvBufferQueueThread(std::chrono::milliseconds timeout)
     while (!stop_recv_buffer_queue_thread_.load(std::memory_order_acquire)) {
         uint32_t idx;
         if (recv_buffer_queue_.getFrontTaskId(idx)) {
-            // std::cout << "data_slots_manager_" << std::endl;
-            // data_slots_manager_->printSlots();
             if (data_slots_manager_->checkSlotReady(idx)) {
                 RDMABufferQueueElement element;
                 if (recv_buffer_queue_.fetchQueue(element)) {
                     postMetaWrite(element.unique_id_, element.rdma_buffer_);
                     recv_buffer_mapping_.emplace(idx, element);
                     data_slots_manager_->releaseSlot(idx);
-                    // data_slots_manager_->printSlots();
                 }
                 else {
                     SLIME_LOG_ERROR("FAIL to fetchQueue recv_buffer_queue_");
@@ -456,17 +436,13 @@ void RDMAEndpoint::SendFinishQueueThread(std::chrono::milliseconds timeout)
 
     while (!stop_wait_send_finish_queue_thread_.load(std::memory_order_acquire)) {
         uint32_t idx;
-        // std::cout << "send_finish_queue_ size: " << send_finish_queue_.size() << std::endl;
         if (send_finish_queue_.getFrontTaskId(idx)) {
-            // std::cout << "send_finish_queue_ idx: " << idx << std::endl;
             bool found = send_finish_queue_.peekQueue(
                 idx, [](const auto& e) { return e.is_finished_ptr_->load(std::memory_order_acquire); });
             if (found) {
-                // std::cout << "send  found" << std::endl;
                 RDMABufferQueueElement element;
                 if (send_finish_queue_.fetchQueue(element)) {
                     element.rdma_buffer_->sendDoneCallback();
-                    // std::cout << "sendDoneCallback" << std::endl;
                     SLIME_LOG_DEBUG(
                         "SUCCESS to send_finish_queue_ ", idx, " and the slot id ", idx % SLIME_STATUS_SLOT_SIZE);
                 }
@@ -487,112 +463,4 @@ void RDMAEndpoint::SendFinishQueueThread(std::chrono::milliseconds timeout)
     SLIME_LOG_INFO("SendFinishQueueThread stopped");
 }
 
-// void RDMAEndpoint::RecvFinishQueueThread(std::chrono::milliseconds timeout)
-// {
-//     SLIME_LOG_INFO("SendBufferQueueThread started (timeout={}ms)", timeout.count());
-
-//     while (!stop_wait_recv_finish_queue_thread_.load(std::memory_order_acquire)) {
-//         uint32_t idx;
-//         if (send_finish_queue_.getFrontTaskId(idx)) {
-
-//             if (temp_slots_manager_->checkSlotReady(idx)) {
-//                 RDMABufferQueueElement element;
-//                 if (recv_finish_queue_.fetchQueue(element)) {
-//                     element.rdma_buffer_->recvDoneCallback();
-//                     if (temp_slots_manager_->releaseSlot(idx)) {
-//                         addPreQueueElement(OpCode::RECV);
-//                     }
-//                     else {
-//                         SLIME_LOG_ERROR("FAIL to set META RECV RING SLOT status of task id ",
-//                                         idx,
-//                                         " and the slot id ",
-//                                         idx % SLIME_STATUS_SLOT_SIZE);
-//                     }
-//                 }
-//                 else {
-//                     SLIME_LOG_ERROR("FAIL to set META RECV RING SLOT status of task id ",
-//                                     idx,
-//                                     " and the slot id ",
-//                                     idx % SLIME_STATUS_SLOT_SIZE);
-//                 }
-//             }
-//         }
-//         else {
-//             if (timeout.count() > 0) {
-//                 std::this_thread::sleep_for(timeout);
-//             }
-//             else {
-//                 std::this_thread::yield();
-//             }
-//         }
-//     }
-//     SLIME_LOG_INFO("SendBufferQueueThread stopped");
-// }
 }  // namespace slime
-
-// int RDMASendRecvTask::makeRemoteDataMR()
-// {
-//     if (!rdma_buffer_ || !rdma_endpoint_) {
-//         SLIME_LOG_ERROR("Null pointer detected: rdma_buffer_=" << rdma_buffer_
-//                                                                << ", rdma_endpoint_=" << rdma_endpoint_);
-//         return -1;
-//     }
-
-//     std::string prefix = (rdma_operation_ == OpCode::SEND) ? "DATA_SEND_" : "DATA_RECV_";
-//     std::string MR_KEY = prefix + std::to_string(unique_slot_id_) + "_";
-//     auto        mr     = rdma_endpoint_->dataCtx()->get_remote_mr(MR_KEY + std::to_string(0));
-
-//     if (mr.addr == 0) {
-//         auto& meta_buffer = rdma_endpoint_->metaBuffer();
-//         for (size_t i = 0; i < rdma_buffer_->batch_size(); ++i) {
-//             uint64_t addr = meta_buffer[unique_slot_id_ % MAX_META_BUFFER_SIZE].mr_addr[i];
-//             uint32_t size = meta_buffer[unique_slot_id_ % MAX_META_BUFFER_SIZE].mr_size[i];
-//             uint32_t rkey = meta_buffer[unique_slot_id_ % MAX_META_BUFFER_SIZE].mr_rkey[i];
-//             rdma_endpoint_->dataCtx()->register_remote_memory_region(MR_KEY + std::to_string(i), addr, size,
-//             rkey);
-//         }
-//     }
-
-//     else {
-//         SLIME_LOG_DEBUG("The REMOTE DATA MR has been REGISTERED! The SLOT_ID is: ", unique_slot_id_);
-//     }
-
-//     return 0;
-// }
-
-// void RDMAEndpoint::connect(const json& data_ctx_info, const json& meta_ctx_info)
-// {
-//     data_ctx_->connect(data_ctx_info);
-//     meta_ctx_->connect(meta_ctx_info);
-//     data_ctx_->launch_future();
-//     meta_ctx_->launch_future();
-//     RDMA_tasks_threads_running_ = true;
-//     rdma_tasks_threads_         = std::thread([this] { this->mainQueueThread(std::chrono::milliseconds(100)); });
-//     rdma_task_pool_ = std::make_shared<RDMASendRecvTaskPool>(shared_from_this());
-// }
-
-// // 生成meta Assignment 和 data Assignment
-// int RDMASendRecvTask::makeAssignmentBatch()
-// {
-//     size_t meta_buffer_idx = unique_slot_id_ % MAX_META_BUFFER_SIZE;
-//     if (rdma_operation_ == OpCode::SEND) {
-//         AssignmentBatch batch;
-//         std::string     prefix = "DATA_SEND_";
-//         std::cout << "rdma_buffer_->batch_size()" << rdma_buffer_->batch_size() << std::endl;
-//         for (size_t i = 0; i < rdma_buffer_->batch_size(); ++i) {
-//             batch.push_back(Assignment(prefix + std::to_string(unique_slot_id_) + "_" + std::to_string(i),
-//                                        0,
-//                                        0,
-//                                        rdma_buffer_->view_batch()[i].length));
-//         }
-//         data_assignment_batch_ = batch;
-//     }
-//     if (rdma_operation_ == OpCode::RECV) {
-//         meta_assignment_batch_ = AssignmentBatch{
-//             Assignment("meta_buffer",
-//                        meta_buffer_idx * sizeof(meta_data_t),
-//                        MAX_META_BUFFER_SIZE * sizeof(meta_data_t) + meta_buffer_idx * sizeof(meta_data_t),
-//                        sizeof(meta_data_t))};
-//     }
-//     return 0;
-// }

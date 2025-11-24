@@ -100,8 +100,7 @@ c10::intrusive_ptr<::c10d::Work> slimeBackend::send(std::vector<at::Tensor>& ten
         offset.push_back(0);
         data_size.push_back(static_cast<size_t>(tensors[i].numel() * tensors[i].itemsize()));
     }
-    // std::cout << "batch_size:" << batch_size << std::endl;
-    // std::cout << "Endpoint iDX:" << mod_positive(dstRank - rank_, size_ - 1) << std::endl;
+
     auto buf = std::make_shared<RDMABuffer>(
         end_point_set_[mod_positive(dstRank - rank_, size_ - 1)], ptrs[0], offset[0], data_size[0]);
     buf->send();
@@ -127,8 +126,6 @@ c10::intrusive_ptr<::c10d::Work> slimeBackend::recv(std::vector<at::Tensor>& ten
         offset.push_back(0);
         data_size.push_back(static_cast<size_t>(tensors[i].numel() * tensors[i].itemsize()));
     }
-    // std::cout << "batch_size:" << batch_size << std::endl;
-    // std::cout << "Endpoint iDX:" << mod_positive(srcRank - rank_, size_ - 1) << std::endl;
     auto buf = std::make_shared<RDMABuffer>(
         end_point_set_[mod_positive(srcRank - rank_, size_ - 1)], ptrs[0], offset[0], data_size[0]);
     buf->recv();

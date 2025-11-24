@@ -310,7 +310,6 @@ class RDMAEndpoint: public std::enable_shared_from_this<RDMAEndpoint> {
 public:
     explicit RDMAEndpoint(const std::string& dev_name, size_t ib_port, const std::string& link_type, size_t qp_nums);
 
-    // TODO: 设计聚合多网卡传输的Send Recv
 
     json dataCtxInfo() const
     {

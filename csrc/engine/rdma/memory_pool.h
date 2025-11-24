@@ -34,13 +34,10 @@ public:
 
     ~RDMAMemoryPool()
     {
-        std::cout << mrs_.size() << std::endl;
+
         for (auto& mr : mrs_) {
-            std::cout << "mr: " << mr.first << std::endl;
             if (mr.second)
                 ibv_dereg_mr(mr.second);
-
-            std::cout << "!!!!! " << std::endl;
         }
         mrs_.clear();
     }
