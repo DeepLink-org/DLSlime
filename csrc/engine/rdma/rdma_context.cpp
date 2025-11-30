@@ -389,7 +389,6 @@ void split_assign_by_max_length(OpCode           opcode,
                                 AssignmentBatch& batch_split_after_max_length,
                                 size_t           max_length)
 {
-    // split assignment by length
     for (size_t i = 0; i < batch.size(); ++i) {
         if (batch[i].length < max_length) {
             batch_split_after_max_length.push_back(std::move(batch[i]));
@@ -434,7 +433,6 @@ RDMAContext::submit(OpCode opcode, AssignmentBatch& batch, callback_fn_t callbac
     size_t          length = SLIME_MAX_LENGTH_PER_ASSIGNMENT;
     AssignmentBatch batch_split;
     split_assign_by_max_length(opcode, batch, batch_split, length);
-
     AssignmentBatch batch_after_agg_qp;
     while (batch_split.size() < SLIME_AGG_QP_NUM) {
         length = length / 2;

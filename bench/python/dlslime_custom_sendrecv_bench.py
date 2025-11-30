@@ -33,7 +33,7 @@ def setup_rdma_connection(args):
     """Establish RDMA connection between sender and receiver"""
     print(f'Initializing RDMA endpoint for {args.mode}...')
     
-    num_qp = 4
+    num_qp = 1
     end_point = _slime_c.rdma_endpoint(args.device, args.rdmaport, args.type, num_qp)
     
     zmq_ctx = zmq.Context()

@@ -92,7 +92,7 @@ public:
 
         if (pd_)
             ibv_dealloc_pd(pd_);
-
+        
         if (ib_ctx_)
             ibv_close_device(ib_ctx_);
 
