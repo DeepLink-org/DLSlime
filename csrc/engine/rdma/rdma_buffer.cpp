@@ -6,12 +6,12 @@ namespace slime {
 
 void RDMABuffer::send()
 {
-    endpoint_->addRDMABuffer(OpCode::SEND, shared_from_this());
+    endpointv0_->addBuffer(OpCode::SEND, shared_from_this());
 }
 
 void RDMABuffer::recv()
 {
-    endpoint_->addRDMABuffer(OpCode::RECV, shared_from_this());
+    endpointv0_->addBuffer(OpCode::RECV, shared_from_this());
 }
 
 void RDMABuffer::sendDoneCallback()
@@ -51,7 +51,7 @@ bool RDMABuffer::waitRecv()
 
     recv_cv_.wait(lock, [this]() { return recv_completed_ > 0; });
     recv_pending_ = false;
-    SLIME_LOG_INFO("complete to send the data.");
+    SLIME_LOG_INFO("complete to recv the data.");
     return true;
 }
 }  // namespace slime

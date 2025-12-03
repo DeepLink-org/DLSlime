@@ -4,7 +4,7 @@
 
 namespace slime {
 
-RDMAAssignment::RDMAAssignment(OpCode opcode, AssignmentBatch& batch, callback_fn_t callback)
+RDMAAssign::RDMAAssign(OpCode opcode, AssignmentBatch& batch, callback_fn_t callback)
 {
     opcode_ = opcode;
 
@@ -13,20 +13,20 @@ RDMAAssignment::RDMAAssignment(OpCode opcode, AssignmentBatch& batch, callback_f
     batch_      = new Assignment[batch_size_];
     std::move(batch.begin(), batch.end(), batch_);
 
-    callback_info_ = std::make_shared<callback_info_t>(opcode, batch_size_, callback);
+    callback_info_ = std::make_shared<callback_info_t>(opcode, batch_size_, callback, batch_);
 }
 
-void RDMAAssignment::wait()
+void RDMAAssign::wait()
 {
     callback_info_->wait();
 }
 
-bool RDMAAssignment::query()
+bool RDMAAssign::query()
 {
     return callback_info_->query();
 }
 
-json RDMAAssignment::dump() const
+json RDMAAssign::dump() const
 {
     json j;
     for (int i = 0; i < batch_size_; ++i)
@@ -34,28 +34,28 @@ json RDMAAssignment::dump() const
     return j;
 }
 
-std::ostream& operator<<(std::ostream& os, const RDMAAssignment& assignment)
+std::ostream& operator<<(std::ostream& os, const RDMAAssign& assignment)
 {
     os << assignment.dump().dump(2);
     return os;
 }
 
-RDMASchedulerAssignment::~RDMASchedulerAssignment() {}
+RDMAAssignHandler::~RDMAAssignHandler() {}
 
-void RDMASchedulerAssignment::wait()
+void RDMAAssignHandler::wait()
 {
-    for (RDMAAssignmentSharedPtr& rdma_assignment : rdma_assignment_batch_) {
+    for (RDMAAssignSharedPtr& rdma_assignment : rdma_assignment_batch_) {
         rdma_assignment->wait();
     }
     return;
 }
 
-void RDMASchedulerAssignment::query()
+void RDMAAssignHandler::query()
 {
     throw std::runtime_error("Not Implemented.");
 }
 
-json RDMASchedulerAssignment::dump() const
+json RDMAAssignHandler::dump() const
 {
     json j;
     for (int i = 0; i < rdma_assignment_batch_.size(); ++i) {
@@ -64,7 +64,7 @@ json RDMASchedulerAssignment::dump() const
     return j;
 }
 
-std::ostream& operator<<(std::ostream& os, const RDMASchedulerAssignment& assignment)
+std::ostream& operator<<(std::ostream& os, const RDMAAssignHandler& assignment)
 {
     os << assignment.dump().dump(2);
     return os;

@@ -13,6 +13,7 @@
 #include "engine/rdma/rdma_config.h"
 #include "json.hpp"
 #include "logging.h"
+#include "xxhash.h"
 
 namespace slime {
 
@@ -34,7 +35,6 @@ public:
 
     ~RDMAMemoryPool()
     {
-
         for (auto& mr : mrs_) {
             if (mr.second)
                 ibv_dereg_mr(mr.second);
@@ -42,25 +42,25 @@ public:
         mrs_.clear();
     }
 
-    int register_memory_region(const std::string& mr_key, uintptr_t data_ptr, uint64_t length);
-    int unregister_memory_region(const std::string& mr_key);
+    int registerMemoryRegion(const uintptr_t& mr_key, uintptr_t data_ptr, uint64_t length);
+    int unregisterMemoryRegion(const uintptr_t& mr_key);
 
-    int register_remote_memory_region(const std::string& mr_key, uintptr_t addr, size_t length, uint32_t rkey);
-    int register_remote_memory_region(const std::string& mr_key, const json& mr_info);
-    int unregister_remote_memory_region(const std::string& mr_key);
+    int registerRemoteMemoryRegion(const uintptr_t& mr_key, uintptr_t addr, size_t length, uint32_t rkey);
+    int registerRemoteMemoryRegion(const uintptr_t& mr_key, const json& mr_info);
+    int unregisterRemoteMemoryRegion(const uintptr_t& mr_key);
 
-    inline struct ibv_mr* get_mr(const std::string& mr_key)
+    inline struct ibv_mr* get_mr(const uintptr_t& mr_key)
     {
         std::unique_lock<std::mutex> lock(mrs_mutex_);
         if (mrs_.find(mr_key) != mrs_.end()) {
             SLIME_LOG_DEBUG("mr_key: ", mr_key, " is found in mrs_");
             return mrs_[mr_key];
         }
-        SLIME_LOG_WARN("mr_key: ", mr_key, "not found in mrs_");
+        SLIME_LOG_WARN("mr_key: ", mr_key, " not found in mrs_");
         return nullptr;
     }
 
-    inline remote_mr_t get_remote_mr(const std::string& mr_key)
+    inline remote_mr_t get_remote_mr(const uintptr_t& mr_key)
     {
         std::unique_lock<std::mutex> lock(remote_mrs_mutex_);
         if (remote_mrs_.find(mr_key) != remote_mrs_.end()) {
@@ -80,7 +80,7 @@ private:
     std::mutex mrs_mutex_;
     std::mutex remote_mrs_mutex_;
 
-    std::unordered_map<std::string, struct ibv_mr*> mrs_;
-    std::unordered_map<std::string, remote_mr_t>    remote_mrs_;
+    std::unordered_map<uintptr_t, struct ibv_mr*> mrs_;
+    std::unordered_map<uintptr_t, remote_mr_t>    remote_mrs_;
 };
 }  // namespace slime

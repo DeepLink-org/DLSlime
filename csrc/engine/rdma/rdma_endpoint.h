@@ -344,7 +344,7 @@ private:
     void addRDMABuffer(OpCode rdma_opcode, std::shared_ptr<RDMABuffer> rdma_buffer);
     void postMetaWrite(uint32_t idx, std::shared_ptr<RDMABuffer> rdma_buffer);
     void postDataWrite(RDMABufferQueueElement& element, std::shared_ptr<RDMABuffer> rdma_buffer);
-    void postRDMAAssignment(OpCode rdma_opcode);
+    void postRDMAAssign(OpCode rdma_opcode);
 
     ProxyQueue<RDMAPrePostQueueElement> meta_recv_queue_;
     ProxyQueue<RDMAPrePostQueueElement> data_recv_queue_;

@@ -32,6 +32,7 @@ using json = nlohmann::json;
 class RDMAContext {
 
     friend class RDMAEndpoint;  // RDMA Endpoint need to use the register memory pool in context
+    friend class RDMAEndpointV0;
 
 public:
     /*
@@ -99,12 +100,12 @@ public:
         SLIME_LOG_DEBUG("RDMAContext deconstructed")
     }
 
-    struct ibv_mr* get_mr(const std::string& mr_key)
+    struct ibv_mr* get_mr(const uintptr_t&  mr_key)
     {
         return memory_pool_->get_mr(mr_key);
     }
 
-    remote_mr_t get_remote_mr(const std::string& mr_key)
+    remote_mr_t get_remote_mr(const uintptr_t&  mr_key)
     {
         return memory_pool_->get_remote_mr(mr_key);
     }
@@ -112,31 +113,31 @@ public:
     int64_t init(const std::string& dev_name, uint8_t ib_port, const std::string& link_type);
 
     /* Memory Allocation */
-    inline int64_t register_memory_region(std::string mr_key, uintptr_t data_ptr, size_t length)
+    inline int64_t registerMemoryRegion(const uintptr_t& mr_key, uintptr_t data_ptr, size_t length)
     {
-        memory_pool_->register_memory_region(mr_key, data_ptr, length);
+        memory_pool_->registerMemoryRegion(mr_key, data_ptr, length);
         return 0;
     }
 
-    inline int register_remote_memory_region(const std::string& mr_key, uintptr_t addr, size_t length, uint32_t rkey)
+    inline int registerRemoteMemoryRegion(const uintptr_t&  mr_key, uintptr_t addr, size_t length, uint32_t rkey)
     {
-        memory_pool_->register_remote_memory_region(mr_key, addr, length, rkey);
+        memory_pool_->registerRemoteMemoryRegion(mr_key, addr, length, rkey);
         return 0;
     }
 
-    inline int64_t register_remote_memory_region(std::string mr_key, json mr_info)
+    inline int64_t registerRemoteMemoryRegion(const uintptr_t& mr_key, json mr_info)
     {
-        memory_pool_->register_remote_memory_region(mr_key, mr_info);
+        memory_pool_->registerRemoteMemoryRegion(mr_key, mr_info);
         return 0;
     }
 
-    inline int64_t unregister_memory_region(std::string mr_key)
+    inline int64_t unregisterMemoryRegion(const uintptr_t&  mr_key)
     {
-        memory_pool_->unregister_memory_region(mr_key);
+        memory_pool_->unregisterMemoryRegion(mr_key);
         return 0;
     }
 
-    int64_t reload_memory_pool()
+    int64_t reloadMemoryPool()
     {
         memory_pool_ = std::make_unique<RDMAMemoryPool>(pd_);
         return 0;
@@ -145,7 +146,7 @@ public:
     /* RDMA Link Construction */
     int64_t connect(const json& endpoint_info_json);
     /* Submit an assignment */
-    std::shared_ptr<RDMASchedulerAssignment> submit(OpCode           opcode,
+    std::shared_ptr<RDMAAssignHandler> submit(OpCode           opcode,
                                                     AssignmentBatch& assignment,
                                                     callback_fn_t    callback = nullptr,
                                                     int              qpi      = UNDEFINED_QPI,
@@ -171,7 +172,7 @@ public:
     }
 
     json endpoint_info() const
-    {
+    {   
         json endpoint_info = json{{"rdma_info", local_rdma_info()}, {"mr_info", memory_pool_->mr_info()}};
         return endpoint_info;
     }
@@ -215,7 +216,7 @@ private:
 
         /* Assignment Queue */
         std::mutex                          assign_queue_mutex_;
-        std::queue<RDMAAssignmentSharedPtr> assign_queue_;
+        std::queue<RDMAAssignSharedPtr> assign_queue_;
         std::atomic<int>                    outstanding_rdma_reads_{0};
 
         /* Has Runnable Assignment */
@@ -269,14 +270,12 @@ private:
     /* Working Queue Dispatch */
     int64_t wq_dispatch_handle(int qpi);
 
-    int socketId();
-
     /* Async RDMA SendRecv */
-    int64_t post_send_batch(int qpi, RDMAAssignmentSharedPtr assign);
-    int64_t post_recv_batch(int qpi, RDMAAssignmentSharedPtr assign);
+    int64_t post_send_batch(int qpi, RDMAAssignSharedPtr assign);
+    int64_t post_recv_batch(int qpi, RDMAAssignSharedPtr assign);
 
     /* Async RDMA Read */
-    int64_t post_rc_oneside_batch(int qpi, RDMAAssignmentSharedPtr assign);
+    int64_t post_rc_oneside_batch(int qpi, RDMAAssignSharedPtr assign);
 
     int64_t service_level_{0};
 };

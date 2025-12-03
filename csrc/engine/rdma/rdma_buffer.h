@@ -2,6 +2,7 @@
 #include "engine/rdma/memory_pool.h"
 #include "engine/rdma/rdma_context.h"
 #include "engine/rdma/rdma_endpoint.h"
+#include "engine/rdma/rdma_endpoint_v0.h"
 
 #include <condition_variable>
 #include <cstdint>
@@ -23,10 +24,24 @@ class RDMAEndpoint;
 
 class RDMABuffer: public std::enable_shared_from_this<RDMABuffer> {
     friend class RDMAEndpoint;
+    friend class RDMAEndpointV0;
 
 public:
     RDMABuffer(std::shared_ptr<RDMAEndpoint> endpoint, uintptr_t ptr, size_t offset, size_t data_size):
-        endpoint_(endpoint), ptr_(ptr), offset_(offset), data_size_(data_size)
+        endpoint_(endpoint),
+        ptr_(ptr),
+        offset_(offset),
+        data_size_(data_size),
+        view_(storage_view_t{ptr, offset, data_size})
+    {
+    }
+
+    RDMABuffer(std::shared_ptr<RDMAEndpointV0> endpoint, uintptr_t ptr, size_t offset, size_t data_size):
+        endpointv0_(endpoint),
+        ptr_(ptr),
+        offset_(offset),
+        data_size_(data_size),
+        view_(storage_view_t{ptr, offset, data_size})
     {
     }
 
@@ -58,9 +73,13 @@ public:
 
 private:
     std::shared_ptr<RDMAEndpoint> endpoint_;
-    uintptr_t                     ptr_;
-    size_t                        offset_;
-    size_t                        data_size_;
+    std::shared_ptr<RDMAEndpointV0> endpointv0_;
+
+    uintptr_t ptr_;
+    size_t    offset_;
+    size_t    data_size_;
+
+    storage_view_t view_;
 
     std::vector<uintptr_t> ptrs_batch_;
     std::vector<size_t>    offset_batch_;
@@ -79,6 +98,8 @@ private:
 
     std::mutex send_mutex_;
     std::mutex recv_mutex_;
+
+    std::atomic<int32_t> slot_id_{0};
 };
 
 }  // namespace slime

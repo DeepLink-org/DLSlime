@@ -10,7 +10,7 @@
 
 #include <pybind11/chrono.h>
 
-#include "engine/rdma/rdma_endpoint.h"
+#include "engine/rdma/rdma_endpoint_v0.h"
 #include "engine/rdma/utils.h"
 
 namespace slime {
@@ -201,7 +201,7 @@ public:
 private:
     void                                       exchangeChannelInfo();
     c10::intrusive_ptr<::c10d::Store>          store_;
-    std::vector<std::shared_ptr<RDMAEndpoint>> end_point_set_;
+    std::vector<std::shared_ptr<RDMAEndpointV0>> end_point_set_;
     std::vector<json>                          local_channel_info_;
     std::vector<json>                          global_channel_info_;
     uint64_t                                   seq_{0};

@@ -39,7 +39,7 @@ def benchmark_send_recv(args):
     if args.sizes:
         sizes = [int(s) for s in args.sizes]
     else:
-        sizes = [2**n for n in range(11, 12)]  # 256B to 256MB
+        sizes = [2**n for n in range(10, 12)]  # 256B to 256MB
 
     print("Prepare data sizes: ", sizes)
     benchmark_data = []
@@ -160,5 +160,5 @@ if __name__ == "__main__":
     # Set environment variables
     os.environ["MASTER_ADDR"] = args.master_addr
     os.environ["MASTER_PORT"] = args.master_port
-
+    os.environ["NCCL_P2P_DISABLE"] = "1"
     benchmark_send_recv(args)

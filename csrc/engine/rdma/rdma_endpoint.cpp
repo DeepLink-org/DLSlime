@@ -5,6 +5,8 @@
 #include "engine/rdma/rdma_common.h"
 #include "engine/rdma/rdma_context.h"
 
+#include "../../utils.h"
+
 #include "logging.h"
 
 #include <atomic>
@@ -15,6 +17,7 @@
 #include <mutex>
 #include <stdexcept>
 #include <string>
+#include <immintrin.h>
 
 namespace slime {
 
@@ -38,18 +41,18 @@ RDMAEndpoint::RDMAEndpoint(const std::string& dev_name, size_t ib_port, const st
     SLIME_LOG_INFO("Allocate MR Buffer and Dummy Buffer");
     meta_buffer_.resize(SLIME_META_BUFFER_SIZE * 2);
     memset(meta_buffer_.data(), 0, meta_buffer_.size() * sizeof(meta_data_t));
-    meta_ctx_->register_memory_region(
-        "meta_buffer", reinterpret_cast<uintptr_t>(meta_buffer_.data()), sizeof(meta_data_t) * meta_buffer_.size());
+    meta_ctx_->registerMemoryRegion(
+        get_xxhash("meta_buffer"), reinterpret_cast<uintptr_t>(meta_buffer_.data()), sizeof(meta_data_t) * meta_buffer_.size());
 
     dum_meta_buffer_.resize(SLIME_DUMMY_BUFFER_SIZE);
     memset(dum_meta_buffer_.data(), 0, dum_meta_buffer_.size() * sizeof(uint32_t));
-    meta_ctx_->register_memory_region("dum_meta_buffer",
+    meta_ctx_->registerMemoryRegion(get_xxhash("dum_meta_buffer"),
                                       reinterpret_cast<uintptr_t>(dum_meta_buffer_.data()),
                                       sizeof(uint32_t) * dum_meta_buffer_.size());
 
     dum_data_buffer_.resize(SLIME_DUMMY_BUFFER_SIZE);
     memset(dum_data_buffer_.data(), 0, dum_data_buffer_.size() * sizeof(uint32_t));
-    data_ctx_->register_memory_region("dum_data_buffer",
+    data_ctx_->registerMemoryRegion(get_xxhash("dum_data_buffer"),
                                       reinterpret_cast<uintptr_t>(dum_data_buffer_.data()),
                                       sizeof(uint32_t) * dum_data_buffer_.size());
 
@@ -159,7 +162,9 @@ void RDMAEndpoint::addPreQueueElement(OpCode rdma_opcode)
             is_finish_ptr->store(true, std::memory_order_release);
         };
 
-        AssignmentBatch assignment_batch_ = AssignmentBatch{Assignment("dum_meta_buffer", 0, 0, 16 * sizeof(uint32_t))};
+        std::string     hash_string = "dum_meta_buffer";
+        AssignmentBatch assignment_batch_ =
+            AssignmentBatch{Assignment(get_xxhash("dum_meta_buffer"), 0, 0, 16 * sizeof(uint32_t))};
         meta_ctx_->submit(OpCode::RECV, assignment_batch_, meta_recv_callback, RDMAContext::UNDEFINED_QPI, idx);
 
         meta_recv_queue_.enqueue(meta_recv_queue_element);
@@ -175,7 +180,8 @@ void RDMAEndpoint::addPreQueueElement(OpCode rdma_opcode)
         auto     data_recv_callback = [idx, is_finish_ptr](int status, int slot_id) mutable {
             is_finish_ptr->store(true, std::memory_order_release);
         };
-        AssignmentBatch assignment_batch_ = AssignmentBatch{Assignment("dum_data_buffer", 0, 0, 16 * sizeof(uint32_t))};
+        AssignmentBatch assignment_batch_ =
+            AssignmentBatch{Assignment(get_xxhash("dum_data_buffer"), 0, 0, 16 * sizeof(uint32_t))};
         data_ctx_->submit(OpCode::RECV, assignment_batch_, data_recv_callback, RDMAContext::UNDEFINED_QPI, idx);
 
         data_recv_queue_.enqueue(data_recv_queue_element);
@@ -212,16 +218,16 @@ void RDMAEndpoint::postMetaWrite(uint32_t idx, std::shared_ptr<RDMABuffer> rdma_
 
     std::string prefix      = "DATA_RECV_";
     std::string MR_KEY      = prefix + std::to_string(idx);
-    auto        mr_is_exist = data_ctx_->get_mr(MR_KEY);
+    auto        mr_is_exist = data_ctx_->get_mr(get_xxhash(MR_KEY));
 
     if (mr_is_exist != nullptr) {
         SLIME_LOG_DEBUG("The RECV DATA MR has been REGISTERED! The SLOT_ID is: ", idx);
     }
     else {
-        data_ctx_->register_memory_region(MR_KEY, rdma_buffer->ptr_, rdma_buffer->data_size_);
+        data_ctx_->registerMemoryRegion(get_xxhash(MR_KEY), rdma_buffer->ptr_, rdma_buffer->data_size_);
     }
 
-    auto mr = data_ctx_->get_mr(MR_KEY);
+    auto mr = data_ctx_->get_mr(get_xxhash(MR_KEY));
 
     meta_buffer_[SLIME_META_BUFFER_SIZE + idx % SLIME_META_BUFFER_SIZE].mr_addr = reinterpret_cast<uint64_t>(mr->addr);
     meta_buffer_[SLIME_META_BUFFER_SIZE + idx % SLIME_META_BUFFER_SIZE].mr_rkey = mr->rkey;
@@ -230,7 +236,7 @@ void RDMAEndpoint::postMetaWrite(uint32_t idx, std::shared_ptr<RDMABuffer> rdma_
 
     size_t          meta_buffer_idx = idx % SLIME_META_BUFFER_SIZE;
     AssignmentBatch meta_assignment_batch_ =
-        AssignmentBatch{Assignment("meta_buffer",
+        AssignmentBatch{Assignment(get_xxhash("meta_buffer"),
                                    meta_buffer_idx * sizeof(meta_data_t),
                                    SLIME_META_BUFFER_SIZE * sizeof(meta_data_t) + meta_buffer_idx * sizeof(meta_data_t),
                                    sizeof(meta_data_t))};
@@ -249,28 +255,28 @@ void RDMAEndpoint::postDataWrite(RDMABufferQueueElement& element, std::shared_pt
     uint32_t    idx         = element.unique_id_;
     std::string prefix      = "DATA_SEND_";
     std::string MR_KEY      = prefix + std::to_string(idx);
-    auto        mr_is_exist = data_ctx_->get_mr(MR_KEY);
+    auto        mr_is_exist = data_ctx_->get_mr(get_xxhash(MR_KEY));
     if (mr_is_exist != nullptr) {
         SLIME_LOG_DEBUG("The SEND DATA MR has been REGISTERED! The SLOT_ID is: ", unique_SEND_SLOT_ID_);
     }
     else {
-        data_ctx_->register_memory_region(MR_KEY, rdma_buffer->ptr_, rdma_buffer->data_size_);
+        data_ctx_->registerMemoryRegion(get_xxhash(MR_KEY), rdma_buffer->ptr_, rdma_buffer->data_size_);
     }
 
-    auto mr_remote = data_ctx_->get_remote_mr(MR_KEY);
+    auto mr_remote = data_ctx_->get_remote_mr(get_xxhash(MR_KEY));
     if (mr_remote.rkey == 0) {
 
         addr = meta_buffer_[idx % SLIME_META_BUFFER_SIZE].mr_addr;
         size = meta_buffer_[idx % SLIME_META_BUFFER_SIZE].mr_size;
         rkey = meta_buffer_[idx % SLIME_META_BUFFER_SIZE].mr_rkey;
-        data_ctx_->register_remote_memory_region(MR_KEY, addr, size, rkey);
+        data_ctx_->registerRemoteMemoryRegion(get_xxhash(MR_KEY), addr, size, rkey);
     }
 
     else {
         SLIME_LOG_DEBUG("The REMOTE DATA MR has been REGISTERED! The SLOT_ID is: ", unique_SEND_SLOT_ID_);
     }
 
-    AssignmentBatch batch = AssignmentBatch{Assignment(MR_KEY, 0, 0, size)};
+    AssignmentBatch batch = AssignmentBatch{Assignment(get_xxhash(MR_KEY), 0, 0, size)};
 
     auto is_finish_ptr = element.is_finished_ptr_;
     is_finish_ptr->store(false, std::memory_order_release);

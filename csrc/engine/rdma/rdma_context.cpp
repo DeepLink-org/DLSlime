@@ -16,6 +16,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include "../../utils.h"
 #include "engine/assignment.h"
 #include "engine/rdma/ibv_helper.h"
 #include "engine/rdma/memory_pool.h"
@@ -227,29 +228,13 @@ int64_t RDMAContext::init(const std::string& dev_name, uint8_t ib_port, const st
     return 0;
 }
 
-int RDMAContext::socketId()
-{
-    // Adapted from https://github.com/kvcache-ai/Mooncake.git
-    std::string   path = "/sys/class/infiniband/" + device_name_ + "/device/numa_node";
-    std::ifstream file(path);
-    if (file.is_open()) {
-        int socket_id;
-        file >> socket_id;
-        file.close();
-        return socket_id;
-    }
-    else {
-        return 0;
-    }
-}
-
 int64_t RDMAContext::connect(const json& endpoint_info_json)
 {
     SLIME_LOG_INFO("RDMA context remote connecting");
     SLIME_LOG_DEBUG("RDMA context remote configuration: ", endpoint_info_json);
     // Register Remote Memory Region
     for (auto& item : endpoint_info_json["mr_info"].items()) {
-        register_remote_memory_region(item.key(), item.value());
+        registerRemoteMemoryRegion(item.value()["addr"].get<uintptr_t>(), item.value());
     }
     SLIME_ASSERT(!connected_, "Already connected!");
     SLIME_ASSERT_EQ(qp_list_len_, endpoint_info_json["rdma_info"].size(), "Peer must have same QP Size.");
@@ -332,13 +317,13 @@ int64_t RDMAContext::connect(const json& endpoint_info_json)
 void RDMAContext::launch_future()
 {
     cq_thread_ = std::thread([this]() -> void {
-        bindToSocket(socketId());
+        bindToSocket(socketId(device_name_));
         cq_poll_handle();
     });
 
     for (int qpi = 0; qpi < qp_list_len_; qpi++)
         qp_management_[qpi]->wq_thread_ = std::thread([this, qpi]() -> void {
-            bindToSocket(socketId());
+            bindToSocket(socketId(device_name_));
             wq_dispatch_handle(qpi);
         });
 }
@@ -397,6 +382,7 @@ void split_assign_by_max_length(OpCode           opcode,
             for (size_t j = 0; j < batch[i].length; j += max_length) {
                 batch_split_after_max_length.push_back(
                     Assignment(batch[i].mr_key,
+                               batch[i].remote_mr_key,
                                batch[i].target_offset + j,
                                batch[i].source_offset + j,
                                std::min(static_cast<size_t>(max_length), batch[i].length - j)));
@@ -426,7 +412,7 @@ void nsplit_assign_by_step(OpCode                        opcode,
     split_assign_by_step(opcode, batch, batch_nsplit, step);
 }
 
-std::shared_ptr<RDMASchedulerAssignment>
+std::shared_ptr<RDMAAssignHandler>
 RDMAContext::submit(OpCode opcode, AssignmentBatch& batch, callback_fn_t callback, int qpi, int32_t imm_data)
 {
     // Step 1: Split by max length
@@ -457,18 +443,19 @@ RDMAContext::submit(OpCode opcode, AssignmentBatch& batch, callback_fn_t callbac
     std::vector<AssignmentBatch> qp_batch;
     nsplit_assign_by_step(opcode, batch_split, qp_batch, SLIME_AGG_QP_NUM);
 
-    RDMAAssignmentSharedPtrBatch assigns;
+    RDMAAssignSharedPtrBatch assigns;
     for (int agg_idx = 0; agg_idx < SLIME_AGG_QP_NUM; ++agg_idx) {
         size_t                       agg_qpi = agg_qpi_list[agg_idx];
         std::unique_lock<std::mutex> lock(qp_management_[agg_qpi]->assign_queue_mutex_);
-        RDMAAssignmentSharedPtr      rdma_assignment;
+        RDMAAssignSharedPtr          rdma_assignment;
         std::vector<AssignmentBatch> batch_split_after_cq_depth;
         split_assign_by_step(opcode, qp_batch[agg_idx], batch_split_after_cq_depth, SLIME_MAX_CQ_DEPTH / 2);
 
         size_t split_size_this_qp = batch_split_after_cq_depth.size();
         for (int i = 0; i < split_size_this_qp; ++i) {
             callback_fn_t split_callback = (i == split_size_this_qp - 1 ? callback : [](int, int) { return 0; });
-            rdma_assignment = std::make_shared<RDMAAssignment>(opcode, batch_split_after_cq_depth[i], split_callback);
+            rdma_assignment = std::make_shared<RDMAAssign>(opcode, batch_split_after_cq_depth[i], split_callback);
+            SLIME_LOG_INFO("dump: ", rdma_assignment->dump());
             qp_management_[agg_qpi]->assign_queue_.push(rdma_assignment);
             rdma_assignment->with_imm_data_ = (i == split_size_this_qp - 1) ? (imm_data != UNDEFINED_IMM_DATA) : false;
             rdma_assignment->imm_data_      = (i == split_size_this_qp - 1) ? imm_data : UNDEFINED_IMM_DATA;
@@ -478,10 +465,10 @@ RDMAContext::submit(OpCode opcode, AssignmentBatch& batch, callback_fn_t callbac
 
         qp_management_[agg_qpi]->has_runnable_event_.notify_one();
     }
-    return std::make_shared<RDMASchedulerAssignment>(assigns);
+    return std::make_shared<RDMAAssignHandler>(assigns);
 }
 
-int64_t RDMAContext::post_send_batch(int qpi, RDMAAssignmentSharedPtr assign)
+int64_t RDMAContext::post_send_batch(int qpi, RDMAAssignSharedPtr assign)
 {
     int                 ret        = 0;
     size_t              batch_size = assign->batch_size();
@@ -521,7 +508,7 @@ int64_t RDMAContext::post_send_batch(int qpi, RDMAAssignmentSharedPtr assign)
     return 0;
 }
 
-int64_t RDMAContext::post_recv_batch(int qpi, RDMAAssignmentSharedPtr assign)
+int64_t RDMAContext::post_recv_batch(int qpi, RDMAAssignSharedPtr assign)
 {
     int64_t             ret        = 0;
     size_t              batch_size = assign->batch_size();
@@ -559,7 +546,7 @@ int64_t RDMAContext::post_recv_batch(int qpi, RDMAAssignmentSharedPtr assign)
     return 0;
 }
 
-int64_t RDMAContext::post_rc_oneside_batch(int qpi, RDMAAssignmentSharedPtr assign)
+int64_t RDMAContext::post_rc_oneside_batch(int qpi, RDMAAssignSharedPtr assign)
 {
     size_t              batch_size = assign->batch_size();
     struct ibv_send_wr* bad_wr     = NULL;
@@ -569,7 +556,7 @@ int64_t RDMAContext::post_rc_oneside_batch(int qpi, RDMAAssignmentSharedPtr assi
     for (size_t i = 0; i < batch_size; ++i) {
         Assignment     subassign   = assign->batch_[i];
         struct ibv_mr* mr          = memory_pool_->get_mr(subassign.mr_key);
-        remote_mr_t    remote_mr   = memory_pool_->get_remote_mr(subassign.mr_key);
+        remote_mr_t    remote_mr   = memory_pool_->get_remote_mr(subassign.remote_mr_key);
         uint64_t       remote_addr = remote_mr.addr;
         uint32_t       remote_rkey = remote_mr.rkey;
         memset(&sge[i], 0, sizeof(ibv_sge));
@@ -578,7 +565,12 @@ int64_t RDMAContext::post_rc_oneside_batch(int qpi, RDMAAssignmentSharedPtr assi
         sge[i].lkey   = mr->lkey;
         wr[i].wr_id =
             (i == batch_size - 1) ? (uintptr_t)(new callback_info_with_qpi_t{assign->callback_info_, qpi}) : 0;
-        wr[i].opcode              = ASSIGN_OP_2_IBV_WR_OP.at(assign->opcode_);
+
+        wr[i].opcode = ASSIGN_OP_2_IBV_WR_OP.at(assign->opcode_);
+        if (wr[i].opcode == IBV_WR_RDMA_WRITE_WITH_IMM and (i != batch_size - 1)) {
+            wr[i].opcode = IBV_WR_RDMA_WRITE;
+        }
+
         wr[i].sg_list             = &sge[i];
         wr[i].num_sge             = 1;
         wr[i].imm_data            = (i == batch_size - 1) ? assign->imm_data_ : UNDEFINED_IMM_DATA;
@@ -699,8 +691,8 @@ int64_t RDMAContext::wq_dispatch_handle(int qpi)
         if (qp_management_[qpi]->stop_wq_thread_)
             return 0;
         while (!(qp_management_[qpi]->assign_queue_.empty())) {
-            RDMAAssignmentSharedPtr front_assign = qp_management_[qpi]->assign_queue_.front();
-            size_t                  batch_size   = front_assign->batch_size();
+            RDMAAssignSharedPtr front_assign = qp_management_[qpi]->assign_queue_.front();
+            size_t              batch_size   = front_assign->batch_size();
             if (batch_size > SLIME_MAX_CQ_DEPTH) {
                 SLIME_LOG_ERROR("batch_size(" << batch_size << ") > MAX SLIME_MAX_CQ_DEPTH (" << SLIME_MAX_CQ_DEPTH
                                               << "), this request will be ignored");
@@ -711,7 +703,9 @@ int64_t RDMAContext::wq_dispatch_handle(int qpi)
                 SLIME_LOG_DEBUG("Schedule batch, batch size: ",
                                 batch_size,
                                 ". Outstanding: ",
-                                qp_management_[qpi]->outstanding_rdma_reads_);
+                                qp_management_[qpi]->outstanding_rdma_reads_,
+                                ". OpCode: ",
+                                (int8_t)front_assign->opcode_);
                 switch (front_assign->opcode_) {
                     case OpCode::SEND:
                         post_send_batch(qpi, front_assign);
