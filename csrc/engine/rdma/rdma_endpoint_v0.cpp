@@ -223,11 +223,8 @@ void RDMAEndpointV0::connect(const json& data_ctx_info, const json& meta_ctx_inf
 
 int32_t RDMAEndpointV0::addBuffer(OpCode opcode, std::shared_ptr<RDMABuffer> buffer)
 {
-    // [Performance Note] MR Lookup/Registration on the hot path.
-    // Ideally, MRs should be registered once at buffer creation.
     auto buffer_mr = data_ctx_->get_mr(buffer->ptr_);
     if (not(buffer_mr and buffer_mr->length == buffer->data_size_)) {
-        // Log at DEBUG level to avoid flooding logs during high-throughput
         SLIME_LOG_DEBUG("Registering new MR for buffer: ", buffer->ptr_);
         data_ctx_->registerMemoryRegion(buffer->ptr_, buffer->ptr_, buffer->data_size_);
     }
