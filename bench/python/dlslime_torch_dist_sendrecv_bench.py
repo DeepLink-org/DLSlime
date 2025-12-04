@@ -112,7 +112,7 @@ def benchmark_send_recv(args):
     if rank == 1 and benchmark_data:
         headers = ["Message Size (bytes)", "Avg Latency", "Bandwidth", "Device"]
         print("\nBenchmark Results:")
-        print(tabulate(benchmark_data, headers=headers, tablefmt="grid"))
+        print(tabulate(benchmark_data, headers=headers, tablefmt="github"))
 
     dist.destroy_process_group()
 
