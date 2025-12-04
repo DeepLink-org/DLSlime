@@ -9,7 +9,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
-#include <mutex>  // [必要]
+#include <mutex>
 #include <string>
 
 namespace slime {

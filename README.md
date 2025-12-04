@@ -188,25 +188,25 @@ torchrun --master-addr 10.130.8.145 --master-port 6006 --nnodes 2 --nproc-per-no
 torchrun --master-addr 10.130.8.145 --master-port 6006 --nnodes 2 --nproc-per-node 1 --node-rank 0 bench/python/agg_transfer_bench_spmd.py --qp-num 8 --transfer-engine dlslime --batch-size 1 --num-iteration 100 --num-concurrency 1
 ```
 
-| Transfer Engine | Message Size (bytes) | Avg Latency(ms) | Bandwidth(MB/s) |
-| --------------- | -------------------- | --------------- | --------------- |
-| dlslime         | 2,048                | 0.039           | 52              |
-| dlslime         | 4,096                | 0.037           | 111             |
-| dlslime         | 8,192                | 0.038           | 216             |
-| dlslime         | 16,384               | 0.037           | 442             |
-| dlslime         | 32,768               | 0.039           | 836             |
-| dlslime         | 65,536               | 0.039           | 1689            |
-| dlslime         | 131,072              | 0.041           | 3195            |
-| dlslime         | 262,144              | 0.043           | 6059            |
-| dlslime         | 524,288              | 0.049           | 10689           |
-| dlslime         | 1,048,576            | 0.062           | 17012           |
-| dlslime         | 2,097,152            | 0.083           | 25154           |
-| dlslime         | 4,194,304            | 0.127           | 33112           |
-| dlslime         | 8,388,608            | 0.211           | 39797           |
-| dlslime         | 16,777,216           | 0.382           | 43893           |
-| dlslime         | 33,554,432           | 0.726           | 46244           |
-| dlslime         | 67,108,864           | 1.412           | 47518           |
-| dlslime         | 134,217,728          | 2.783           | 48235           |
+| Transfer Engine | #Channels | Message Size (bytes) | Batch Size | Num Concurrency | Avg Latency(ms) | Bandwidth(MB/s) |
+| --------------- | --------- | -------------------- | ---------- | --------------- | --------------- | --------------- |
+| dlslime         | 1         | 2,048                | 1          | 1               | 0.039           | 52              |
+| dlslime         | 1         | 4,096                | 1          | 1               | 0.037           | 111             |
+| dlslime         | 1         | 8,192                | 1          | 1               | 0.038           | 216             |
+| dlslime         | 1         | 16,384               | 1          | 1               | 0.037           | 442             |
+| dlslime         | 1         | 32,768               | 1          | 1               | 0.039           | 836             |
+| dlslime         | 1         | 65,536               | 1          | 1               | 0.039           | 1689            |
+| dlslime         | 1         | 131,072              | 1          | 1               | 0.041           | 3195            |
+| dlslime         | 1         | 262,144              | 1          | 1               | 0.043           | 6059            |
+| dlslime         | 1         | 524,288              | 1          | 1               | 0.049           | 10689           |
+| dlslime         | 1         | 1,048,576            | 1          | 1               | 0.062           | 17012           |
+| dlslime         | 1         | 2,097,152            | 1          | 1               | 0.083           | 25154           |
+| dlslime         | 1         | 4,194,304            | 1          | 1               | 0.127           | 33112           |
+| dlslime         | 1         | 8,388,608            | 1          | 1               | 0.211           | 39797           |
+| dlslime         | 1         | 16,777,216           | 1          | 1               | 0.382           | 43893           |
+| dlslime         | 1         | 33,554,432           | 1          | 1               | 0.726           | 46244           |
+| dlslime         | 1         | 67,108,864           | 1          | 1               | 1.412           | 47518           |
+| dlslime         | 1         | 134,217,728          | 1          | 1               | 2.783           | 48235           |
 
 #### #BS=64, #Concurrency=1
 

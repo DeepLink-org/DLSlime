@@ -11,8 +11,6 @@
 namespace slime {
 inline int64_t get_xxhash(std::string_view str)
 {
-    // 使用 xxHash3 (目前最快的版本)，生成 64 位 hash
-    // 注意：seed 设为 0 或者任意你喜欢的数字
     return (int64_t)XXH3_64bits(str.data(), str.size());
 }
 

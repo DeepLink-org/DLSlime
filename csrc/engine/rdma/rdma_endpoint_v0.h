@@ -23,7 +23,7 @@ namespace slime {
 class RDMABuffer;
 
 /**
- * @brief Configuration constants for V2 Optimization.
+ * @brief Configuration constants for V0 Optimization.
  * MAX_FIFO_DEPTH must be a power of 2 for jring compatibility.
  * BURST_SIZE defines the batch size for ring operations to maximize throughput.
  */
@@ -132,7 +132,6 @@ public:
     inline json metaCtxInfo() const
     {
         auto endpoint_info = meta_ctx_->endpoint_info();
-        // Expose local meta info address for remote RDMA Write
         endpoint_info["remote_meta_key"] = uintptr_t(remote_meta_info_);
         return endpoint_info;
     }
@@ -160,8 +159,6 @@ private:
     jring_t* recv_buffer_ring_;
 
     // These rings were removed in V2 as we now use scoreboards & callbacks directly
-    // jring_t* meta_recv_assign_ring_; // Deprecated
-    // jring_t* data_recv_assign_ring_; // Deprecated
     jring_t* send_complete_ring_;
     jring_t* recv_complete_ring_;
 

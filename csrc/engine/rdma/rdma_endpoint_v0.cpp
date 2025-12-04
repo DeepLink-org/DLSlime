@@ -204,9 +204,6 @@ void RDMAEndpointV0::connect(const json& data_ctx_info, const json& meta_ctx_inf
 
     SLIME_LOG_INFO("Connection Established. Pre-posting RECV requests...");
 
-    // V2 Optimization: Zero-Malloc Recv Pre-posting
-    // We pre-post RECV requests for the entire depth of the FIFO.
-    // When a message arrives, the callback sets the scoreboard flag.
     for (int i = 0; i < MAX_FIFO_DEPTH; ++i) {
         std::vector<Assignment> batch{Assignment(reinterpret_cast<uintptr_t>(dummy_), 0, 0, sizeof(int64_t))};
         auto                    assign = meta_ctx_->submit(OpCode::RECV, batch, [this, i](int32_t status, int32_t imm) {
@@ -230,10 +227,6 @@ void RDMAEndpointV0::connect(const json& data_ctx_info, const json& meta_ctx_inf
     meta_ctx_->launch_future();
     SLIME_LOG_INFO("RDMA Contexts Launched.");
 }
-
-// ==========================================
-// Core Logic (V2: Batching, Pooling, Zero-Malloc)
-// ==========================================
 
 int32_t RDMAEndpointV0::addBuffer(OpCode opcode, std::shared_ptr<RDMABuffer> buffer)
 {
@@ -309,7 +302,6 @@ int32_t RDMAEndpointV0::sendProxy()
 
                 auto meta = remote_meta_info_[slot];
 
-                // Only log details in DEBUG mode
                 SLIME_LOG_DEBUG("MetaData Slot ", slot, " Received. RKey: ", meta.r_key_);
 
                 // Register remote memory for RDMA Write
@@ -326,7 +318,6 @@ int32_t RDMAEndpointV0::sendProxy()
                     s_ctx->buffer->sendDoneCallback();
                 });
 
-                // Re-post RECV for the next time this slot is used (Zero-Malloc loop)
                 std::vector<Assignment> batch{Assignment(reinterpret_cast<uintptr_t>(dummy_), 0, 0, sizeof(int64_t))};
                 meta_ctx_->submit(OpCode::RECV, batch, [this, slot](int32_t status, int32_t imm) {
                     meta_arrived_scoreboard_[slot].val.store(true, std::memory_order_release);
@@ -356,9 +347,6 @@ int32_t RDMAEndpointV0::recvProxy()
                 RecvContext* r_ctx = static_cast<RecvContext*>(buf_ptrs[i]);
                 int          slot  = r_ctx->slot_id;
 
-                // Send Local Meta to Remote (via RDMA Write with IMM or regular Write)
-                // Using WRITE_WITH_IMM to notify remote side that meta is ready (if supported)
-                // or just regular Write to updating their remote_meta_info buffer.
                 auto assign_batch = AssignmentBatch{Assignment(reinterpret_cast<uintptr_t>(local_meta_info_),
                                                                remote_meta_key_,
                                                                slot * sizeof(meta_info_t),
