@@ -1,5 +1,5 @@
 #include "engine/rdma/rdma_buffer.h"
-#include "engine/rdma/rdma_endpoint.cpp"
+#include "engine/rdma/rdma_endpoint_v0.cpp"
 
 #include <chrono>
 #include <cstdlib>
@@ -21,7 +21,7 @@ int main(int argc, char** argv)
 {
 
     std::cout << "Init the RMDA ENDPOINT OF RECV... " << std::endl;
-    auto end_point = std::make_shared<RDMAEndpoint>(FLAGS_DEVICE_NAME, FLAGS_IB_PORT, FLAGS_LINK_TYPE, 1);
+    auto end_point = std::make_shared<RDMAEndpointV0>(FLAGS_DEVICE_NAME, FLAGS_IB_PORT, FLAGS_LINK_TYPE, 1);
 
     std::cout << "RDMA QP INFO VIA TCP... " << std::endl;
     zmq::context_t zmq_ctx_data(2);

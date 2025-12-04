@@ -28,7 +28,6 @@ add_library(
     memory_pool.cpp
     rdma_assignment.cpp
     rdma_context.cpp
-    rdma_endpoint.cpp
     rdma_endpoint_v0.cpp
     rdma_buffer.cpp
 )

@@ -2,7 +2,6 @@
 
 #include "engine/assignment.h"
 #include "engine/rdma/rdma_assignment.h"
-#include "engine/rdma/rdma_endpoint.h"
 #include "jring.h"
 #include "rdma_common.h"
 #include "rdma_context.h"

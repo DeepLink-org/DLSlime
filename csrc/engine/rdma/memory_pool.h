@@ -72,36 +72,6 @@ public:
         return remote_mr_t();
     }
 
-    /* To maintain backward compatibility */
-    int registerMemoryRegion(const std::string& mr_key, uintptr_t data_ptr, uint64_t length)
-    {
-        return registerMemoryRegion(get_xxhash(mr_key), data_ptr, length);
-    }
-    int unregisterMemoryRegion(const std::string& mr_key)
-    {
-        return unregisterMemoryRegion(get_xxhash(mr_key));
-    }
-    int registerRemoteMemoryRegion(const std::string& mr_key, uintptr_t addr, size_t length, uint32_t rkey)
-    {
-        return registerRemoteMemoryRegion(get_xxhash(mr_key), addr, length, rkey);
-    }
-    int registerRemoteMemoryRegion(const std::string& mr_key, const json& mr_info)
-    {
-        return registerRemoteMemoryRegion(get_xxhash(mr_key), mr_info);
-    }
-    int unregisterRemoteMemoryRegion(const std::string& mr_key)
-    {
-        return unregisterRemoteMemoryRegion(get_xxhash(mr_key));
-    }
-    inline struct ibv_mr* get_mr(const std::string& mr_key)
-    {
-        return get_mr(get_xxhash(mr_key));
-    }
-    inline remote_mr_t get_remote_mr(const std::string& mr_key)
-    {
-        return get_remote_mr(get_xxhash(mr_key));
-    }
-
     json mr_info();
     json remote_mr_info();
 

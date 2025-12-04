@@ -1,7 +1,6 @@
 #pragma once
 #include "engine/rdma/memory_pool.h"
 #include "engine/rdma/rdma_context.h"
-#include "engine/rdma/rdma_endpoint.h"
 #include "engine/rdma/rdma_endpoint_v0.h"
 
 #include <condition_variable>

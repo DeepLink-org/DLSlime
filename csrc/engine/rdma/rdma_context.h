@@ -105,17 +105,7 @@ public:
         return memory_pool_->get_mr(mr_key);
     }
 
-    struct ibv_mr* get_mr(const std::string&  mr_key)
-    {
-        return memory_pool_->get_mr(mr_key);
-    }
-
     remote_mr_t get_remote_mr(const uintptr_t&  mr_key)
-    {
-        return memory_pool_->get_remote_mr(mr_key);
-    }
-
-    remote_mr_t get_remote_mr(const std::string&  mr_key)
     {
         return memory_pool_->get_remote_mr(mr_key);
     }
@@ -131,30 +121,6 @@ public:
     }
 
     inline int registerRemoteMemoryRegion(const uintptr_t&  mr_key, uintptr_t addr, size_t length, uint32_t rkey)
-    {
-        memory_pool_->registerRemoteMemoryRegion(mr_key, addr, length, rkey);
-        return 0;
-    }
-
-    inline int64_t registerRemoteMemoryRegion(const std::string& mr_key, json mr_info)
-    {
-        memory_pool_->registerRemoteMemoryRegion(mr_key, mr_info);
-        return 0;
-    }
-
-    inline int64_t unregisterMemoryRegion(const std::string&  mr_key)
-    {
-        memory_pool_->unregisterMemoryRegion(mr_key);
-        return 0;
-    }
-
-    inline int64_t registerMemoryRegion(const std::string& mr_key, uintptr_t data_ptr, size_t length)
-    {
-        memory_pool_->registerMemoryRegion(mr_key, data_ptr, length);
-        return 0;
-    }
-
-    inline int registerRemoteMemoryRegion(const std::string&  mr_key, uintptr_t addr, size_t length, uint32_t rkey)
     {
         memory_pool_->registerRemoteMemoryRegion(mr_key, addr, length, rkey);
         return 0;
