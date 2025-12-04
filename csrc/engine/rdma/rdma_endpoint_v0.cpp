@@ -137,10 +137,6 @@ RDMAEndpointV0::RDMAEndpointV0(const std::string& dev_name,
     send_buffer_ring_ = createRing("send_buf", ring_size);
     recv_buffer_ring_ = createRing("recv_buf", ring_size);
 
-    // V2: Removed redundant rings used in V1 logic
-    send_complete_ring_ = nullptr;
-    recv_complete_ring_ = nullptr;
-
     SLIME_LOG_INFO("RDMA Endpoint Initialization Completed.");
 }
 
