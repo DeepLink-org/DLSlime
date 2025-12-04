@@ -16,14 +16,13 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include "../../utils.h"
 #include "engine/assignment.h"
 #include "engine/rdma/ibv_helper.h"
 #include "engine/rdma/memory_pool.h"
 #include "engine/rdma/rdma_assignment.h"
 #include "engine/rdma/rdma_config.h"
 #include "engine/rdma/rdma_env.h"
-#include "engine/rdma/utils.h"
+#include "engine/rdma/rdma_utils.h"
 #include "logging.h"
 
 #include "rdma_context.h"

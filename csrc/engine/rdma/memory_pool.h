@@ -10,7 +10,6 @@
 #include <infiniband/verbs.h>
 #include <sys/types.h>
 
-#include "../../utils.h"
 #include "engine/rdma/rdma_config.h"
 #include "json.hpp"
 #include "logging.h"

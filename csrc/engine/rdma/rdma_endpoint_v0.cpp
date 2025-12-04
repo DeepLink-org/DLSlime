@@ -1,11 +1,12 @@
 #include "rdma_endpoint_v0.h"
 
-#include "../../utils.h"
+
 #include "engine/assignment.h"
 #include "engine/rdma/rdma_buffer.h"
 #include "engine/rdma/rdma_common.h"
 #include "engine/rdma/rdma_context.h"
 #include "engine/rdma/rdma_env.h"
+#include "engine/rdma/rdma_utils.h"
 #include "logging.h"
 
 #include <atomic>
