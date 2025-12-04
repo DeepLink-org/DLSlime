@@ -157,13 +157,13 @@ torch.cuda.synchronize()
 
 if args.transfer_engine == 'dlslime':
     for idx, ttensor in enumerate(ttensors):
-        rdma_endpoint.register_memory_region(f'buffer_{idx}', ttensor.data_ptr(), ttensor.storage_offset(),
+        rdma_endpoint.register_memory_region(idx, ttensor.data_ptr(), ttensor.storage_offset(),
                                              ttensor.numel() * ttensor.itemsize)
 elif args.transfer_engine == 'mooncake':
     for idx, ttensor in enumerate(ttensors):
         result = rdma_endpoint.register_memory(ttensor.data_ptr() + ttensor.storage_offset(),
                                                ttensor.numel() * ttensor.itemsize)
-        mooncake_endpoint_info['kv_table'][f'buffer_{idx}'] = (ttensor.data_ptr() + ttensor.storage_offset(),
+        mooncake_endpoint_info['kv_table'][idx] = (ttensor.data_ptr() + ttensor.storage_offset(),
                                                                ttensor.numel() * ttensor.itemsize)
         if result != 0:
             raise RuntimeError(f'Failed to register memory region: {result}')
@@ -173,7 +173,7 @@ elif args.transfer_engine == 'nixl':
     for idx, ttensor in enumerate(ttensors):
         nixl_memory_info.append(
             (ttensor.data_ptr() + ttensor.storage_offset(), ttensor.numel() * ttensor.itemsize, local_rank, ''))
-        nixl_endpoint_info['kv_table'][f'buffer_{idx}'] = (ttensor.data_ptr() + ttensor.storage_offset(),
+        nixl_endpoint_info['kv_table'][idx] = (ttensor.data_ptr() + ttensor.storage_offset(),
                                                            ttensor.numel() * ttensor.itemsize)
     reg_descs = agent.register_memory(nixl_memory_info, 'VRAM', is_sorted=False)
     if not reg_descs:  # Same as reg_descs if successful
@@ -323,16 +323,16 @@ for idx, (rawsize, ttensor) in enumerate(zip(args.size, ttensors)):
     start_event.record()
     for iter_id in range(args.num_iteration):
         if args.transfer_engine == 'dlslime':
-            transfer_batch_concurrency_dlslime(role, args.opcode, f'buffer_{idx}', ttensor, args.batch_size,
+            transfer_batch_concurrency_dlslime(role, args.opcode, idx, ttensor, args.batch_size,
                                                args.num_concurrency)
         elif args.transfer_engine == 'mooncake':
-            transfer_batch_concurrency_mooncake(role, args.opcode, f'buffer_{idx}', ttensor, args.batch_size,
+            transfer_batch_concurrency_mooncake(role, args.opcode, idx, ttensor, args.batch_size,
                                                 args.num_concurrency)
         elif args.transfer_engine == 'nixl':
-            transfer_batch_concurrency_nixl(role, args.opcode, f'buffer_{idx}', ttensor, args.batch_size,
+            transfer_batch_concurrency_nixl(role, args.opcode, idx, ttensor, args.batch_size,
                                             args.num_concurrency)
         elif args.transfer_engine == 'nccl':
-            transfer_batch_concurrency_nccl(role, args.opcode, f'buffer_{idx}', ttensor, args.batch_size,
+            transfer_batch_concurrency_nccl(role, args.opcode, idx, ttensor, args.batch_size,
                                             args.num_concurrency)
         torch.cuda.synchronize()
     end_event.record()

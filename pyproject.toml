@@ -25,6 +25,7 @@ readme = "README.md"
 requires-python = ">=3.8"
 version = "0.0.1.post10"
 dependencies = [
+  "xxhash",
   "pydantic>=2.0",
   # for --build-no-isolation
   "scikit-build-core>=0.10",

@@ -16,17 +16,18 @@
 #include <unordered_map>
 
 #include "json.hpp"
+#include "logging.h"
 
 namespace slime {
 
 using json = nlohmann::json;
 
-class RDMAAssignment;
-class RDMASchedulerAssignment;
+class RDMAAssign;
+class RDMAAssignHandler;
 
-using callback_fn_t                = std::function<void(int, int)>;
-using RDMAAssignmentSharedPtr      = std::shared_ptr<RDMAAssignment>;
-using RDMAAssignmentSharedPtrBatch = std::vector<RDMAAssignmentSharedPtr>;
+using callback_fn_t            = std::function<void(int, int)>;
+using RDMAAssignSharedPtr      = std::shared_ptr<RDMAAssign>;
+using RDMAAssignSharedPtrBatch = std::vector<RDMAAssignSharedPtr>;
 
 // TODO (Jimy): add timeout check
 const std::chrono::milliseconds kNoTimeout = std::chrono::milliseconds::zero();
@@ -41,13 +42,20 @@ static const std::map<OpCode, ibv_wr_opcode> ASSIGN_OP_2_IBV_WR_OP = {
 
 typedef struct callback_info {
     callback_info() = default;
-    callback_info(OpCode opcode, size_t batch_size, callback_fn_t callback): opcode_(opcode), batch_size_(batch_size)
+    callback_info(OpCode opcode, size_t batch_size, callback_fn_t callback, Assignment* batch):
+        opcode_(opcode), batch_size_(batch_size), batch_(batch)
     {
-        if (callback)
+        if (callback) {
             callback_ = std::move(callback);
+        }
     }
 
     callback_fn_t callback_{[this](int code, int imm_data) {
+        if (code != 0) {
+            for (int i = 0; i < batch_size_; ++i) {
+                SLIME_LOG_ERROR("ERROR ASSIGNMENT: ", batch_[i].dump());
+            }
+        }
         std::unique_lock<std::mutex> lock(mutex_);
         finished_.fetch_add(1, std::memory_order_relaxed);
         done_cv_.notify_one();
@@ -60,6 +68,7 @@ typedef struct callback_info {
     std::atomic<int>        finished_{0};
     std::condition_variable done_cv_;
     std::mutex              mutex_;
+    Assignment*             batch_;
 
     void wait()
     {
@@ -79,14 +88,14 @@ typedef struct callback_info {
     }
 } callback_info_t;
 
-class RDMAAssignment {
+class RDMAAssign {
     friend class RDMAContext;
-    friend std::ostream& operator<<(std::ostream& os, const RDMAAssignment& assignment);
+    friend std::ostream& operator<<(std::ostream& os, const RDMAAssign& assignment);
 
 public:
-    RDMAAssignment(OpCode opcode, AssignmentBatch& batch, callback_fn_t callback = nullptr);
+    RDMAAssign(OpCode opcode, AssignmentBatch& batch, callback_fn_t callback = nullptr);
 
-    ~RDMAAssignment()
+    ~RDMAAssign()
     {
         delete[] batch_;
     }
@@ -118,18 +127,17 @@ private:
     std::shared_ptr<callback_info_t> callback_info_;
 };
 
-class RDMASchedulerAssignment {
-    friend class RDMAScheduler;
-    friend std::ostream& operator<<(std::ostream& os, const RDMASchedulerAssignment& assignment);
+class RDMAAssignHandler {
+    friend std::ostream& operator<<(std::ostream& os, const RDMAAssignHandler& assignment);
 
 public:
-    RDMASchedulerAssignment(RDMAAssignmentSharedPtrBatch& rdma_assignment_batch):
+    RDMAAssignHandler(RDMAAssignSharedPtrBatch& rdma_assignment_batch):
         rdma_assignment_batch_(std::move(rdma_assignment_batch))
     {
     }
-    ~RDMASchedulerAssignment();
+    ~RDMAAssignHandler();
 
-    void query();
+    bool query();
     void wait();
 
     std::chrono::duration<double> latency()
@@ -147,7 +155,7 @@ public:
     json dump() const;
 
 private:
-    RDMAAssignmentSharedPtrBatch rdma_assignment_batch_{};
+    RDMAAssignSharedPtrBatch rdma_assignment_batch_{};
 };
 
 }  // namespace slime

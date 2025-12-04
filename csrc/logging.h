@@ -9,9 +9,11 @@
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <mutex>
 #include <string>
 
 namespace slime {
+
 inline std::string get_env_variable(char const* env_var_name)
 {
     if (!env_var_name) {
@@ -23,11 +25,20 @@ inline std::string get_env_variable(char const* env_var_name)
     return "";
 }
 
-
-
 inline int get_log_level()
 {
     return SLIME_LOG_LEVEL;
+}
+
+inline bool is_mutex_logging_enabled()
+{
+    return SLIME_LOG_MUTEX;
+}
+
+inline std::mutex& get_console_mutex()
+{
+    static std::mutex mtx;
+    return mtx;
 }
 
 #define STREAM_VAR_ARGS1(a) << a
@@ -53,9 +64,16 @@ inline int get_log_level()
               STREAM_VAR_ARGS1)                                                                                        \
     (__VA_ARGS__)
 
+#define SLIME_CONSOLE_LOCK                                                                                             \
+    std::unique_lock<std::mutex> _slime_console_lock(slime::get_console_mutex(), std::defer_lock);                     \
+    if (slime::is_mutex_logging_enabled()) {                                                                           \
+        _slime_console_lock.lock();                                                                                    \
+    }
+
 #define SLIME_ASSERT(Expr, Msg, ...)                                                                                   \
     {                                                                                                                  \
         if (!(Expr)) {                                                                                                 \
+            SLIME_CONSOLE_LOCK                                                                                         \
             std::cerr << "\033[1;91m"                                                                                  \
                       << "[Assertion Failed]"                                                                          \
                       << "\033[m " << __FILE__ << ":" << __LINE__ << ": " << __FUNCTION__ << ", Expected: " << #Expr   \
@@ -73,6 +91,7 @@ inline int get_log_level()
 
 #define SLIME_ABORT(Msg, ...)                                                                                          \
     {                                                                                                                  \
+        SLIME_CONSOLE_LOCK                                                                                             \
         std::cerr << "\033[1;91m"                                                                                      \
                   << "[Fatal]"                                                                                         \
                   << "\033[m " << __FILE__ << ":" << __LINE__ << ": " << __FUNCTION__ << ": "                          \
@@ -83,6 +102,7 @@ inline int get_log_level()
 #define SLIME_LOG_LEVEL(MsgType, FlagFormat, Level, ...)                                                               \
     {                                                                                                                  \
         if (get_log_level() >= Level) {                                                                                \
+            SLIME_CONSOLE_LOCK                                                                                         \
             std::cerr << FlagFormat << "[" << MsgType << "]"                                                           \
                       << "\033[m " << __FILE__ << ":" << __LINE__ << ": " << __FUNCTION__                              \
                       << ": " __VA_OPT__(STREAM_VAR_ARGS(__VA_ARGS__)) << std::endl;                                   \

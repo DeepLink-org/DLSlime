@@ -23,8 +23,8 @@ typedef struct remote_mr {
     remote_mr(uintptr_t addr, size_t length, uint32_t rkey): addr(addr), length(length), rkey(rkey) {}
 
     uintptr_t addr{(uintptr_t) nullptr};
-    size_t    length{};
-    uint32_t  rkey{};
+    size_t    length{0};
+    uint32_t  rkey{0};
 } remote_mr_t;
 
 class RDMAMemoryPool {
@@ -41,30 +41,33 @@ public:
         mrs_.clear();
     }
 
-    int register_memory_region(const std::string& mr_key, uintptr_t data_ptr, uint64_t length);
-    int unregister_memory_region(const std::string& mr_key);
+    int registerMemoryRegion(const uintptr_t& mr_key, uintptr_t data_ptr, uint64_t length);
 
-    int register_remote_memory_region(const std::string& mr_key, uintptr_t addr, size_t length, uint32_t rkey);
-    int register_remote_memory_region(const std::string& mr_key, const json& mr_info);
-    int unregister_remote_memory_region(const std::string& mr_key);
+    int unregisterMemoryRegion(const uintptr_t& mr_key);
 
-    inline struct ibv_mr* get_mr(const std::string& mr_key)
+    int registerRemoteMemoryRegion(const uintptr_t& mr_key, uintptr_t addr, size_t length, uint32_t rkey);
+
+    int registerRemoteMemoryRegion(const uintptr_t& mr_key, const json& mr_info);
+
+    int unregisterRemoteMemoryRegion(const uintptr_t& mr_key);
+
+    inline struct ibv_mr* get_mr(const uintptr_t& mr_key)
     {
         std::unique_lock<std::mutex> lock(mrs_mutex_);
-        if (mrs_.find(mr_key) != mrs_.end())
+        if (mrs_.find(mr_key) != mrs_.end()) {
             return mrs_[mr_key];
-
-        SLIME_LOG_WARN("mr_key: ", mr_key, "not found in mrs_");
+        }
+        SLIME_LOG_DEBUG("mr_key: ", mr_key, " not found in mrs_");
         return nullptr;
     }
 
-    inline remote_mr_t get_remote_mr(const std::string& mr_key)
+    inline remote_mr_t get_remote_mr(const uintptr_t& mr_key)
     {
         std::unique_lock<std::mutex> lock(remote_mrs_mutex_);
-        if (remote_mrs_.find(mr_key) != remote_mrs_.end())
+        if (remote_mrs_.find(mr_key) != remote_mrs_.end()) {
             return remote_mrs_[mr_key];
-
-        SLIME_LOG_WARN("mr_key: ", mr_key, " not found in remote_mrs_");
+        }
+        SLIME_LOG_DEBUG("mr_key: ", mr_key, " not found in remote_mrs_");
         return remote_mr_t();
     }
 
@@ -77,7 +80,7 @@ private:
     std::mutex mrs_mutex_;
     std::mutex remote_mrs_mutex_;
 
-    std::unordered_map<std::string, struct ibv_mr*> mrs_;
-    std::unordered_map<std::string, remote_mr_t>    remote_mrs_;
+    std::unordered_map<uintptr_t, struct ibv_mr*> mrs_;
+    std::unordered_map<uintptr_t, remote_mr_t>    remote_mrs_;
 };
 }  // namespace slime

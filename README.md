@@ -388,3 +388,7 @@ torchrun --master-addr 10.130.8.145 --master-port 6006 --nnodes 2 --nproc-per-no
 | D                 | 29317.66 | 28683.25 | 24515.30 | 27491.33 |
 
 detailed results: [bench](bench/results)
+
+
+
+
