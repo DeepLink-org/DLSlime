@@ -19,10 +19,6 @@
 
 namespace slime {
 
-// ==========================================
-// Helper Functions: Memory & Ring Management
-// ==========================================
-
 jring_t* RDMAEndpointV0::createRing(const char* name, size_t count)
 {
     size_t ring_sz = jring_get_buf_ring_size(sizeof(void*), count);
@@ -49,10 +45,6 @@ void RDMAEndpointV0::freeRing(jring_t* ring)
     }
 }
 
-// ==========================================
-// Constructor & Destructor
-// ==========================================
-
 RDMAEndpointV0::RDMAEndpointV0(const std::string& dev_name,
                                size_t             ib_port,
                                const std::string& link_type,
@@ -61,8 +53,6 @@ RDMAEndpointV0::RDMAEndpointV0(const std::string& dev_name,
     SLIME_LOG_INFO("Init RDMAEndpointV0 Contexts and Devices...");
 
     // Initialize RDMA Contexts.
-    // data_ctx for high-throughput data; meta_ctx for control plane messages.
-    // Note: Assuming RDMAContext internally manages polling or async events.
     data_ctx_ = std::make_shared<RDMAContext>(qp_nums, 0);
     meta_ctx_ = std::make_shared<RDMAContext>(1, 0);
 
@@ -79,9 +69,6 @@ RDMAEndpointV0::RDMAEndpointV0(const std::string& dev_name,
 
     size_t meta_buffer_size = sizeof(meta_info_t) * MAX_FIFO_DEPTH;
 
-    // --- Aligned Memory Allocation (Critical for RDMA & Performance) ---
-    // Using posix_memalign instead of malloc/new to ensure 64-byte alignment.
-
     void* dummy_mem = nullptr;
     if (posix_memalign(&dummy_mem, 64, sizeof(int64_t)) != 0)
         throw std::runtime_error("dummy alloc fail");
@@ -97,8 +84,6 @@ RDMAEndpointV0::RDMAEndpointV0(const std::string& dev_name,
         throw std::runtime_error("local meta alloc fail");
     local_meta_info_ = static_cast<meta_info_t*>(local_raw_mem);
 
-    // V2 Optimization: Pre-allocate Context Pools
-    // This removes the need for `new` in the hot path.
     send_ctx_pool_.resize(MAX_FIFO_DEPTH);
     recv_ctx_pool_.resize(MAX_FIFO_DEPTH);
 
@@ -129,7 +114,7 @@ RDMAEndpointV0::RDMAEndpointV0(const std::string& dev_name,
     }
 
     // Initialize Rings
-    // Size is double the depth to handle potential overflow gracefully and align with power-of-2 requirements.
+    // Size is double the depth to handle potential overflow gracefully.
     size_t ring_size  = MAX_FIFO_DEPTH * 2;
     send_buffer_ring_ = createRing("send_buf", ring_size);
     recv_buffer_ring_ = createRing("recv_buf", ring_size);
@@ -159,10 +144,6 @@ RDMAEndpointV0::~RDMAEndpointV0()
         SLIME_LOG_ERROR("Exception in RDMAEndpoint destructor: ", e.what());
     }
 }
-
-// ==========================================
-// Thread Management
-// ==========================================
 
 void RDMAEndpointV0::proxyInit()
 {
@@ -200,7 +181,6 @@ void RDMAEndpointV0::connect(const json& data_ctx_info, const json& meta_ctx_inf
     for (int i = 0; i < MAX_FIFO_DEPTH; ++i) {
         std::vector<Assignment> batch{Assignment(reinterpret_cast<uintptr_t>(dummy_), 0, 0, sizeof(int64_t))};
         auto                    assign = meta_ctx_->submit(OpCode::RECV, batch, [this, i](int32_t status, int32_t imm) {
-            // Signal that metadata for slot `i` has arrived
             meta_arrived_scoreboard_[i].val.store(true, std::memory_order_release);
         });
     }
@@ -209,7 +189,6 @@ void RDMAEndpointV0::connect(const json& data_ctx_info, const json& meta_ctx_inf
     for (int i = 0; i < MAX_FIFO_DEPTH; ++i) {
         std::vector<Assignment> batch{Assignment(reinterpret_cast<uintptr_t>(dummy_), 0, 0, sizeof(int64_t))};
         auto                    assign = data_ctx_->submit(OpCode::RECV, batch, [this, i](int32_t status, int32_t imm) {
-            // Signal that data for slot `i` has finished writing (Remote Write with IMM)
             data_arrived_scoreboard_[i].val.store(true, std::memory_order_release);
         });
     }
@@ -230,16 +209,13 @@ int32_t RDMAEndpointV0::addBuffer(OpCode opcode, std::shared_ptr<RDMABuffer> buf
     }
 
     if (OpCode::SEND == opcode) {
-        // 1. Atomically allocate a global slot ID
         uint64_t slot    = send_slot_id_.fetch_add(1, std::memory_order_relaxed) % MAX_FIFO_DEPTH;
         buffer->slot_id_ = slot;
 
-        // 2. Retrieve pre-allocated context from pool
         SendContext* ctx = &send_ctx_pool_[slot];
         ctx->slot_id     = slot;
         ctx->buffer      = buffer;
 
-        // 3. Enqueue pointer to ring (Spin-wait if ring is full - Backpressure)
         while (jring_enqueue_burst(send_buffer_ring_, (void**)&ctx, 1, nullptr) == 0) {
             cpu_relax();
         }
@@ -266,9 +242,7 @@ int32_t RDMAEndpointV0::addBuffer(OpCode opcode, std::shared_ptr<RDMABuffer> buf
 int32_t RDMAEndpointV0::sendProxy()
 {
     bindToSocket(socketId(data_ctx_->device_name_));
-    SLIME_LOG_INFO("SendProxy Thread running on NUMA node.");
 
-    // V2: Use pointer arrays for Batch Processing
     void* buf_ptrs[BURST_SIZE];
 
     while (!stop_send_proxy_signal_.load(std::memory_order_relaxed)) {
@@ -281,29 +255,22 @@ int32_t RDMAEndpointV0::sendProxy()
                 auto* s_ctx = (SendContext*)buf_ptrs[i];
                 int   slot  = s_ctx->slot_id;
 
-                // Wait for Metadata to arrive (Spin-polling on scoreboard)
-                // This replaces the old `wait()` on future, avoiding context switches.
                 while (!meta_arrived_scoreboard_[slot].val.load(std::memory_order_acquire)) {
                     cpu_relax();
                 }
 
-                // Reset flag for next round
                 meta_arrived_scoreboard_[slot].val.store(false, std::memory_order_relaxed);
 
                 auto meta = remote_meta_info_[slot];
 
                 SLIME_LOG_DEBUG("MetaData Slot ", slot, " Received. RKey: ", meta.r_key_);
 
-                // Register remote memory for RDMA Write
                 data_ctx_->registerRemoteMemoryRegion(
                     meta.view_.data_ptr, meta.view_.data_ptr, meta.view_.length, meta.r_key_);
 
-                // Construct Assignment
                 auto assign = Assignment(s_ctx->buffer->ptr_, meta.view_.data_ptr, 0, 0, s_ctx->buffer->data_size_);
                 auto assign_batch = AssignmentBatch{assign};
 
-                // Submit RDMA Write with Immediate Data
-                // The callback is used to notify the application layer
                 data_ctx_->submit(OpCode::WRITE_WITH_IMM, assign_batch, [s_ctx](int32_t stat, int32_t imm_data) {
                     s_ctx->buffer->sendDoneCallback();
                 });
@@ -324,7 +291,6 @@ int32_t RDMAEndpointV0::sendProxy()
 int32_t RDMAEndpointV0::recvProxy()
 {
     bindToSocket(socketId(data_ctx_->device_name_));
-    SLIME_LOG_INFO("RecvProxy Thread running on NUMA node.");
 
     void* buf_ptrs[BURST_SIZE];
 
@@ -345,17 +311,14 @@ int32_t RDMAEndpointV0::recvProxy()
 
                 meta_ctx_->submit(OpCode::WRITE_WITH_IMM, assign_batch);
 
-                // Wait for Data to arrive (signaled by RDMA Write with IMM from sender)
                 while (!data_arrived_scoreboard_[slot].val.load(std::memory_order_acquire)) {
                     cpu_relax();
                 }
 
                 data_arrived_scoreboard_[slot].val.store(false, std::memory_order_relaxed);
 
-                // Notify application
                 r_ctx->buffer->recvDoneCallback();
 
-                // Re-post RECV for next data arrival
                 std::vector<Assignment> batch{Assignment(reinterpret_cast<uintptr_t>(dummy_), 0, 0, sizeof(int64_t))};
                 data_ctx_->submit(OpCode::RECV, batch, [this, slot](int32_t status, int32_t imm) {
                     data_arrived_scoreboard_[slot].val.store(true, std::memory_order_release);
