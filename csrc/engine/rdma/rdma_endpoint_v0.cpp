@@ -25,12 +25,9 @@ namespace slime {
 
 jring_t* RDMAEndpointV0::createRing(const char* name, size_t count)
 {
-    // Ensure element size is 4-byte aligned (sizeof(void*) is 8 on x64)
-    // Count must be a power of 2 for bitwise masking optimization
     size_t ring_sz = jring_get_buf_ring_size(sizeof(void*), count);
 
     void* mem = nullptr;
-    // Allocate 64-byte aligned memory to fit cache lines perfectly
     if (posix_memalign(&mem, 64, ring_sz) != 0) {
         throw std::runtime_error(std::string("Failed to allocate ring memory: ") + name);
     }

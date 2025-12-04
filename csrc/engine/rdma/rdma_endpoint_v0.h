@@ -131,7 +131,7 @@ public:
 
     inline json metaCtxInfo() const
     {
-        auto endpoint_info = meta_ctx_->endpoint_info();
+        auto endpoint_info               = meta_ctx_->endpoint_info();
         endpoint_info["remote_meta_key"] = uintptr_t(remote_meta_info_);
         return endpoint_info;
     }
