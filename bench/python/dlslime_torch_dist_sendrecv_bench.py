@@ -22,7 +22,7 @@ def benchmark_send_recv(args):
     # Initialize process group
     print("Initialize process group")
     rank = 0 if args.mode == "send" else 1
-    backend_S = "cuda:nccl" if args.use_gpu else "cpu:dlslime"
+    backend_S = "cuda:dlslime,cpu:gloo" if args.use_gpu else "cpu:dlslime"
     dist.init_process_group(backend_S, rank=rank, world_size=2)
     slime_group = dist.new_group(ranks=[0, 1], backend=backend_S)
     print(backend_S)
@@ -39,7 +39,7 @@ def benchmark_send_recv(args):
     if args.sizes:
         sizes = [int(s) for s in args.sizes]
     else:
-        sizes = [2**n for n in range(10, 24)]  # 256B to 256MB
+        sizes = [2**n for n in range(10, 31)]  # 256B to 256MB
 
     print("Prepare data sizes: ", sizes)
     benchmark_data = []
@@ -147,7 +147,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--iterations",
         type=int,
-        default=1,
+        default=100,
         help="Number of iterations for benchmarking",
     )
 
