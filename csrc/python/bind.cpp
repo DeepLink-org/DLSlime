@@ -153,7 +153,9 @@ PYBIND11_MODULE(_slime_c, m)
         .def(py::init<>())
         .def(py::init<size_t>())
         .def("init_rdma_context", &slime::RDMAContext::init)
-        .def("register_memory_region", &slime::RDMAContext::registerMemoryRegion)
+        .def("register_memory_region",
+             static_cast<int64_t (slime::RDMAContext::*)(const uintptr_t&, uintptr_t, uint64_t)>(
+                 &slime::RDMAContext::registerMemoryRegion))
         .def("register_remote_memory_region",
              static_cast<int64_t (slime::RDMAContext::*)(const uintptr_t&, json)>(
                  &slime::RDMAContext::registerRemoteMemoryRegion))
@@ -163,20 +165,22 @@ PYBIND11_MODULE(_slime_c, m)
         .def("launch_future", &slime::RDMAContext::launch_future)
         .def("stop_future", &slime::RDMAContext::stop_future)
         .def("submit", &slime::RDMAContext::submit, py::call_guard<py::gil_scoped_release>())
-        .def("submit_by_vector",
-             [](slime::RDMAContext&     self,
-                slime::OpCode           opcode,
-                std::vector<uintptr_t>& mr_keys,
-                std::vector<int>&       toff,
-                std::vector<int>&       soff,
-                std::vector<int>&       length) {
-                 std::vector<slime::Assignment> batch;
-                 int                            bs = mr_keys.size();
-                 for (int i = 0; i < bs; ++i) {
-                     batch.emplace_back(slime::Assignment(mr_keys[i], toff[i], soff[i], length[i]));
-                 }
-                 return self.submit(opcode, batch);
-             });
+        .def(
+            "submit_by_vector",
+            [](slime::RDMAContext&     self,
+               slime::OpCode           opcode,
+               std::vector<uintptr_t>& mr_keys,
+               std::vector<int>&       toff,
+               std::vector<int>&       soff,
+               std::vector<int>&       length) {
+                std::vector<slime::Assignment> batch;
+                int                            bs = mr_keys.size();
+                for (int i = 0; i < bs; ++i) {
+                    batch.emplace_back(slime::Assignment(mr_keys[i], toff[i], soff[i], length[i]));
+                }
+                return self.submit(opcode, batch);
+            },
+            py::call_guard<py::gil_scoped_release>());
 
     py::class_<slime::RDMAEndpoint, std::shared_ptr<slime::RDMAEndpoint>>(m, "rdma_endpoint")
         .def(py::init<const std::string&, uint8_t, const std::string&, size_t>())

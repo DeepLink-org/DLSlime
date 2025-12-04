@@ -22,7 +22,7 @@ def benchmark_send_recv(args):
     # Initialize process group
     print("Initialize process group")
     rank = 0 if args.mode == "send" else 1
-    backend_S = "cuda:dlslime" if args.use_gpu else "cpu:dlslime"
+    backend_S = "cuda:nccl" if args.use_gpu else "cpu:dlslime"
     dist.init_process_group(backend_S, rank=rank, world_size=2)
     slime_group = dist.new_group(ranks=[0, 1], backend=backend_S)
     print(backend_S)
@@ -39,7 +39,7 @@ def benchmark_send_recv(args):
     if args.sizes:
         sizes = [int(s) for s in args.sizes]
     else:
-        sizes = [2**n for n in range(10, 12)]  # 256B to 256MB
+        sizes = [2**n for n in range(10, 24)]  # 256B to 256MB
 
     print("Prepare data sizes: ", sizes)
     benchmark_data = []
@@ -129,7 +129,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--master-addr",
         type=str,
-        default="localhost",
+        default="10.102.207.84",
         help="Master address for distributed training",
     )
     parser.add_argument(
@@ -161,4 +161,5 @@ if __name__ == "__main__":
     os.environ["MASTER_ADDR"] = args.master_addr
     os.environ["MASTER_PORT"] = args.master_port
     os.environ["NCCL_P2P_DISABLE"] = "1"
+    os.environ["NCCL_SHM_DISABLE"] = "1"
     benchmark_send_recv(args)

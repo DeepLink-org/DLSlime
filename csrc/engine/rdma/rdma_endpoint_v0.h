@@ -22,11 +22,18 @@ namespace slime {
 
 class RDMABuffer;
 
-// V2 Optimization: Parameters
-static const size_t MAX_FIFO_DEPTH = 512;
-static const int    BURST_SIZE     = 16;
+/**
+ * @brief Configuration constants for V2 Optimization.
+ * MAX_FIFO_DEPTH must be a power of 2 for jring compatibility.
+ * BURST_SIZE defines the batch size for ring operations to maximize throughput.
+ */
+static const size_t MAX_FIFO_DEPTH = 1024;
+static const int    BURST_SIZE     = 128;
 
-// V2 Optimization: Efficient CPU Pause
+/**
+ * @brief Efficient CPU pause instruction (pause/yield).
+ * Used in spin-loops to reduce power consumption and hint the CPU pipeline.
+ */
 static inline void cpu_relax()
 {
     _mm_pause();
@@ -36,7 +43,10 @@ static inline void cpu_relax()
 // V2 Data Structures: Context Pooling
 // ==========================================
 
-// Meta info aligned to Cache Line
+/**
+ * @brief Meta information exchanged between nodes.
+ * Aligned to 64 bytes to match Cache Line size, preventing False Sharing.
+ */
 typedef struct alignas(64) ViewInfo {
     uint32_t       r_key_;
     storage_view_t view_;
@@ -46,13 +56,17 @@ typedef struct alignas(64) ViewInfo {
 
     std::string dump()
     {
+        // JSON dumping is heavy, strictly use for debugging
         return json{{"r_key_", r_key_},
                     {"view_", {{"ptr", view_.data_ptr}, {"length", view_.length}, {"offset", view_.storage_offset}}}}
             .dump();
     }
 } meta_info_t;
 
-// Context for Send Operations
+/**
+ * @brief Context object for Send operations.
+ * Pre-allocated in a pool to avoid malloc overhead during runtime.
+ */
 struct alignas(64) SendContext {
     int32_t                            slot_id;
     std::shared_ptr<RDMABuffer>        buffer;
@@ -65,11 +79,13 @@ struct alignas(64) SendContext {
     }
 };
 
-// Context for Recv Operations
+/**
+ * @brief Context object for Recv operations.
+ */
 struct alignas(64) RecvContext {
     int32_t                            slot_id;
     std::shared_ptr<RDMABuffer>        buffer;
-    std::shared_ptr<RDMAAssignHandler> assign_handler;  // Points to the internal recv completion
+    std::shared_ptr<RDMAAssignHandler> assign_handler;
 
     void reset()
     {
@@ -78,10 +94,12 @@ struct alignas(64) RecvContext {
     }
 };
 
-// Context for Meta/Data Token Recv
-struct alignas(64) TokenRecvContext {
-    int32_t                            idx;
-    std::shared_ptr<RDMAAssignHandler> assign;
+/**
+ * @brief Atomic boolean with padding to ensure it occupies a full cache line.
+ * This is critical for scoreboards to prevent False Sharing between threads/cores.
+ */
+struct alignas(64) PaddedAtomicBool {
+    std::atomic<bool> val{false};
 };
 
 // ==========================================
@@ -95,8 +113,16 @@ public:
     explicit RDMAEndpointV0(const std::string& dev_name, size_t ib_port, const std::string& link_type, size_t qp_nums);
     ~RDMAEndpointV0();
 
+    /**
+     * @brief Submit a buffer for Send or Recv operation.
+     * This method is thread-safe and non-blocking (uses lock-free ring).
+     */
     int32_t addBuffer(OpCode opcode, std::shared_ptr<RDMABuffer> buffer);
-    void    connect(const json& data_ctx_info, const json& meta_ctx_info);
+
+    /**
+     * @brief Establish connection and start proxy threads.
+     */
+    void connect(const json& data_ctx_info, const json& meta_ctx_info);
 
     inline json dataCtxInfo() const
     {
@@ -105,7 +131,8 @@ public:
 
     inline json metaCtxInfo() const
     {
-        auto endpoint_info               = meta_ctx_->endpoint_info();
+        auto endpoint_info = meta_ctx_->endpoint_info();
+        // Expose local meta info address for remote RDMA Write
         endpoint_info["remote_meta_key"] = uintptr_t(remote_meta_info_);
         return endpoint_info;
     }
@@ -123,25 +150,28 @@ private:
 
     uintptr_t remote_meta_key_;
 
+    // DMA-able memory regions for metadata exchange
     meta_info_t* remote_meta_info_;
     meta_info_t* local_meta_info_;
 
-    // --- jring_t* queue ---
+    // --- jring_t* Lock-free Queues ---
+    // Using raw pointers to avoid overhead, managed by jring
     jring_t* send_buffer_ring_;
     jring_t* recv_buffer_ring_;
 
-    jring_t* meta_recv_assign_ring_;
-    jring_t* data_recv_assign_ring_;
-
+    // These rings were removed in V2 as we now use scoreboards & callbacks directly
+    // jring_t* meta_recv_assign_ring_; // Deprecated
+    // jring_t* data_recv_assign_ring_; // Deprecated
     jring_t* send_complete_ring_;
     jring_t* recv_complete_ring_;
 
-    std::vector<SendContext>      send_ctx_pool_;
-    std::vector<RecvContext>      recv_ctx_pool_;
-    std::vector<TokenRecvContext> meta_recv_ctx_pool_;
-    std::vector<TokenRecvContext> data_recv_ctx_pool_;
+    // Context Pools to avoid dynamic allocation
+    std::vector<SendContext> send_ctx_pool_;
+    std::vector<RecvContext> recv_ctx_pool_;
 
-    int64_t* dummy_;
+    // Scoreboards for signaling completion between RDMA callbacks and Proxy threads
+    PaddedAtomicBool* meta_arrived_scoreboard_;
+    PaddedAtomicBool* data_arrived_scoreboard_;
 
     std::atomic<uint64_t> send_slot_id_{0};
     std::atomic<uint64_t> recv_slot_id_{0};
@@ -149,14 +179,8 @@ private:
     std::atomic<bool> stop_send_proxy_signal_{false};
     std::atomic<bool> stop_recv_proxy_signal_{false};
 
-    std::atomic<bool> stop_send_finish_signal_{false};
-    std::atomic<bool> stop_recv_finish_signal_{false};
-
     std::thread send_proxy_thread_;
     std::thread recv_proxy_thread_;
-
-    std::thread send_finish_thread_;
-    std::thread recv_finish_thread_;
 
     void proxyInit();
     void proxyDestroy();
@@ -164,12 +188,12 @@ private:
     int32_t sendProxy();
     int32_t recvProxy();
 
-    int32_t sendFinish();
-    int32_t recvFinish();
-
-    // jring helper function
+    // Helper to allocate aligned memory for jring
     jring_t* createRing(const char* name, size_t count);
     void     freeRing(jring_t* ring);
+
+    // Dummy buffer for RDMA operations that require a payload but carry no data
+    int64_t* dummy_;
 };
 
 }  // namespace slime

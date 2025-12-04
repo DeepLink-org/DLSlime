@@ -29,19 +29,19 @@ class RDMABuffer: public std::enable_shared_from_this<RDMABuffer> {
 public:
     RDMABuffer(std::shared_ptr<RDMAEndpoint> endpoint, uintptr_t ptr, size_t offset, size_t data_size):
         endpoint_(endpoint),
-        ptr_(ptr),
-        offset_(offset),
+        ptr_(ptr + offset),
+        offset_(0),
         data_size_(data_size),
-        view_(storage_view_t{ptr, offset, data_size})
+        view_(storage_view_t{ptr + offset, 0, data_size})
     {
     }
 
     RDMABuffer(std::shared_ptr<RDMAEndpointV0> endpoint, uintptr_t ptr, size_t offset, size_t data_size):
         endpointv0_(endpoint),
-        ptr_(ptr),
-        offset_(offset),
+        ptr_(ptr + offset),
+        offset_(0),
         data_size_(data_size),
-        view_(storage_view_t{ptr, offset, data_size})
+        view_(storage_view_t{ptr + offset, 0, data_size})
     {
     }
 

@@ -42,17 +42,17 @@ RDMAEndpoint::RDMAEndpoint(const std::string& dev_name, size_t ib_port, const st
     meta_buffer_.resize(SLIME_META_BUFFER_SIZE * 2);
     memset(meta_buffer_.data(), 0, meta_buffer_.size() * sizeof(meta_data_t));
     meta_ctx_->registerMemoryRegion(
-        get_xxhash("meta_buffer"), reinterpret_cast<uintptr_t>(meta_buffer_.data()), sizeof(meta_data_t) * meta_buffer_.size());
+        "meta_buffer", reinterpret_cast<uintptr_t>(meta_buffer_.data()), sizeof(meta_data_t) * meta_buffer_.size());
 
     dum_meta_buffer_.resize(SLIME_DUMMY_BUFFER_SIZE);
     memset(dum_meta_buffer_.data(), 0, dum_meta_buffer_.size() * sizeof(uint32_t));
-    meta_ctx_->registerMemoryRegion(get_xxhash("dum_meta_buffer"),
+    meta_ctx_->registerMemoryRegion("dum_meta_buffer",
                                       reinterpret_cast<uintptr_t>(dum_meta_buffer_.data()),
                                       sizeof(uint32_t) * dum_meta_buffer_.size());
 
     dum_data_buffer_.resize(SLIME_DUMMY_BUFFER_SIZE);
     memset(dum_data_buffer_.data(), 0, dum_data_buffer_.size() * sizeof(uint32_t));
-    data_ctx_->registerMemoryRegion(get_xxhash("dum_data_buffer"),
+    data_ctx_->registerMemoryRegion("dum_data_buffer",
                                       reinterpret_cast<uintptr_t>(dum_data_buffer_.data()),
                                       sizeof(uint32_t) * dum_data_buffer_.size());
 
@@ -218,16 +218,16 @@ void RDMAEndpoint::postMetaWrite(uint32_t idx, std::shared_ptr<RDMABuffer> rdma_
 
     std::string prefix      = "DATA_RECV_";
     std::string MR_KEY      = prefix + std::to_string(idx);
-    auto        mr_is_exist = data_ctx_->get_mr(get_xxhash(MR_KEY));
+    auto        mr_is_exist = data_ctx_->get_mr(MR_KEY);
 
     if (mr_is_exist != nullptr) {
         SLIME_LOG_DEBUG("The RECV DATA MR has been REGISTERED! The SLOT_ID is: ", idx);
     }
     else {
-        data_ctx_->registerMemoryRegion(get_xxhash(MR_KEY), rdma_buffer->ptr_, rdma_buffer->data_size_);
+        data_ctx_->registerMemoryRegion(MR_KEY, rdma_buffer->ptr_, rdma_buffer->data_size_);
     }
 
-    auto mr = data_ctx_->get_mr(get_xxhash(MR_KEY));
+    auto mr = data_ctx_->get_mr(MR_KEY);
 
     meta_buffer_[SLIME_META_BUFFER_SIZE + idx % SLIME_META_BUFFER_SIZE].mr_addr = reinterpret_cast<uint64_t>(mr->addr);
     meta_buffer_[SLIME_META_BUFFER_SIZE + idx % SLIME_META_BUFFER_SIZE].mr_rkey = mr->rkey;
@@ -255,21 +255,21 @@ void RDMAEndpoint::postDataWrite(RDMABufferQueueElement& element, std::shared_pt
     uint32_t    idx         = element.unique_id_;
     std::string prefix      = "DATA_SEND_";
     std::string MR_KEY      = prefix + std::to_string(idx);
-    auto        mr_is_exist = data_ctx_->get_mr(get_xxhash(MR_KEY));
+    auto        mr_is_exist = data_ctx_->get_mr(MR_KEY);
     if (mr_is_exist != nullptr) {
         SLIME_LOG_DEBUG("The SEND DATA MR has been REGISTERED! The SLOT_ID is: ", unique_SEND_SLOT_ID_);
     }
     else {
-        data_ctx_->registerMemoryRegion(get_xxhash(MR_KEY), rdma_buffer->ptr_, rdma_buffer->data_size_);
+        data_ctx_->registerMemoryRegion(MR_KEY, rdma_buffer->ptr_, rdma_buffer->data_size_);
     }
 
-    auto mr_remote = data_ctx_->get_remote_mr(get_xxhash(MR_KEY));
+    auto mr_remote = data_ctx_->get_remote_mr(MR_KEY);
     if (mr_remote.rkey == 0) {
 
         addr = meta_buffer_[idx % SLIME_META_BUFFER_SIZE].mr_addr;
         size = meta_buffer_[idx % SLIME_META_BUFFER_SIZE].mr_size;
         rkey = meta_buffer_[idx % SLIME_META_BUFFER_SIZE].mr_rkey;
-        data_ctx_->registerRemoteMemoryRegion(get_xxhash(MR_KEY), addr, size, rkey);
+        data_ctx_->registerRemoteMemoryRegion(MR_KEY, addr, size, rkey);
     }
 
     else {

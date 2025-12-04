@@ -1,6 +1,7 @@
 
 #include "engine/rdma/rdma_buffer.h"
 #include "engine/assignment.h"
+#include "logging.h"
 
 namespace slime {
 
@@ -17,6 +18,7 @@ void RDMABuffer::recv()
 void RDMABuffer::sendDoneCallback()
 {
     std::unique_lock<std::mutex> lock(send_mutex_);
+    SLIME_LOG_DEBUG("Send done callback triggered");
     ++send_completed_;
     send_cv_.notify_all();
 }
@@ -24,6 +26,7 @@ void RDMABuffer::sendDoneCallback()
 void RDMABuffer::recvDoneCallback()
 {
     std::unique_lock<std::mutex> lock(recv_mutex_);
+    SLIME_LOG_DEBUG("Recv done callback triggered");
     ++recv_completed_;
     recv_cv_.notify_all();
 }

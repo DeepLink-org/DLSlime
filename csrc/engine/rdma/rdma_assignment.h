@@ -137,7 +137,7 @@ public:
     }
     ~RDMAAssignHandler();
 
-    void query();
+    bool query();
     void wait();
 
     std::chrono::duration<double> latency()

@@ -82,7 +82,7 @@ class RDMAEndpoint(BaseEndpoint):
 
     def register_memory_region(
         self,
-        mr_key: str,
+        mr_key: int,
         addr: int,
         offset: int,
         length: int,
@@ -96,7 +96,7 @@ class RDMAEndpoint(BaseEndpoint):
         """
         self._ctx.register_memory_region(mr_key, addr + offset, length)
 
-    def register_remote_memory_region(self, mr_key: str, remote_mr_info: dict) -> None:
+    def register_remote_memory_region(self, mr_key: int, remote_mr_info: dict) -> None:
         """Register a Remote Memory Region (MR) for RDMA operations.
 
         Args:

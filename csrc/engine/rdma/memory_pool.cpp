@@ -71,6 +71,7 @@ json RDMAMemoryPool::mr_info()
     for (auto& mr : mrs_) {
         SLIME_LOG_INFO("mr_info: ", mr_info.dump())
         mr_info[std::to_string(mr.first)] = {
+            {"mr_key", (uintptr_t)mr.first},
             {"addr", (uintptr_t)mr.second->addr},
             {"rkey", mr.second->rkey},
             {"length", mr.second->length},

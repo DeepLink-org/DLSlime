@@ -1,9 +1,12 @@
 import torch
 
+import xxhash
 from dlslime import Assignment, RDMAEndpoint, available_nic
 
 devices = available_nic()
 assert devices, 'No RDMA devices.'
+
+buffer = xxhash.xxh64_intdigest("buffer")
 
 # Initialize RDMA endpoint
 initiator = RDMAEndpoint(device_name=devices[0], ib_port=1, link_type='RoCE')
@@ -12,14 +15,14 @@ target = RDMAEndpoint(device_name=devices[-1], ib_port=1, link_type='RoCE')
 # Register local GPU memory with RDMA subsystem
 local_tensor = torch.zeros([16], device='cuda:0', dtype=torch.uint8)
 initiator.register_memory_region(
-    mr_key='buffer',
+    mr_key=buffer,
     addr=local_tensor.data_ptr(),
     offset=local_tensor.storage_offset(),
     length=local_tensor.numel() * local_tensor.itemsize,
 )
 remote_tensor = torch.ones([16], device='cuda', dtype=torch.uint8)
 target.register_memory_region(
-    mr_key='buffer',
+    mr_key=buffer,
     addr=remote_tensor.data_ptr(),
     offset=remote_tensor.storage_offset(),
     length=remote_tensor.numel() * remote_tensor.itemsize,
@@ -34,14 +37,14 @@ initiator.connect(target.endpoint_info)
 
 print('Remote tensor after RDMA write:', remote_tensor)
 future_write = initiator.write_batch_with_imm_data(
-    [Assignment(mr_key='buffer', target_offset=0, source_offset=8, length=8)],
+    [Assignment(mr_key=buffer, target_offset=0, source_offset=8, length=8)],
     qpi=0,
     imm_data=1,
     async_op=True,
 )
 
 future_recv = target.recv_batch(
-    [Assignment(mr_key='buffer', target_offset=0, source_offset=0, length=8)],
+    [Assignment(mr_key=buffer, target_offset=0, source_offset=0, length=8)],
     qpi=0,
     async_op=True,
 )

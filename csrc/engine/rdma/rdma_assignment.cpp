@@ -28,7 +28,7 @@ bool RDMAAssign::query()
 
 json RDMAAssign::dump() const
 {
-    json j;
+    json j = {{"opcode", opcode_}};
     for (int i = 0; i < batch_size_; ++i)
         j["rdma_assign"].push_back(batch_[i].dump().dump());
     return j;
@@ -50,9 +50,12 @@ void RDMAAssignHandler::wait()
     return;
 }
 
-void RDMAAssignHandler::query()
+bool RDMAAssignHandler::query()
 {
-    throw std::runtime_error("Not Implemented.");
+    for (RDMAAssignSharedPtr& rdma_assignment : rdma_assignment_batch_) {
+        if (rdma_assignment->query()) return true;
+    }
+    return false;
 }
 
 json RDMAAssignHandler::dump() const

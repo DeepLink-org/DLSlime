@@ -234,7 +234,7 @@ int64_t RDMAContext::connect(const json& endpoint_info_json)
     SLIME_LOG_DEBUG("RDMA context remote configuration: ", endpoint_info_json);
     // Register Remote Memory Region
     for (auto& item : endpoint_info_json["mr_info"].items()) {
-        registerRemoteMemoryRegion(item.value()["addr"].get<uintptr_t>(), item.value());
+        registerRemoteMemoryRegion(item.value()["mr_key"].get<uintptr_t>(), item.value());
     }
     SLIME_ASSERT(!connected_, "Already connected!");
     SLIME_ASSERT_EQ(qp_list_len_, endpoint_info_json["rdma_info"].size(), "Peer must have same QP Size.");
@@ -257,7 +257,7 @@ int64_t RDMAContext::connect(const json& endpoint_info_json)
         attr.dest_qp_num        = remote_rdma_info.qpn;
         attr.rq_psn             = remote_rdma_info.psn;
         attr.max_dest_rd_atomic = SLIME_MAX_DEST_RD_ATOMIC;
-        attr.min_rnr_timer      = 1;
+        attr.min_rnr_timer      = 0x16;
         attr.ah_attr.dlid       = remote_rdma_info.lid;
         attr.ah_attr.sl         = SLIME_SERVICE_LEVEL;
         attr.ah_attr.src_path_bits = 0;
@@ -705,7 +705,7 @@ int64_t RDMAContext::wq_dispatch_handle(int qpi)
                                 ". Outstanding: ",
                                 qp_management_[qpi]->outstanding_rdma_reads_,
                                 ". OpCode: ",
-                                (int8_t)front_assign->opcode_);
+                                (int64_t)front_assign->opcode_);
                 switch (front_assign->opcode_) {
                     case OpCode::SEND:
                         post_send_batch(qpi, front_assign);

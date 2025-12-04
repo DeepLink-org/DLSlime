@@ -10,10 +10,10 @@
 #include <infiniband/verbs.h>
 #include <sys/types.h>
 
+#include "../../utils.h"
 #include "engine/rdma/rdma_config.h"
 #include "json.hpp"
 #include "logging.h"
-#include "xxhash.h"
 
 namespace slime {
 
@@ -43,20 +43,22 @@ public:
     }
 
     int registerMemoryRegion(const uintptr_t& mr_key, uintptr_t data_ptr, uint64_t length);
+
     int unregisterMemoryRegion(const uintptr_t& mr_key);
 
     int registerRemoteMemoryRegion(const uintptr_t& mr_key, uintptr_t addr, size_t length, uint32_t rkey);
+
     int registerRemoteMemoryRegion(const uintptr_t& mr_key, const json& mr_info);
+
     int unregisterRemoteMemoryRegion(const uintptr_t& mr_key);
 
     inline struct ibv_mr* get_mr(const uintptr_t& mr_key)
     {
         std::unique_lock<std::mutex> lock(mrs_mutex_);
         if (mrs_.find(mr_key) != mrs_.end()) {
-            SLIME_LOG_DEBUG("mr_key: ", mr_key, " is found in mrs_");
             return mrs_[mr_key];
         }
-        SLIME_LOG_WARN("mr_key: ", mr_key, " not found in mrs_");
+        SLIME_LOG_DEBUG("mr_key: ", mr_key, " not found in mrs_");
         return nullptr;
     }
 
@@ -64,11 +66,40 @@ public:
     {
         std::unique_lock<std::mutex> lock(remote_mrs_mutex_);
         if (remote_mrs_.find(mr_key) != remote_mrs_.end()) {
-            SLIME_LOG_DEBUG("mr_key: ", mr_key, " is found in remote_mrs_");
             return remote_mrs_[mr_key];
         }
-        SLIME_LOG_WARN("mr_key: ", mr_key, " not found in remote_mrs_");
+        SLIME_LOG_DEBUG("mr_key: ", mr_key, " not found in remote_mrs_");
         return remote_mr_t();
+    }
+
+    /* To maintain backward compatibility */
+    int registerMemoryRegion(const std::string& mr_key, uintptr_t data_ptr, uint64_t length)
+    {
+        return registerMemoryRegion(get_xxhash(mr_key), data_ptr, length);
+    }
+    int unregisterMemoryRegion(const std::string& mr_key)
+    {
+        return unregisterMemoryRegion(get_xxhash(mr_key));
+    }
+    int registerRemoteMemoryRegion(const std::string& mr_key, uintptr_t addr, size_t length, uint32_t rkey)
+    {
+        return registerRemoteMemoryRegion(get_xxhash(mr_key), addr, length, rkey);
+    }
+    int registerRemoteMemoryRegion(const std::string& mr_key, const json& mr_info)
+    {
+        return registerRemoteMemoryRegion(get_xxhash(mr_key), mr_info);
+    }
+    int unregisterRemoteMemoryRegion(const std::string& mr_key)
+    {
+        return unregisterRemoteMemoryRegion(get_xxhash(mr_key));
+    }
+    inline struct ibv_mr* get_mr(const std::string& mr_key)
+    {
+        return get_mr(get_xxhash(mr_key));
+    }
+    inline remote_mr_t get_remote_mr(const std::string& mr_key)
+    {
+        return get_remote_mr(get_xxhash(mr_key));
     }
 
     json mr_info();

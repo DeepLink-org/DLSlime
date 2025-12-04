@@ -16,11 +16,9 @@ if __name__ == "__main__":
         send_endpoint.get_data_context_info(), send_endpoint.get_meta_context_info()
     )
 
-    send_tensor = torch.ones([1024], dtype=torch.uint8, device="cuda")
-    send_tensor = torch.ones([1024], dtype=torch.uint8, device="cpu") * 2
+    send_tensor = torch.ones([262144], dtype=torch.uint8, device="cuda") * 2
 
-    recv_tensor = torch.zeros([1024], dtype=torch.uint8, device="cpu")
-    recv_tensor = torch.zeros([1024], dtype=torch.uint8, device="cuda")
+    recv_tensor = torch.zeros([262144], dtype=torch.uint8, device="cuda")
 
     send_buffer = _slime_c.rdma_buffer(
         send_endpoint,
