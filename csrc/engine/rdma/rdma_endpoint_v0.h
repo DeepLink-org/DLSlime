@@ -158,10 +158,6 @@ private:
     jring_t* send_buffer_ring_;
     jring_t* recv_buffer_ring_;
 
-    // These rings were removed in V2 as we now use scoreboards & callbacks directly
-    jring_t* send_complete_ring_;
-    jring_t* recv_complete_ring_;
-
     // Context Pools to avoid dynamic allocation
     std::vector<SendContext> send_ctx_pool_;
     std::vector<RecvContext> recv_ctx_pool_;
