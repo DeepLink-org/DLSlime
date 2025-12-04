@@ -21,26 +21,13 @@ namespace slime {
 
 class RDMABuffer;
 
-/**
- * @brief Configuration constants for V0 Optimization.
- * MAX_FIFO_DEPTH must be a power of 2 for jring compatibility.
- * BURST_SIZE defines the batch size for ring operations to maximize throughput.
- */
 static const size_t MAX_FIFO_DEPTH = 1024;
 static const int    BURST_SIZE     = 128;
 
-/**
- * @brief Efficient CPU pause instruction (pause/yield).
- * Used in spin-loops to reduce power consumption and hint the CPU pipeline.
- */
 static inline void cpu_relax()
 {
     _mm_pause();
 }
-
-// ==========================================
-// V2 Data Structures: Context Pooling
-// ==========================================
 
 /**
  * @brief Meta information exchanged between nodes.
@@ -93,10 +80,6 @@ struct alignas(64) RecvContext {
     }
 };
 
-/**
- * @brief Atomic boolean with padding to ensure it occupies a full cache line.
- * This is critical for scoreboards to prevent False Sharing between threads/cores.
- */
 struct alignas(64) PaddedAtomicBool {
     std::atomic<bool> val{false};
 };
@@ -153,7 +136,6 @@ private:
     meta_info_t* local_meta_info_;
 
     // --- jring_t* Lock-free Queues ---
-    // Using raw pointers to avoid overhead, managed by jring
     jring_t* send_buffer_ring_;
     jring_t* recv_buffer_ring_;
 
@@ -180,11 +162,9 @@ private:
     int32_t sendProxy();
     int32_t recvProxy();
 
-    // Helper to allocate aligned memory for jring
     jring_t* createRing(const char* name, size_t count);
     void     freeRing(jring_t* ring);
 
-    // Dummy buffer for RDMA operations that require a payload but carry no data
     int64_t* dummy_;
 };
 
