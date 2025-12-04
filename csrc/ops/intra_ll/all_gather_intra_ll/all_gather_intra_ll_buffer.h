@@ -21,8 +21,7 @@ namespace slime {
 class AllGatherIntraLLBuffer {
 
 public:
-    AllGatherIntraLLBuffer(
-        int32_t max_bs, int32_t msg_size, torch::Dtype dtype, int32_t world_size, int32_t rank);
+    AllGatherIntraLLBuffer(int32_t max_bs, int32_t msg_size, torch::Dtype dtype, int32_t world_size, int32_t rank);
 
     int32_t itemsize();
 
@@ -34,7 +33,9 @@ public:
 
     int allocBuffer();
 
-    torch::Tensor allGatherLL(torch::Tensor q);
+    torch::Tensor allGatherLL(torch::Tensor q, c10::optional<torch::Tensor> mask = c10::nullopt);
+
+    torch::Tensor allToAllLL(torch::Tensor q, c10::optional<torch::Tensor> mask = c10::nullopt);
 
 private:
     int8_t** buffer_ptrs_;

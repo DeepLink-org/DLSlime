@@ -37,8 +37,8 @@ class AllGatherInterLLGemm(torch.nn.Module):
             bs,
             msg_size,
             dtype,
-            rank,
             world_size,
+            rank,
             num_concurrency=2,
             allow_nvlink=allow_nvlink,
         )

@@ -224,7 +224,16 @@ PYBIND11_MODULE(_slime_c, m)
         .def(py::init<int32_t, int32_t, torch::Dtype, int32_t, int32_t>())
         .def("buffer_info", &slime::AllGatherIntraLLBuffer::buffer_info)
         .def("connect_full_mesh", &slime::AllGatherIntraLLBuffer::connectFullMesh)
-        .def("all_gather_ll", &slime::AllGatherIntraLLBuffer::allGatherLL);
+        .def("all_gather_ll",
+             &slime::AllGatherIntraLLBuffer::allGatherLL,
+             py::arg("q"),
+             py::arg("mask") = py::none(),
+             "AllGather with optional mask")
+        .def("all_to_all_ll",
+             &slime::AllGatherIntraLLBuffer::allToAllLL,
+             py::arg("buffer_ori"),
+             py::arg("mask") = py::none(),
+             "AllGather with optional mask");
 #endif
 
 #ifdef BUILD_INTER_OPS
