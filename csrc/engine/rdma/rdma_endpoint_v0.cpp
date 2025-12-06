@@ -1,6 +1,5 @@
 #include "rdma_endpoint_v0.h"
 
-
 #include "engine/assignment.h"
 #include "engine/rdma/rdma_buffer.h"
 #include "engine/rdma/rdma_common.h"
@@ -53,11 +52,13 @@ RDMAEndpointV0::RDMAEndpointV0(const std::string& dev_name,
 {
     SLIME_LOG_INFO("Init RDMAEndpointV0 Contexts and Devices...");
 
+    qp_nums_ = qp_nums;
     // Initialize RDMA Contexts.
     data_ctx_ = std::make_shared<RDMAContext>(qp_nums, 0);
     meta_ctx_ = std::make_shared<RDMAContext>(1, 0);
 
-    SLIME_ASSERT(qp_nums == SLIME_AGG_QP_NUM, "all qp must be aggregrated");
+    SLIME_ASSERT(1 == SLIME_AGG_QP_NUM, "cannot aggqp when sendrecv");
+    SLIME_ASSERT(64 > SLIME_QP_NUM, "QP NUM must less than 64");
 
     data_ctx_->init(dev_name, ib_port, link_type);
     meta_ctx_->init(dev_name, ib_port, link_type);
@@ -107,11 +108,11 @@ RDMAEndpointV0::RDMAEndpointV0(const std::string& dev_name,
     // Initialize Scoreboards
     // These atomic flags serve as signaling mechanism between RDMA callback thread and Proxy threads.
     SLIME_LOG_DEBUG("Initializing scoreboards...");
-    meta_arrived_scoreboard_ = new PaddedAtomicBool[MAX_FIFO_DEPTH];
-    data_arrived_scoreboard_ = new PaddedAtomicBool[MAX_FIFO_DEPTH];
+    meta_arrived_scoreboard_ = new PaddedAtomicUint64[MAX_FIFO_DEPTH];
+    data_arrived_scoreboard_ = new PaddedAtomicUint64[MAX_FIFO_DEPTH];
     for (int i = 0; i < MAX_FIFO_DEPTH; ++i) {
-        meta_arrived_scoreboard_[i].val.store(false);
-        data_arrived_scoreboard_[i].val.store(false);
+        meta_arrived_scoreboard_[i].val.store(0);
+        data_arrived_scoreboard_[i].val.store(0);
     }
 
     // Initialize Rings
@@ -182,16 +183,22 @@ void RDMAEndpointV0::connect(const json& data_ctx_info, const json& meta_ctx_inf
     for (int i = 0; i < MAX_FIFO_DEPTH; ++i) {
         std::vector<Assignment> batch{Assignment(reinterpret_cast<uintptr_t>(dummy_), 0, 0, sizeof(int64_t))};
         auto                    assign = meta_ctx_->submit(OpCode::RECV, batch, [this, i](int32_t status, int32_t imm) {
-            meta_arrived_scoreboard_[i].val.store(true, std::memory_order_release);
+            meta_arrived_scoreboard_[i].val.store(1, std::memory_order_release);
         });
     }
 
-    // Pre Recv Data
-    for (int i = 0; i < MAX_FIFO_DEPTH; ++i) {
-        std::vector<Assignment> batch{Assignment(reinterpret_cast<uintptr_t>(dummy_), 0, 0, sizeof(int64_t))};
-        auto                    assign = data_ctx_->submit(OpCode::RECV, batch, [this, i](int32_t status, int32_t imm) {
-            data_arrived_scoreboard_[i].val.store(true, std::memory_order_release);
-        });
+    for (size_t qpi = 0; qpi < qp_nums_; ++qpi) {
+        // Pre Recv Data
+        for (int i = 0; i < MAX_FIFO_DEPTH; ++i) {
+            std::vector<Assignment> batch{Assignment(reinterpret_cast<uintptr_t>(dummy_), 0, 0, sizeof(int64_t))};
+            auto                    assign = data_ctx_->submit(
+                OpCode::RECV,
+                batch,
+                [this, qpi, i](int32_t status, int32_t imm) {
+                    data_arrived_scoreboard_[i].val.fetch_or(1ULL << qpi, std::memory_order_release);
+                },
+                qpi);
+        }
     }
 
     proxyInit();
@@ -203,9 +210,11 @@ void RDMAEndpointV0::connect(const json& data_ctx_info, const json& meta_ctx_inf
 
 int32_t RDMAEndpointV0::addBuffer(OpCode opcode, std::shared_ptr<RDMABuffer> buffer)
 {
-    auto buffer_mr = data_ctx_->get_mr(buffer->ptr_);
+    buffer->num_pack_ = qp_nums_;
+    auto buffer_mr    = data_ctx_->get_mr(buffer->ptr_);
     if (not(buffer_mr and buffer_mr->length == buffer->data_size_)) {
         SLIME_LOG_DEBUG("Registering new MR for buffer: ", buffer->ptr_);
+        SLIME_ASSERT(qp_nums_ < buffer->data_size_, "qp_nums_ > buffer->data_size");
         data_ctx_->registerMemoryRegion(buffer->ptr_, buffer->ptr_, buffer->data_size_);
     }
 
@@ -260,7 +269,7 @@ int32_t RDMAEndpointV0::sendProxy()
                     cpu_relax();
                 }
 
-                meta_arrived_scoreboard_[slot].val.store(false, std::memory_order_relaxed);
+                meta_arrived_scoreboard_[slot].val.store(0, std::memory_order_relaxed);
 
                 auto meta = remote_meta_info_[slot];
 
@@ -272,13 +281,27 @@ int32_t RDMAEndpointV0::sendProxy()
                 auto assign = Assignment(s_ctx->buffer->ptr_, meta.view_.data_ptr, 0, 0, s_ctx->buffer->data_size_);
                 auto assign_batch = AssignmentBatch{assign};
 
-                data_ctx_->submit(OpCode::WRITE_WITH_IMM, assign_batch, [s_ctx](int32_t stat, int32_t imm_data) {
-                    s_ctx->buffer->sendDoneCallback();
-                });
+                AssignmentBatch splited_assign_batch;
+                split_assign_by_max_length(OpCode::WRITE_WITH_IMM,
+                                           assign_batch,
+                                           splited_assign_batch,
+                                           (s_ctx->buffer->data_size_ + qp_nums_ - 1) / qp_nums_);
+                std::vector<AssignmentBatch> agg_assign_batch;
+
+                nsplit_assign_by_step(OpCode::WRITE_WITH_IMM, splited_assign_batch, agg_assign_batch, qp_nums_);
+
+                for (size_t qpi = 0; qpi < qp_nums_; ++qpi) {
+                    data_ctx_->submit(
+                        OpCode::WRITE_WITH_IMM,
+                        agg_assign_batch[qpi],
+                        [s_ctx](int32_t stat, int32_t imm_data) { s_ctx->buffer->sendDoneCallback(); },
+                        qpi);
+                    SLIME_LOG_INFO("writewithimm, qpi: ", qpi, ", ", agg_assign_batch[qpi][0].dump());
+                }
 
                 std::vector<Assignment> batch{Assignment(reinterpret_cast<uintptr_t>(dummy_), 0, 0, sizeof(int64_t))};
                 meta_ctx_->submit(OpCode::RECV, batch, [this, slot](int32_t status, int32_t imm) {
-                    meta_arrived_scoreboard_[slot].val.store(true, std::memory_order_release);
+                    meta_arrived_scoreboard_[slot].val.store(1, std::memory_order_release);
                 });
             }
         }
@@ -312,18 +335,22 @@ int32_t RDMAEndpointV0::recvProxy()
 
                 meta_ctx_->submit(OpCode::WRITE_WITH_IMM, assign_batch);
 
-                while (!data_arrived_scoreboard_[slot].val.load(std::memory_order_acquire)) {
+                const uint64_t TARGET_MASK = (1 << qp_nums_) - 1;
+                while (data_arrived_scoreboard_[slot].val.load(std::memory_order_acquire) != TARGET_MASK) {
                     cpu_relax();
                 }
 
-                data_arrived_scoreboard_[slot].val.store(false, std::memory_order_relaxed);
+                data_arrived_scoreboard_[slot].val.store(0, std::memory_order_relaxed);
 
                 r_ctx->buffer->recvDoneCallback();
 
-                std::vector<Assignment> batch{Assignment(reinterpret_cast<uintptr_t>(dummy_), 0, 0, sizeof(int64_t))};
-                data_ctx_->submit(OpCode::RECV, batch, [this, slot](int32_t status, int32_t imm) {
-                    data_arrived_scoreboard_[slot].val.store(true, std::memory_order_release);
-                });
+                for (size_t qpi = 0; qpi < qp_nums_; ++qpi) {
+                    std::vector<Assignment> batch{
+                        Assignment(reinterpret_cast<uintptr_t>(dummy_), 0, 0, sizeof(int64_t))};
+                    data_ctx_->submit(OpCode::RECV, batch, [this, slot, qpi](int32_t status, int32_t imm) {
+                        data_arrived_scoreboard_[slot].val.fetch_or(1ULL << qpi, std::memory_order_release);
+                    });
+                }
             }
         }
         else {

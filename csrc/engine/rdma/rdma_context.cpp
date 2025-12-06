@@ -368,49 +368,6 @@ void RDMAContext::stop_future()
     }
 }
 
-void split_assign_by_max_length(OpCode           opcode,
-                                AssignmentBatch& batch,
-                                AssignmentBatch& batch_split_after_max_length,
-                                size_t           max_length)
-{
-    for (size_t i = 0; i < batch.size(); ++i) {
-        if (batch[i].length < max_length) {
-            batch_split_after_max_length.push_back(std::move(batch[i]));
-        }
-        else {
-            for (size_t j = 0; j < batch[i].length; j += max_length) {
-                batch_split_after_max_length.push_back(
-                    Assignment(batch[i].mr_key,
-                               batch[i].remote_mr_key,
-                               batch[i].target_offset + j,
-                               batch[i].source_offset + j,
-                               std::min(static_cast<size_t>(max_length), batch[i].length - j)));
-            }
-        }
-    }
-}
-
-void split_assign_by_step(OpCode opcode, AssignmentBatch& batch, std::vector<AssignmentBatch>& batch_split, size_t step)
-{
-    // split assignment by step
-    for (int i = 0; i < batch.size(); i += step) {
-        AssignmentBatch split_batch;
-        std::move(batch.begin() + i, std::min(batch.end(), batch.begin() + i + step), std::back_inserter(split_batch));
-        batch_split.push_back(split_batch);
-    }
-}
-
-void nsplit_assign_by_step(OpCode                        opcode,
-                           AssignmentBatch&              batch,
-                           std::vector<AssignmentBatch>& batch_nsplit,
-                           size_t                        nstep)
-{
-    // split assignment by nstep
-    size_t bsize = batch.size();
-    int    step  = (bsize + nstep - 1) / nstep;
-    split_assign_by_step(opcode, batch, batch_nsplit, step);
-}
-
 std::shared_ptr<RDMAAssignHandler>
 RDMAContext::submit(OpCode opcode, AssignmentBatch& batch, callback_fn_t callback, int qpi, int32_t imm_data)
 {

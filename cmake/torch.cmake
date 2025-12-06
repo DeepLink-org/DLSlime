@@ -30,6 +30,7 @@ run_python(
 
 if(TORCH_CURRENT_VERSION VERSION_GREATER_EQUAL "2.9")
     message(STATUS "Torch version ${TORCH_CURRENT_VERSION} >= 2.9, using predefined TORCH_ENABLE_ABI.")
+    set(Torch_PYBIND11_BUILD_ABI ${TORCH_ENABLE_ABI})
 else()
     message(STATUS "Torch version ${TORCH_CURRENT_VERSION} < 2.9, querying internal ABI string.")
     run_python(

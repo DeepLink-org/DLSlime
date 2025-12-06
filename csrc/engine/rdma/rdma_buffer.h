@@ -99,6 +99,8 @@ private:
     std::mutex recv_mutex_;
 
     std::atomic<int32_t> slot_id_{0};
+
+    uint64_t num_pack_ = 1;
 };
 
 }  // namespace slime
