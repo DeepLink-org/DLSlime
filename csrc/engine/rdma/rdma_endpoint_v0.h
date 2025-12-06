@@ -80,8 +80,8 @@ struct alignas(64) RecvContext {
     }
 };
 
-struct alignas(64) PaddedAtomicBool {
-    std::atomic<bool> val{false};
+struct alignas(64) PaddedAtomicUint64 {
+    std::atomic<uint64_t> val{0};
 };
 
 // ==========================================
@@ -124,6 +124,8 @@ public:
     }
 
 private:
+    int64_t qp_nums_;
+
     std::shared_ptr<RDMAContext> data_ctx_;
     std::shared_ptr<RDMAContext> meta_ctx_;
     size_t                       data_ctx_qp_num_;
@@ -144,8 +146,8 @@ private:
     std::vector<RecvContext> recv_ctx_pool_;
 
     // Scoreboards for signaling completion between RDMA callbacks and Proxy threads
-    PaddedAtomicBool* meta_arrived_scoreboard_;
-    PaddedAtomicBool* data_arrived_scoreboard_;
+    PaddedAtomicUint64* meta_arrived_scoreboard_;
+    PaddedAtomicUint64* data_arrived_scoreboard_;
 
     std::atomic<uint64_t> send_slot_id_{0};
     std::atomic<uint64_t> recv_slot_id_{0};
