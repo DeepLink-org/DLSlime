@@ -93,7 +93,7 @@ class RDMAAssign {
     friend std::ostream& operator<<(std::ostream& os, const RDMAAssign& assignment);
 
 public:
-    RDMAAssign(OpCode opcode, AssignmentBatch& batch, callback_fn_t callback = nullptr);
+    RDMAAssign(OpCode opcode, AssignmentBatch& batch, callback_fn_t callback = nullptr, bool is_inline=false);
 
     ~RDMAAssign()
     {
@@ -125,6 +125,8 @@ private:
     bool    with_imm_data_{false};
 
     std::shared_ptr<callback_info_t> callback_info_;
+
+    bool is_inline_;
 };
 
 class RDMAAssignHandler {

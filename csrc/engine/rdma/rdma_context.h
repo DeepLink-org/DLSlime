@@ -52,25 +52,13 @@ public:
         srand48(time(NULL));
     }
 
-    RDMAContext(size_t qp_num)
+    RDMAContext(size_t qp_num, size_t max_num_inline_data = 0)
     {
         SLIME_LOG_DEBUG("Initializing qp management, num qp: " << qp_num);
 
-        qp_list_len_   = qp_num;
-        qp_management_ = new qp_management_t*[qp_list_len_];
-        for (int qpi = 0; qpi < qp_list_len_; qpi++) {
-            qp_management_[qpi] = new qp_management_t();
-        }
+        qp_list_len_         = qp_num;
+        max_num_inline_data_ = max_num_inline_data;
 
-        /* random initialization for psn configuration */
-        srand48(time(NULL));
-    }
-
-    RDMAContext(size_t qp_num, int64_t service_level): service_level_(service_level)
-    {
-        SLIME_LOG_DEBUG("Initializing qp management, num qp: " << qp_num);
-
-        qp_list_len_   = qp_num;
         qp_management_ = new qp_management_t*[qp_list_len_];
         for (int qpi = 0; qpi < qp_list_len_; qpi++) {
             qp_management_[qpi] = new qp_management_t();
@@ -93,19 +81,19 @@ public:
 
         if (pd_)
             ibv_dealloc_pd(pd_);
-        
+
         if (ib_ctx_)
             ibv_close_device(ib_ctx_);
 
         SLIME_LOG_DEBUG("RDMAContext deconstructed")
     }
 
-    struct ibv_mr* get_mr(const uintptr_t&  mr_key)
+    struct ibv_mr* get_mr(const uintptr_t& mr_key)
     {
         return memory_pool_->get_mr(mr_key);
     }
 
-    remote_mr_t get_remote_mr(const uintptr_t&  mr_key)
+    remote_mr_t get_remote_mr(const uintptr_t& mr_key)
     {
         return memory_pool_->get_remote_mr(mr_key);
     }
@@ -120,7 +108,7 @@ public:
         return 0;
     }
 
-    inline int registerRemoteMemoryRegion(const uintptr_t&  mr_key, uintptr_t addr, size_t length, uint32_t rkey)
+    inline int registerRemoteMemoryRegion(const uintptr_t& mr_key, uintptr_t addr, size_t length, uint32_t rkey)
     {
         memory_pool_->registerRemoteMemoryRegion(mr_key, addr, length, rkey);
         return 0;
@@ -132,7 +120,7 @@ public:
         return 0;
     }
 
-    inline int64_t unregisterMemoryRegion(const uintptr_t&  mr_key)
+    inline int64_t unregisterMemoryRegion(const uintptr_t& mr_key)
     {
         memory_pool_->unregisterMemoryRegion(mr_key);
         return 0;
@@ -148,10 +136,11 @@ public:
     int64_t connect(const json& endpoint_info_json);
     /* Submit an assignment */
     std::shared_ptr<RDMAAssignHandler> submit(OpCode           opcode,
-                                                    AssignmentBatch& assignment,
-                                                    callback_fn_t    callback = nullptr,
-                                                    int              qpi      = UNDEFINED_QPI,
-                                                    int32_t          imm_data = UNDEFINED_IMM_DATA);
+                                              AssignmentBatch& assignment,
+                                              callback_fn_t    callback  = nullptr,
+                                              int              qpi       = UNDEFINED_QPI,
+                                              int32_t          imm_data  = UNDEFINED_IMM_DATA,
+                                              bool             is_inline = false);
 
     void launch_future();
     void stop_future();
@@ -173,7 +162,7 @@ public:
     }
 
     json endpoint_info() const
-    {   
+    {
         json endpoint_info = json{{"rdma_info", local_rdma_info()}, {"mr_info", memory_pool_->mr_info()}};
         return endpoint_info;
     }
@@ -201,6 +190,7 @@ private:
     struct ibv_comp_channel* comp_channel_ = nullptr;
     struct ibv_cq*           cq_           = nullptr;
     uint8_t                  ib_port_      = -1;
+    size_t                   max_num_inline_data_{0};
 
     std::unique_ptr<RDMAMemoryPool> memory_pool_;
 
@@ -216,9 +206,9 @@ private:
         std::mutex rdma_post_send_mutex_;
 
         /* Assignment Queue */
-        std::mutex                          assign_queue_mutex_;
+        std::mutex                      assign_queue_mutex_;
         std::queue<RDMAAssignSharedPtr> assign_queue_;
-        std::atomic<int>                    outstanding_rdma_reads_{0};
+        std::atomic<int>                outstanding_rdma_reads_{0};
 
         /* Has Runnable Assignment */
         std::condition_variable has_runnable_event_;

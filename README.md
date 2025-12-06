@@ -369,29 +369,30 @@ SLIME_QP_NUM=2 python bench/python/dlslime_torch_dist_sendrecv_bench.py --mode s
 SLIME_QP_NUM=2 python bench/python/dlslime_torch_dist_sendrecv_bench.py --mode recv --use-gpu --iterations 100
 ```
 
+Benchmark Results:
 | Message Size (bytes)   | Avg Latency   | Bandwidth     | Device   |
 |------------------------|---------------|---------------|----------|
-| 1,024                  | 0.065 ms      | 15.80 MB/s    | GPU      |
-| 2,048                  | 0.064 ms      | 32.13 MB/s    | GPU      |
-| 4,096                  | 0.066 ms      | 62.05 MB/s    | GPU      |
-| 8,192                  | 0.094 ms      | 86.80 MB/s    | GPU      |
-| 16,384                 | 0.087 ms      | 188.30 MB/s   | GPU      |
-| 32,768                 | 0.060 ms      | 545.00 MB/s   | GPU      |
-| 65,536                 | 0.058 ms      | 1131.37 MB/s  | GPU      |
-| 131,072                | 0.060 ms      | 2201.22 MB/s  | GPU      |
-| 262,144                | 0.064 ms      | 4083.31 MB/s  | GPU      |
-| 524,288                | 0.065 ms      | 8093.57 MB/s  | GPU      |
-| 1,048,576              | 0.127 ms      | 8279.14 MB/s  | GPU      |
-| 2,097,152              | 0.203 ms      | 10307.72 MB/s | GPU      |
-| 4,194,304              | 0.273 ms      | 15373.75 MB/s | GPU      |
-| 8,388,608              | 0.467 ms      | 17964.32 MB/s | GPU      |
-| 16,777,216             | 0.847 ms      | 19818.16 MB/s | GPU      |
-| 33,554,432             | 1.100 ms      | 30497.25 MB/s | GPU      |
-| 67,108,864             | 1.869 ms      | 35908.79 MB/s | GPU      |
-| 134,217,728            | 3.289 ms      | 40810.12 MB/s | GPU      |
-| 268,435,456            | 6.048 ms      | 44380.53 MB/s | GPU      |
-| 536,870,912            | 11.600 ms     | 46280.66 MB/s | GPU      |
-| 1,073,741,824          | 22.593 ms     | 47525.87 MB/s | GPU      |
+| 1,024                  | 0.047 ms      | 21.83 MB/s    | GPU      |
+| 2,048                  | 0.048 ms      | 42.73 MB/s    | GPU      |
+| 4,096                  | 0.051 ms      | 79.89 MB/s    | GPU      |
+| 8,192                  | 0.049 ms      | 165.81 MB/s   | GPU      |
+| 16,384                 | 0.061 ms      | 266.84 MB/s   | GPU      |
+| 32,768                 | 0.052 ms      | 631.99 MB/s   | GPU      |
+| 65,536                 | 0.061 ms      | 1080.54 MB/s  | GPU      |
+| 131,072                | 0.059 ms      | 2212.21 MB/s  | GPU      |
+| 262,144                | 0.058 ms      | 4556.62 MB/s  | GPU      |
+| 524,288                | 0.062 ms      | 8391.94 MB/s  | GPU      |
+| 1,048,576              | 0.066 ms      | 15844.25 MB/s | GPU      |
+| 2,097,152              | 0.092 ms      | 22799.62 MB/s | GPU      |
+| 4,194,304              | 0.149 ms      | 28085.04 MB/s | GPU      |
+| 8,388,608              | 0.311 ms      | 26963.06 MB/s | GPU      |
+| 16,777,216             | 0.469 ms      | 35789.94 MB/s | GPU      |
+| 33,554,432             | 0.895 ms      | 37472.84 MB/s | GPU      |
+| 67,108,864             | 1.670 ms      | 40195.09 MB/s | GPU      |
+| 134,217,728            | 3.244 ms      | 41371.45 MB/s | GPU      |
+| 268,435,456            | 5.899 ms      | 45505.47 MB/s | GPU      |
+| 536,870,912            | 11.444 ms     | 46913.87 MB/s | GPU      |
+| 1,073,741,824          | 22.280 ms     | 48193.20 MB/s | GPU      |
 
 
 ### Heterogeneous Interconnection​

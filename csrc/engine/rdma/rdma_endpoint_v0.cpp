@@ -54,8 +54,8 @@ RDMAEndpointV0::RDMAEndpointV0(const std::string& dev_name,
 
     qp_nums_ = qp_nums;
     // Initialize RDMA Contexts.
-    data_ctx_ = std::make_shared<RDMAContext>(qp_nums, 0);
-    meta_ctx_ = std::make_shared<RDMAContext>(1, 0);
+    data_ctx_ = std::make_shared<RDMAContext>(qp_nums);
+    meta_ctx_ = std::make_shared<RDMAContext>(1, 256);
 
     SLIME_ASSERT(1 == SLIME_AGG_QP_NUM, "cannot aggqp when sendrecv");
     SLIME_ASSERT(64 > SLIME_QP_NUM, "QP NUM must less than 64");
@@ -333,7 +333,7 @@ int32_t RDMAEndpointV0::recvProxy()
                                                                slot * sizeof(meta_info_t),
                                                                sizeof(meta_info_t))};
 
-                meta_ctx_->submit(OpCode::WRITE_WITH_IMM, assign_batch);
+                meta_ctx_->submit(OpCode::WRITE_WITH_IMM, assign_batch, nullptr, 0, 0, true);
 
                 const uint64_t TARGET_MASK = (1 << qp_nums_) - 1;
                 while (data_arrived_scoreboard_[slot].val.load(std::memory_order_acquire) != TARGET_MASK) {

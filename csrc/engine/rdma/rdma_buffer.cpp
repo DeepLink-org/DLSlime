@@ -3,58 +3,52 @@
 #include "engine/assignment.h"
 #include "engine/rdma/rdma_env.h"
 #include "logging.h"
+#include <atomic>
+#include <emmintrin.h>
 
 namespace slime {
 
 void RDMABuffer::send()
 {
+    send_completed_.store(0, std::memory_order_release); 
     endpointv0_->addBuffer(OpCode::SEND, shared_from_this());
 }
 
 void RDMABuffer::recv()
 {
+    recv_completed_.store(0, std::memory_order_release); 
     endpointv0_->addBuffer(OpCode::RECV, shared_from_this());
 }
 
 void RDMABuffer::sendDoneCallback()
 {
-    std::unique_lock<std::mutex> lock(send_mutex_);
     SLIME_LOG_DEBUG("Send done callback triggered");
-    ++send_completed_;
-    send_cv_.notify_all();
+    send_completed_.fetch_add(1);
 }
 
 void RDMABuffer::recvDoneCallback()
 {
-    std::unique_lock<std::mutex> lock(recv_mutex_);
     SLIME_LOG_DEBUG("Recv done callback triggered");
-    ++recv_completed_;
-    recv_cv_.notify_all();
+    recv_completed_.fetch_add(1);
 }
 
 bool RDMABuffer::waitSend()
 {
-    std::unique_lock<std::mutex> lock(send_mutex_);
-
     if (send_completed_ == num_pack_) {
         return true;
     }
-    send_cv_.wait(lock, [this]() { return send_completed_ >= num_pack_; });
-    send_pending_ = false;
+    while (send_completed_.load(std::memory_order_acquire) < num_pack_) _mm_pause();
     SLIME_LOG_INFO("complete to send the data.");
     return true;
 }
 
 bool RDMABuffer::waitRecv()
 {
-    std::unique_lock<std::mutex> lock(recv_mutex_);
-
     if (recv_completed_ == 1) {
         return true;
     }
 
-    recv_cv_.wait(lock, [this]() { return recv_completed_ >= 1; });
-    recv_pending_ = false;
+    while (recv_completed_.load(std::memory_order_acquire) < 1) _mm_pause();
     SLIME_LOG_INFO("complete to recv the data.");
     return true;
 }
