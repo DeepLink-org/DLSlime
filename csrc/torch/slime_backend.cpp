@@ -113,8 +113,6 @@ c10::intrusive_ptr<::c10d::Work> slimeBackend::send(std::vector<at::Tensor>& ten
     if (tensors[0].is_cuda()) {
 #ifdef SLIME_USE_CUDA
         stream_handle = (void*)at::cuda::getCurrentCUDAStream().stream();
-#else
-        SLIME_LOG_WARN("Tensor is CUDA but DLSlime built without CUDA support!");
 #endif
     }
     else if (tensor.is_cpu()) {
