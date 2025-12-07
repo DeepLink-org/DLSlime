@@ -12,10 +12,8 @@ std::shared_ptr<DeviceSignal> createSignal(bool bypass)
     if (bypass) {
         return std::make_shared<CPUDeviceSignal>();
     }
-    SLIME_LOG_INFO("USE_CUDA_SIGNAL");
     return std::make_shared<CudaDeviceSignal>();
 #else
-    SLIME_LOG_INFO("USE_CPU_SIGNAL");
     return std::make_shared<CPUDeviceSignal>();
 #endif
 }
