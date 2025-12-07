@@ -4,7 +4,7 @@
 
 namespace slime {
 
-RDMAAssign::RDMAAssign(OpCode opcode, AssignmentBatch& batch, callback_fn_t callback)
+RDMAAssign::RDMAAssign(OpCode opcode, AssignmentBatch& batch, callback_fn_t callback, bool is_inline)
 {
     opcode_ = opcode;
 
@@ -14,6 +14,7 @@ RDMAAssign::RDMAAssign(OpCode opcode, AssignmentBatch& batch, callback_fn_t call
     std::move(batch.begin(), batch.end(), batch_);
 
     callback_info_ = std::make_shared<callback_info_t>(opcode, batch_size_, callback, batch_);
+    is_inline_ = is_inline;
 }
 
 void RDMAAssign::wait()

@@ -61,8 +61,8 @@ public:
         return storage_view_batch_;
     }
 
-    void send();
-    void recv();
+    void send(void* stream_handler=nullptr);
+    void recv(void* stream_handler=nullptr);
 
     bool waitSend();
     bool waitRecv();

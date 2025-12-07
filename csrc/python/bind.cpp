@@ -182,7 +182,7 @@ PYBIND11_MODULE(_slime_c, m)
             py::call_guard<py::gil_scoped_release>());
 
     py::class_<slime::RDMAEndpointV0, std::shared_ptr<slime::RDMAEndpointV0>>(m, "rdma_endpoint")
-        .def(py::init<const std::string&, uint8_t, const std::string&, size_t>())
+        .def(py::init<const std::string&, uint8_t, const std::string&, size_t, bool>())
         .def("context_connect", &slime::RDMAEndpointV0::connect)
         .def("get_data_context_info", &slime::RDMAEndpointV0::dataCtxInfo)
         .def("get_meta_context_info", &slime::RDMAEndpointV0::metaCtxInfo)

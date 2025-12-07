@@ -1,5 +1,6 @@
 #include "rdma_endpoint_v0.h"
 
+#include "device/device_api.h"
 #include "engine/assignment.h"
 #include "engine/rdma/rdma_buffer.h"
 #include "engine/rdma/rdma_common.h"
@@ -12,7 +13,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
-#include <stdlib.h>  // for posix_memalign
+#include <stdlib.h>
 #include <sys/types.h>
 #include <thread>
 #include <vector>
@@ -45,17 +46,16 @@ void RDMAEndpointV0::freeRing(jring_t* ring)
     }
 }
 
-RDMAEndpointV0::RDMAEndpointV0(const std::string& dev_name,
-                               size_t             ib_port,
-                               const std::string& link_type,
-                               size_t             qp_nums)
+RDMAEndpointV0::RDMAEndpointV0(
+    const std::string& dev_name, size_t ib_port, const std::string& link_type, size_t qp_nums, bool bypass_signal)
 {
     SLIME_LOG_INFO("Init RDMAEndpointV0 Contexts and Devices...");
 
+    bypass_signal_ = bypass_signal;
     qp_nums_ = qp_nums;
     // Initialize RDMA Contexts.
-    data_ctx_ = std::make_shared<RDMAContext>(qp_nums, 0);
-    meta_ctx_ = std::make_shared<RDMAContext>(1, 0);
+    data_ctx_ = std::make_shared<RDMAContext>(qp_nums);
+    meta_ctx_ = std::make_shared<RDMAContext>(1, 256);
 
     SLIME_ASSERT(1 == SLIME_AGG_QP_NUM, "cannot aggqp when sendrecv");
     SLIME_ASSERT(64 > SLIME_QP_NUM, "QP NUM must less than 64");
@@ -89,7 +89,11 @@ RDMAEndpointV0::RDMAEndpointV0(const std::string& dev_name,
     send_ctx_pool_.resize(MAX_FIFO_DEPTH);
     recv_ctx_pool_.resize(MAX_FIFO_DEPTH);
 
-    SLIME_LOG_INFO("Memory Pools Pre-allocated.");
+    for (int i = 0; i < MAX_FIFO_DEPTH; ++i) {
+        SLIME_LOG_INFO("initializing signal");
+        send_ctx_pool_[i].signal = slime::device::createSignal(bypass_signal_);
+        recv_ctx_pool_[i].signal = slime::device::createSignal(bypass_signal_);
+    }
 
     // Register Memory Regions (MR)
     // Registering these upfront prevents expensive registration calls during runtime.
@@ -208,7 +212,7 @@ void RDMAEndpointV0::connect(const json& data_ctx_info, const json& meta_ctx_inf
     SLIME_LOG_INFO("RDMA Contexts Launched.");
 }
 
-int32_t RDMAEndpointV0::addBuffer(OpCode opcode, std::shared_ptr<RDMABuffer> buffer)
+int32_t RDMAEndpointV0::addBuffer(OpCode opcode, std::shared_ptr<RDMABuffer> buffer, void* stream_handle)
 {
     buffer->num_pack_ = qp_nums_;
     auto buffer_mr    = data_ctx_->get_mr(buffer->ptr_);
@@ -226,6 +230,8 @@ int32_t RDMAEndpointV0::addBuffer(OpCode opcode, std::shared_ptr<RDMABuffer> buf
         ctx->slot_id     = slot;
         ctx->buffer      = buffer;
 
+        ctx->signal->record_on_stream(stream_handle);
+
         while (jring_enqueue_burst(send_buffer_ring_, (void**)&ctx, 1, nullptr) == 0) {
             cpu_relax();
         }
@@ -237,6 +243,9 @@ int32_t RDMAEndpointV0::addBuffer(OpCode opcode, std::shared_ptr<RDMABuffer> buf
         RecvContext* ctx = &recv_ctx_pool_[slot];
         ctx->slot_id     = slot;
         ctx->buffer      = buffer;
+
+        ctx->signal->reset();
+        ctx->signal->wait_on_stream(stream_handle, 1);
 
         // Setup local meta info for remote writer to know where to write
         local_meta_info_[slot].r_key_ = data_ctx_->get_mr(buffer->ptr_)->rkey;
@@ -264,6 +273,10 @@ int32_t RDMAEndpointV0::sendProxy()
             for (int i = 0; i < n; ++i) {
                 auto* s_ctx = (SendContext*)buf_ptrs[i];
                 int   slot  = s_ctx->slot_id;
+
+                while (s_ctx->signal->is_busy()) {
+                    cpu_relax();
+                }
 
                 while (!meta_arrived_scoreboard_[slot].val.load(std::memory_order_acquire)) {
                     cpu_relax();
@@ -333,7 +346,7 @@ int32_t RDMAEndpointV0::recvProxy()
                                                                slot * sizeof(meta_info_t),
                                                                sizeof(meta_info_t))};
 
-                meta_ctx_->submit(OpCode::WRITE_WITH_IMM, assign_batch);
+                meta_ctx_->submit(OpCode::WRITE_WITH_IMM, assign_batch, nullptr, 0, 0, true);
 
                 const uint64_t TARGET_MASK = (1 << qp_nums_) - 1;
                 while (data_arrived_scoreboard_[slot].val.load(std::memory_order_acquire) != TARGET_MASK) {
@@ -342,6 +355,7 @@ int32_t RDMAEndpointV0::recvProxy()
 
                 data_arrived_scoreboard_[slot].val.store(0, std::memory_order_relaxed);
 
+                r_ctx->signal->set_signal_from_cpu(1);
                 r_ctx->buffer->recvDoneCallback();
 
                 for (size_t qpi = 0; qpi < qp_nums_; ++qpi) {

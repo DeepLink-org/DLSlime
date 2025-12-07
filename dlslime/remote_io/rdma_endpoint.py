@@ -152,7 +152,7 @@ class RDMAEndpoint(BaseEndpoint):
                 assign.source_offset,
                 assign.length,
             ) for assign in batch
-        ], None, -1, -1)
+        ], None, -1, -1, False)
         if not async_op:
             return rdma_assignment.wait()
         else:
@@ -192,7 +192,7 @@ class RDMAEndpoint(BaseEndpoint):
                 assign.source_offset,
                 assign.length,
             ) for assign in batch
-        ], None, qpi, -1)
+        ], None, qpi, -1, False)
         if not async_op:
             return rdma_assignment.wait()
         else:
@@ -212,7 +212,7 @@ class RDMAEndpoint(BaseEndpoint):
                 assign.source_offset,
                 assign.length,
             ) for assign in batch
-        ], delete_assignment_callback, -1, -1)
+        ], delete_assignment_callback, -1, -1, False)
         self.assignment_with_callback[callback_obj_id] = rdma_assignment
         return rdma_assignment
 
@@ -241,7 +241,7 @@ class RDMAEndpoint(BaseEndpoint):
                 assign.source_offset,
                 assign.length,
             ) for assign in batch
-        ], None, qpi, -1)
+        ], None, qpi, -1, False)
         if async_op:
             return rdma_assignment
         else:
@@ -281,6 +281,7 @@ class RDMAEndpoint(BaseEndpoint):
             None,
             qpi,
             imm_data,
+            False
         )
         if async_op:
             return rdma_assignment
@@ -311,7 +312,7 @@ class RDMAEndpoint(BaseEndpoint):
                 assign.source_offset,
                 assign.length,
             ) for assign in batch
-        ], None, qpi, -1)
+        ], None, qpi, -1, False)
         if async_op:
             return rdma_assignment
         else:

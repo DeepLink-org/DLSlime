@@ -1,5 +1,4 @@
 # Python Wrapper
-slime_option(USE_MACA "USE in MACA Platform" OFF)
 
 # find pybind
 set(PYBIND11_FINDPYTHON ON)
@@ -77,7 +76,4 @@ if(TORCH_CURRENT_VERSION VERSION_LESS "2.9")
     add_compile_options(-DPYBIND11_BUILD_ABI=\"${Torch_PYBIND11_BUILD_ABI}\")
 endif()
 
-if (USE_MACA)
-    add_compile_definitions("USE_MACA")
-    message(STATUS "Build DLSlime under meta platform.")
-endif()
+

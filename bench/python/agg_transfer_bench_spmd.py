@@ -20,6 +20,8 @@ import torch.distributed as dist
 from tabulate import tabulate
 from torch.distributed import distributed_c10d
 
+from dlslime import _slime_torch
+
 parser = argparse.ArgumentParser()
 parser.add_argument('--batch-size', type=int, default=1)
 parser.add_argument('--size', nargs='+', type=int, default=[n for n in range(8, 25)])
@@ -116,6 +118,7 @@ elif args.transfer_engine == 'mooncake':
     from dlslime import available_nic
 
 dist.init_process_group('cpu:gloo,cuda:nccl')
+transfer_group = dist.new_group(list(range(world_size)), backend='cuda:nccl')
 
 # TODO: for AFD Benchmark
 initiator_group = dist.new_group(list(range(num_channels)), backend='cpu:gloo,cuda:nccl')
@@ -152,7 +155,8 @@ elif args.transfer_engine == 'nixl':
 
 torch.cuda.set_device(local_rank)
 
-ttensors = [torch.ones([2 << rawsize], device='cuda') for rawsize in args.size]
+ttensors = [torch.ones([2 << rawsize], device=f'cuda:{local_rank}') for rawsize in args.size]
+print(local_rank)
 torch.cuda.synchronize()
 
 if args.transfer_engine == 'dlslime':
@@ -301,13 +305,13 @@ def transfer_batch_concurrency_nccl(role, opcode, mr_key, tensor, batch_size, nu
     for concurrent_id in range(num_concurrency):
         if role == 'target':
             reqs = [
-                distributed_c10d.P2POp(dist.isend, tensor, peer_rank, tag=iter_id * batch_size + batch_id)
+                distributed_c10d.P2POp(dist.isend, tensor, peer_rank, tag=iter_id * batch_size + batch_id, group=transfer_group)
                 for batch_id in range(batch_size)
             ]
             futures.extend(distributed_c10d.batch_isend_irecv(reqs))
         else:
             reqs = [
-                distributed_c10d.P2POp(dist.irecv, tensor, peer_rank, tag=iter_id * batch_size + batch_id)
+                distributed_c10d.P2POp(dist.irecv, tensor, peer_rank, tag=iter_id * batch_size + batch_id, group=transfer_group)
                 for batch_id in range(batch_size)
             ]
             futures.extend(distributed_c10d.batch_isend_irecv(reqs))

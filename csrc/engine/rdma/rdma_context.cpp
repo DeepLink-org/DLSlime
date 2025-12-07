@@ -177,15 +177,24 @@ int64_t RDMAContext::init(const std::string& dev_name, uint8_t ib_port, const st
         qp_init_attr.send_cq                 = cq_;
         qp_init_attr.recv_cq                 = cq_;
         qp_init_attr.qp_type                 = IBV_QPT_RC;  // Reliable Connection
-        qp_init_attr.cap.max_send_wr         = SLIME_MAX_SEND_WR;
-        qp_init_attr.cap.max_recv_wr         = SLIME_MAX_RECV_WR;
-        qp_init_attr.cap.max_send_sge        = 1;
-        qp_init_attr.cap.max_recv_sge        = 1;
-        qp_init_attr.sq_sig_all              = false;
-        rdma_info_t& local_rdma_info         = qp_man->local_rdma_info_;
-        qp_man->qp_                          = ibv_create_qp(pd_, &qp_init_attr);
+
+        if (max_num_inline_data_ == 0) {
+            qp_init_attr.cap.max_send_wr = SLIME_MAX_SEND_WR;
+        }
+        else {
+            SLIME_ASSERT(max_num_inline_data_ <= 4096, "inline data need to less than or equal to 4096");
+            qp_init_attr.cap.max_send_wr     = 4096;
+            qp_init_attr.cap.max_inline_data = max_num_inline_data_;
+        }
+
+        qp_init_attr.cap.max_recv_wr  = SLIME_MAX_RECV_WR;
+        qp_init_attr.cap.max_send_sge = 1;
+        qp_init_attr.cap.max_recv_sge = 1;
+        qp_init_attr.sq_sig_all       = false;
+        rdma_info_t& local_rdma_info  = qp_man->local_rdma_info_;
+        qp_man->qp_                   = ibv_create_qp(pd_, &qp_init_attr);
         if (!qp_man->qp_) {
-            SLIME_LOG_ERROR("Failed to create QP " << qp_man->qp_->qp_num);
+            SLIME_LOG_ERROR("Failed to create QP " << qp_man->qp_->qp_num, ": ", strerror(errno));
             return -1;
         }
 
@@ -368,8 +377,8 @@ void RDMAContext::stop_future()
     }
 }
 
-std::shared_ptr<RDMAAssignHandler>
-RDMAContext::submit(OpCode opcode, AssignmentBatch& batch, callback_fn_t callback, int qpi, int32_t imm_data)
+std::shared_ptr<RDMAAssignHandler> RDMAContext::submit(
+    OpCode opcode, AssignmentBatch& batch, callback_fn_t callback, int qpi, int32_t imm_data, bool is_inline)
 {
     // Step 1: Split by max length
     size_t          length = SLIME_MAX_LENGTH_PER_ASSIGNMENT;
@@ -410,7 +419,8 @@ RDMAContext::submit(OpCode opcode, AssignmentBatch& batch, callback_fn_t callbac
         size_t split_size_this_qp = batch_split_after_cq_depth.size();
         for (int i = 0; i < split_size_this_qp; ++i) {
             callback_fn_t split_callback = (i == split_size_this_qp - 1 ? callback : [](int, int) { return 0; });
-            rdma_assignment = std::make_shared<RDMAAssign>(opcode, batch_split_after_cq_depth[i], split_callback);
+            rdma_assignment =
+                std::make_shared<RDMAAssign>(opcode, batch_split_after_cq_depth[i], split_callback, is_inline);
             SLIME_LOG_INFO("dump: ", rdma_assignment->dump());
             qp_management_[agg_qpi]->assign_queue_.push(rdma_assignment);
             rdma_assignment->with_imm_data_ = (i == split_size_this_qp - 1) ? (imm_data != UNDEFINED_IMM_DATA) : false;
@@ -447,7 +457,9 @@ int64_t RDMAContext::post_send_batch(int qpi, RDMAAssignSharedPtr assign)
         wr[i].num_sge    = 1;
         wr[i].imm_data   = (i == batch_size - 1) ? assign->imm_data_ : UNDEFINED_IMM_DATA;
         wr[i].send_flags = (i == batch_size - 1) ? IBV_SEND_SIGNALED : 0;
-        wr[i].next       = (i == batch_size - 1) ? nullptr : &wr[i + 1];
+        if (assign->is_inline_)
+            wr[i].send_flags |= IBV_SEND_INLINE;
+        wr[i].next = (i == batch_size - 1) ? nullptr : &wr[i + 1];
     }
     {
         std::unique_lock<std::mutex> lock(qp_management_[qpi]->rdma_post_send_mutex_);
@@ -527,10 +539,14 @@ int64_t RDMAContext::post_rc_oneside_batch(int qpi, RDMAAssignSharedPtr assign)
             wr[i].opcode = IBV_WR_RDMA_WRITE;
         }
 
-        wr[i].sg_list             = &sge[i];
-        wr[i].num_sge             = 1;
-        wr[i].imm_data            = (i == batch_size - 1) ? assign->imm_data_ : UNDEFINED_IMM_DATA;
-        wr[i].send_flags          = (i == batch_size - 1) ? IBV_SEND_SIGNALED : 0;
+        wr[i].sg_list    = &sge[i];
+        wr[i].num_sge    = 1;
+        wr[i].imm_data   = (i == batch_size - 1) ? assign->imm_data_ : UNDEFINED_IMM_DATA;
+        wr[i].send_flags = (i == batch_size - 1) ? IBV_SEND_SIGNALED : 0;
+        if (assign->is_inline_) {
+            wr[i].send_flags |= IBV_SEND_INLINE;
+            SLIME_LOG_INFO("length: ", subassign.length)
+        }
         wr[i].wr.rdma.remote_addr = remote_addr + assign->batch_[i].target_offset;
         wr[i].wr.rdma.rkey        = remote_rkey;
         wr[i].next                = (i == batch_size - 1) ? NULL : &wr[i + 1];
