@@ -152,8 +152,6 @@ c10::intrusive_ptr<::c10d::Work> slimeBackend::recv(std::vector<at::Tensor>& ten
     if (tensors[0].is_cuda()) {
 #ifdef SLIME_USE_CUDA
         stream_handle = (void*)at::cuda::getCurrentCUDAStream().stream();
-#else
-        throw std::runtime_error("Tensor is CUDA but DLSlime built without CUDA support!");
 #endif
     }
     else if (tensor.is_cpu()) {
@@ -190,7 +188,7 @@ slimeBackend::slimeBackend(const c10::intrusive_ptr<::c10d::Store>& store, int r
     for (int i = 0; i < size - 1; ++i) {
 
         // TODO: the different end_point in the rank can use different RDMA dev to transmit the message.
-        end_point_set_.push_back(std::make_shared<RDMAEndpointV0>(dev_name, ib_port, link_type, qp_num, false));
+        end_point_set_.push_back(std::make_shared<RDMAEndpointV0>(dev_name, ib_port, link_type, qp_num));
 
         json channel_info;
         channel_info["data_channel"] = end_point_set_[i]->dataCtxInfo();

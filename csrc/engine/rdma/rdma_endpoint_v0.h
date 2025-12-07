@@ -95,7 +95,7 @@ class RDMAEndpointV0: public std::enable_shared_from_this<RDMAEndpointV0> {
     friend class RDMABuffer;
 
 public:
-    explicit RDMAEndpointV0(const std::string& dev_name, size_t ib_port, const std::string& link_type, size_t qp_nums, bool bypass_signal);
+    explicit RDMAEndpointV0(const std::string& dev_name, size_t ib_port, const std::string& link_type, size_t qp_nums);
     ~RDMAEndpointV0();
 
     /**

@@ -38,7 +38,7 @@ bool RDMABuffer::waitSend()
         return true;
     }
     while (send_completed_.load(std::memory_order_acquire) < num_pack_) _mm_pause();
-    SLIME_LOG_INFO("complete to send the data.");
+    SLIME_LOG_DEBUG("complete to send the data.");
     return true;
 }
 
@@ -49,7 +49,7 @@ bool RDMABuffer::waitRecv()
     }
 
     while (recv_completed_.load(std::memory_order_acquire) < 1) _mm_pause();
-    SLIME_LOG_INFO("complete to recv the data.");
+    SLIME_LOG_DEBUG("complete to recv the data.");
     return true;
 }
 }  // namespace slime

@@ -421,7 +421,6 @@ std::shared_ptr<RDMAAssignHandler> RDMAContext::submit(
             callback_fn_t split_callback = (i == split_size_this_qp - 1 ? callback : [](int, int) { return 0; });
             rdma_assignment =
                 std::make_shared<RDMAAssign>(opcode, batch_split_after_cq_depth[i], split_callback, is_inline);
-            SLIME_LOG_INFO("dump: ", rdma_assignment->dump());
             qp_management_[agg_qpi]->assign_queue_.push(rdma_assignment);
             rdma_assignment->with_imm_data_ = (i == split_size_this_qp - 1) ? (imm_data != UNDEFINED_IMM_DATA) : false;
             rdma_assignment->imm_data_      = (i == split_size_this_qp - 1) ? imm_data : UNDEFINED_IMM_DATA;
@@ -543,10 +542,8 @@ int64_t RDMAContext::post_rc_oneside_batch(int qpi, RDMAAssignSharedPtr assign)
         wr[i].num_sge    = 1;
         wr[i].imm_data   = (i == batch_size - 1) ? assign->imm_data_ : UNDEFINED_IMM_DATA;
         wr[i].send_flags = (i == batch_size - 1) ? IBV_SEND_SIGNALED : 0;
-        if (assign->is_inline_) {
+        if (assign->is_inline_)
             wr[i].send_flags |= IBV_SEND_INLINE;
-            SLIME_LOG_INFO("length: ", subassign.length)
-        }
         wr[i].wr.rdma.remote_addr = remote_addr + assign->batch_[i].target_offset;
         wr[i].wr.rdma.rkey        = remote_rkey;
         wr[i].next                = (i == batch_size - 1) ? NULL : &wr[i + 1];

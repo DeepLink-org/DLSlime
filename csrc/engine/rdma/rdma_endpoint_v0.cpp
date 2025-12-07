@@ -46,12 +46,16 @@ void RDMAEndpointV0::freeRing(jring_t* ring)
     }
 }
 
-RDMAEndpointV0::RDMAEndpointV0(
-    const std::string& dev_name, size_t ib_port, const std::string& link_type, size_t qp_nums, bool bypass_signal)
+RDMAEndpointV0::RDMAEndpointV0(const std::string& dev_name,
+                               size_t             ib_port,
+                               const std::string& link_type,
+                               size_t             qp_nums)
 {
     SLIME_LOG_INFO("Init RDMAEndpointV0 Contexts and Devices...");
+    SLIME_LOG_INFO("bypass Signal: ", SLIME_BYPASS_SIGNAL);
+    if (SLIME_BYPASS_SIGNAL)
+        bypass_signal_ = true;
 
-    bypass_signal_ = bypass_signal;
     qp_nums_ = qp_nums;
     // Initialize RDMA Contexts.
     data_ctx_ = std::make_shared<RDMAContext>(qp_nums);
@@ -90,7 +94,6 @@ RDMAEndpointV0::RDMAEndpointV0(
     recv_ctx_pool_.resize(MAX_FIFO_DEPTH);
 
     for (int i = 0; i < MAX_FIFO_DEPTH; ++i) {
-        SLIME_LOG_INFO("initializing signal");
         send_ctx_pool_[i].signal = slime::device::createSignal(bypass_signal_);
         recv_ctx_pool_[i].signal = slime::device::createSignal(bypass_signal_);
     }
@@ -309,7 +312,6 @@ int32_t RDMAEndpointV0::sendProxy()
                         agg_assign_batch[qpi],
                         [s_ctx](int32_t stat, int32_t imm_data) { s_ctx->buffer->sendDoneCallback(); },
                         qpi);
-                    SLIME_LOG_INFO("writewithimm, qpi: ", qpi, ", ", agg_assign_batch[qpi][0].dump());
                 }
 
                 std::vector<Assignment> batch{Assignment(reinterpret_cast<uintptr_t>(dummy_), 0, 0, sizeof(int64_t))};
