@@ -68,8 +68,8 @@ public:
     }
 
 private:
-    volatile int* host_ptr_ = nullptr;  // CPU 读的地址
-    void*         dev_ptr_  = nullptr;  // GPU 写的地址
+    volatile int* host_ptr_ = nullptr;
+    void*         dev_ptr_  = nullptr;
 };
 
 }  // namespace device
