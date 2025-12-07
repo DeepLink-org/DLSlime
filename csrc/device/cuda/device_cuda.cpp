@@ -1,7 +1,6 @@
 #include "cuda_signal.h"
 #include "device/cpu/cpu_signal.h"
 #include "device/device_api.h"
-#include "logging.h"
 
 namespace slime {
 namespace device {
