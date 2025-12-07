@@ -6,6 +6,12 @@ include(${CMAKE_CURRENT_LIST_DIR}/cmake/utils.cmake)
 
 # Slime options for transfer engine
 slime_option(BUILD_RDMA                "Build RDMA"                        ON)
+
+slime_option(USE_CUDA                  "USE in CUDA Platform"             OFF)
+slime_option(USE_MACA                  "USE in MACA Platform"             OFF)
+slime_option(USE_CAMB                  "USE in CAMB Platform"             OFF)
+slime_option(USE_ASCEND                "USE in CAMB Platform"             OFF)
+
 slime_option(BUILD_NVLINK              "Build NVLINK"                     OFF)
 slime_option(BUILD_NVSHMEM             "Build NVSHMEM"                    OFF)
 slime_option(BUILD_ASCEND_DIRECT       "Build Ascend direct transport"    OFF)

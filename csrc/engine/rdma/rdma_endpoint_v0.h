@@ -1,5 +1,6 @@
 #pragma once
 
+#include "device/signal.h"
 #include "engine/assignment.h"
 #include "engine/rdma/rdma_assignment.h"
 #include "jring.h"
@@ -54,9 +55,10 @@ typedef struct alignas(64) ViewInfo {
  * Pre-allocated in a pool to avoid malloc overhead during runtime.
  */
 struct alignas(64) SendContext {
-    int32_t                            slot_id;
-    std::shared_ptr<RDMABuffer>        buffer;
-    std::shared_ptr<RDMAAssignHandler> assign_handler;
+    int32_t                                      slot_id;
+    std::shared_ptr<RDMABuffer>                  buffer;
+    std::shared_ptr<RDMAAssignHandler>           assign_handler;
+    std::shared_ptr<slime::device::DeviceSignal> signal;
 
     void reset()
     {
@@ -69,9 +71,10 @@ struct alignas(64) SendContext {
  * @brief Context object for Recv operations.
  */
 struct alignas(64) RecvContext {
-    int32_t                            slot_id;
-    std::shared_ptr<RDMABuffer>        buffer;
-    std::shared_ptr<RDMAAssignHandler> assign_handler;
+    int32_t                                      slot_id;
+    std::shared_ptr<RDMABuffer>                  buffer;
+    std::shared_ptr<RDMAAssignHandler>           assign_handler;
+    std::shared_ptr<slime::device::DeviceSignal> signal;
 
     void reset()
     {
@@ -92,14 +95,14 @@ class RDMAEndpointV0: public std::enable_shared_from_this<RDMAEndpointV0> {
     friend class RDMABuffer;
 
 public:
-    explicit RDMAEndpointV0(const std::string& dev_name, size_t ib_port, const std::string& link_type, size_t qp_nums);
+    explicit RDMAEndpointV0(const std::string& dev_name, size_t ib_port, const std::string& link_type, size_t qp_nums, bool bypass_signal);
     ~RDMAEndpointV0();
 
     /**
      * @brief Submit a buffer for Send or Recv operation.
      * This method is thread-safe and non-blocking (uses lock-free ring).
      */
-    int32_t addBuffer(OpCode opcode, std::shared_ptr<RDMABuffer> buffer);
+    int32_t addBuffer(OpCode opcode, std::shared_ptr<RDMABuffer> buffer, void* stream_handle = nullptr);
 
     /**
      * @brief Establish connection and start proxy threads.
@@ -124,6 +127,8 @@ public:
     }
 
 private:
+    bool bypass_signal_{false};
+
     int64_t qp_nums_;
 
     std::shared_ptr<RDMAContext> data_ctx_;

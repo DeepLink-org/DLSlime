@@ -29,7 +29,7 @@ def benchmark_send_recv(args):
     print("rank: ", rank)
     if args.use_gpu:
         torch.cuda.set_device(rank)
-        device = "cuda"
+        device = f"cuda:{rank}"
         print("Device: cuda")
     else:
         device = "cpu"
@@ -46,6 +46,7 @@ def benchmark_send_recv(args):
     num = 1
     print("Start to test the bench")
     for size in sizes:
+        print(f"profiling size: {size}")
         num_elements = max(1, size // 4)
         send_batch = [
             torch.ones(num_elements, device=device, dtype=torch.float32)
@@ -66,10 +67,12 @@ def benchmark_send_recv(args):
             for i in range(num):
                 if rank == 0:
                     send_op = dist.isend(send_batch[i], dst=1, group=slime_group)
-                    reqs.extend([send_op])
+                    recv_op = dist.irecv(send_batch[i], src=1, group=slime_group)
+                    reqs.extend([send_op, recv_op])
                 else:
+                    send_op = dist.isend(send_batch[i], dst=0, group=slime_group)
                     recv_op = dist.irecv(recv_batch[i], src=0, group=slime_group)
-                    reqs.extend([recv_op])
+                    reqs.extend([send_op, recv_op])
             work = reqs
             all_work.extend(work)
 

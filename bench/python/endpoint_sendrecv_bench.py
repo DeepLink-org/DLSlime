@@ -30,8 +30,8 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=100):
     print(f"Tensor Device: {device_type.upper()}")
 
     # 初始化 Endpoint
-    send_endpoint = _slime_c.rdma_endpoint(dev0, 1, "RoCE", num_qp)
-    recv_endpoint = _slime_c.rdma_endpoint(dev1, 1, "RoCE", num_qp)
+    send_endpoint = _slime_c.rdma_endpoint(dev0, 1, "RoCE", num_qp, True)
+    recv_endpoint = _slime_c.rdma_endpoint(dev1, 1, "RoCE", num_qp, True)
 
     # 建立连接
     send_endpoint.context_connect(
@@ -104,8 +104,8 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=100):
                     recv_tensor.storage_offset(),
                     recv_tensor.numel(),
                 )
-                recv_buffer.recv()
-                send_buffer.send()
+                recv_buffer.recv(None)
+                send_buffer.send(None)
                 send_buffer.wait_send()
                 recv_buffer.wait_recv()
 
@@ -129,9 +129,8 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=100):
                     recv_tensor.numel(),
                 )
                 # 标准 RDMA 流程：先 Post Recv，再 Post Send
-                recv_buffer.recv()
-                send_buffer.send()
-
+                recv_buffer.recv(None)
+                send_buffer.send(None)
                 # 等待完成
                 # 注意：Stop-and-Wait 模式。如果是流水线模式，吞吐量会更高，
                 # 但这里我们测的是单次操作的 Latency

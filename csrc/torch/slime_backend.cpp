@@ -2,6 +2,13 @@
 #include "engine/rdma/rdma_buffer.h"
 #include "engine/rdma/rdma_endpoint_v0.h"
 #include "engine/rdma/rdma_env.h"
+#include "logging.h"
+
+#ifdef SLIME_USE_CUDA
+#include <ATen/cuda/CUDAContext.h>
+#include <c10/cuda/CUDAStream.h>
+#endif
+
 #include <memory>
 
 namespace slime {
@@ -101,9 +108,22 @@ c10::intrusive_ptr<::c10d::Work> slimeBackend::send(std::vector<at::Tensor>& ten
         data_size.push_back(static_cast<size_t>(tensors[i].numel() * tensors[i].itemsize()));
     }
 
+    auto  tensor        = tensors[0];
+    void* stream_handle = nullptr;
+    if (tensors[0].is_cuda()) {
+#ifdef SLIME_USE_CUDA
+        stream_handle = (void*)at::cuda::getCurrentCUDAStream().stream();
+#else
+        SLIME_LOG_WARN("Tensor is CUDA but DLSlime built without CUDA support!");
+#endif
+    }
+    else if (tensor.is_cpu()) {
+        stream_handle = nullptr;
+    }
+
     auto buf = std::make_shared<RDMABuffer>(
         end_point_set_[mod_positive(dstRank - rank_, size_ - 1)], ptrs[0], offset[0], data_size[0]);
-    buf->send();
+    buf->send(stream_handle);
 
     ++seq_;
     // The work captures the tensor to prevent it being deallocated and
@@ -126,9 +146,24 @@ c10::intrusive_ptr<::c10d::Work> slimeBackend::recv(std::vector<at::Tensor>& ten
         offset.push_back(0);
         data_size.push_back(static_cast<size_t>(tensors[i].numel() * tensors[i].itemsize()));
     }
+
+    auto  tensor        = tensors[0];
+    void* stream_handle = nullptr;
+    if (tensors[0].is_cuda()) {
+#ifdef SLIME_USE_CUDA
+        // 只有编译时开启了 CUDA 选项，才编译这行
+        stream_handle = (void*)at::cuda::getCurrentCUDAStream().stream();
+#else
+        throw std::runtime_error("Tensor is CUDA but DLSlime built without CUDA support!");
+#endif
+    }
+    else if (tensor.is_cpu()) {
+        stream_handle = nullptr;
+    }
+
     auto buf = std::make_shared<RDMABuffer>(
         end_point_set_[mod_positive(srcRank - rank_, size_ - 1)], ptrs[0], offset[0], data_size[0]);
-    buf->recv();
+    buf->recv(stream_handle);
     ++seq_;
 
     // The work captures the tensor to prevent it being deallocated and
@@ -156,7 +191,7 @@ slimeBackend::slimeBackend(const c10::intrusive_ptr<::c10d::Store>& store, int r
     for (int i = 0; i < size - 1; ++i) {
 
         // TODO: the different end_point in the rank can use different RDMA dev to transmit the message.
-        end_point_set_.push_back(std::make_shared<RDMAEndpointV0>(dev_name, ib_port, link_type, qp_num));
+        end_point_set_.push_back(std::make_shared<RDMAEndpointV0>(dev_name, ib_port, link_type, qp_num, false));
 
         json channel_info;
         channel_info["data_channel"] = end_point_set_[i]->dataCtxInfo();
