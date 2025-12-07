@@ -151,7 +151,6 @@ c10::intrusive_ptr<::c10d::Work> slimeBackend::recv(std::vector<at::Tensor>& ten
     void* stream_handle = nullptr;
     if (tensors[0].is_cuda()) {
 #ifdef SLIME_USE_CUDA
-        // 只有编译时开启了 CUDA 选项，才编译这行
         stream_handle = (void*)at::cuda::getCurrentCUDAStream().stream();
 #else
         throw std::runtime_error("Tensor is CUDA but DLSlime built without CUDA support!");
