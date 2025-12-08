@@ -5,7 +5,6 @@ import time
 import torch
 import torch.distributed as dist
 import torch.profiler
-from tabulate import tabulate
 
 # 尝试导入 dlslime backend
 try:
@@ -29,9 +28,6 @@ def benchmark_send_recv(args):
 
     print(f"Rank {rank} initializing process group with backend: {backend_S}...")
     dist.init_process_group(backend_S, rank=rank, world_size=2)
-
-    # 这里的 group 其实对于 P2P 来说不是必须的，但在某些版本下是个好习惯
-    # slime_group = dist.new_group(ranks=[0, 1], backend=backend_S)
 
     if args.use_gpu:
         torch.cuda.set_device(rank)
