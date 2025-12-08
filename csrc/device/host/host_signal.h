@@ -64,8 +64,6 @@ public:
         }
     }
 
-    // --- 重置 ---
-
     void reset_all() override
     {
         flags_->gpu_ready.store(0, std::memory_order_release);
