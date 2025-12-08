@@ -31,7 +31,6 @@ public:
     }
 };
 
-// 方便的宏
 #define NVTX_RANGE(name, color) slime::NvtxScope _nvtx_scope(name, color)
 #define NVTX_THREAD(name) nvtxNameOsThread(pthread_self(), name)
 
