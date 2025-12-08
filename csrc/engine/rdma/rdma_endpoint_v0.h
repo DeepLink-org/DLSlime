@@ -56,10 +56,8 @@ struct alignas(64) SendContext {
     std::shared_ptr<RDMABuffer>        buffer;
     std::shared_ptr<RDMAAssignHandler> assign_handler;
 
-    // [New] 异构信号量 (CPU/GPU 多态)
     std::shared_ptr<slime::device::DeviceSignal> signal;
 
-    // [New] 多 QP 掩码 (等待几个 QP 完成)
     uint32_t expected_mask = 0;
 
     void reset()
@@ -67,7 +65,6 @@ struct alignas(64) SendContext {
         buffer         = nullptr;
         assign_handler = nullptr;
         expected_mask  = 0;
-        // 注意：signal 对象本身不销毁，留给 slot 复用
     }
 };
 
@@ -77,10 +74,8 @@ struct alignas(64) RecvContext {
     std::shared_ptr<RDMABuffer>        buffer;
     std::shared_ptr<RDMAAssignHandler> assign_handler;
 
-    // [New] 异构信号量
     std::shared_ptr<slime::device::DeviceSignal> signal;
 
-    // [New] 多 QP 掩码
     uint32_t expected_mask = 0;
 
     void reset()
