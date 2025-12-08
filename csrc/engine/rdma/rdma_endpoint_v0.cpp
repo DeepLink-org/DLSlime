@@ -223,7 +223,6 @@ void RDMAEndpointV0::connect(const json& data_ctx_info, const json& meta_ctx_inf
 
 int32_t RDMAEndpointV0::addBuffer(OpCode opcode, std::shared_ptr<RDMABuffer> buffer, void* stream_handle)
 {
-    // 1. 准备工作：MR 检查与注册 (保留旧逻辑兜底)
     auto buffer_mr = data_ctx_->get_mr(buffer->ptr_);
     if (not(buffer_mr and buffer_mr->length == buffer->data_size_)) {
         SLIME_LOG_DEBUG("Registering new MR for buffer: ", buffer->ptr_);
