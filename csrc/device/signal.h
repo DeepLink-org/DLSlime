@@ -10,14 +10,19 @@ public:
 
     virtual void init() = 0;
 
-    virtual void record_on_stream(void* stream_handle) = 0;
+    virtual void record_gpu_ready() = 0;
 
-    virtual void set_signal_from_cpu(int val) = 0;
-    virtual void wait_on_stream(void* stream_handle, uint32_t target_val) = 0;
+    virtual bool is_gpu_ready() = 0;
 
-    virtual bool is_busy() = 0;
+    virtual uint32_t get_comm_done_mask() = 0;
+    virtual void set_comm_done(int qp_index) = 0;
 
-    virtual void reset() = 0;
+    virtual void bind_stream(void* stream_handle) = 0;
+    virtual void wait_comm_done_on_stream(uint32_t target_mask) = 0;
+
+    virtual void wait_comm_done_cpu(uint32_t target_mask) = 0;
+
+    virtual void reset_all() = 0;
 };
 
 }  // namespace device

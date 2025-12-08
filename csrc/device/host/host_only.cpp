@@ -1,5 +1,5 @@
-#include "device/cpu/cpu_signal.h"
 #include "device/device_api.h"
+#include "device/host/host_signal.h"
 #include "logging.h"
 
 #include <cstddef>
@@ -10,7 +10,7 @@ namespace device {
 std::shared_ptr<DeviceSignal> createSignal(bool bypass)
 {
     SLIME_LOG_INFO("create signal cpu.");
-    return std::make_shared<CPUDeviceSignal>();
+    return std::make_shared<HostOnlySignal>();
 }
 
 void* get_current_stream_handle()

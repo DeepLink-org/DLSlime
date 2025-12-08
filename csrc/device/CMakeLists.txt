@@ -28,7 +28,7 @@ elseif (USE_CAMB)
 
 else()
     message(STATUS "Building DLSlime with CPU Backend")
-    list(APPEND DEVICE_SRCS cpu/device_cpu.cpp)
+    list(APPEND DEVICE_SRCS host/host_only.cpp)
 endif()
 
 add_library(
