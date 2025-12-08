@@ -336,7 +336,6 @@ int32_t RDMAEndpointV0::sendProxy()
                     Assignment(reinterpret_cast<uintptr_t>(dummy_), 0, 0, sizeof(int64_t))};
 
                 meta_ctx_->submit(OpCode::RECV, meta_batch, [this, slot](int32_t status, int32_t imm) {
-                    // 当收到下一次 Meta 时，点亮 scoreboard
                     meta_arrived_scoreboard_[slot].val.store(true, std::memory_order_release);
                 });
             }
