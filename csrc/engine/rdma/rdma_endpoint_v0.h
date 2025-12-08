@@ -155,7 +155,6 @@ private:
 
     // Scoreboards for signaling completion between RDMA callbacks and Proxy threads
     PaddedAtomicUint64* meta_arrived_scoreboard_;
-    PaddedAtomicUint64* data_arrived_scoreboard_;
 
     std::atomic<uint64_t> send_slot_id_{0};
     std::atomic<uint64_t> recv_slot_id_{0};

@@ -329,21 +329,25 @@ void RDMAContext::launch_future()
         cq_poll_handle();
     });
 
-    for (int qpi = 0; qpi < qp_list_len_; qpi++)
-        qp_management_[qpi]->wq_thread_ = std::thread([this, qpi]() -> void {
-            bindToSocket(socketId(device_name_));
-            wq_dispatch_handle(qpi);
-        });
+    if (not bypass_dispatcher_) {
+        for (int qpi = 0; qpi < qp_list_len_; qpi++)
+            qp_management_[qpi]->wq_thread_ = std::thread([this, qpi]() -> void {
+                bindToSocket(socketId(device_name_));
+                wq_dispatch_handle(qpi);
+            });
+    }
 }
 
 void RDMAContext::stop_future()
 {
     // Stop work queue dispatch
-    for (int qpi = 0; qpi < qp_list_len_; ++qpi) {
-        if (!qp_management_[qpi]->stop_wq_thread_ && qp_management_[qpi]->wq_thread_.joinable()) {
-            qp_management_[qpi]->stop_wq_thread_ = true;
-            qp_management_[qpi]->has_runnable_event_.notify_one();
-            qp_management_[qpi]->wq_thread_.join();
+    if (not bypass_dispatcher_) {
+        for (int qpi = 0; qpi < qp_list_len_; ++qpi) {
+            if (!qp_management_[qpi]->stop_wq_thread_ && qp_management_[qpi]->wq_thread_.joinable()) {
+                qp_management_[qpi]->stop_wq_thread_ = true;
+                qp_management_[qpi]->has_runnable_event_.notify_one();
+                qp_management_[qpi]->wq_thread_.join();
+            }
         }
     }
 
@@ -462,12 +466,12 @@ int64_t RDMAContext::post_send_batch(int qpi, RDMAAssignSharedPtr assign)
     }
     {
         std::unique_lock<std::mutex> lock(qp_management_[qpi]->rdma_post_send_mutex_);
-        qp_management_[qpi]->outstanding_rdma_reads_.fetch_add(batch_size, std::memory_order_relaxed);
+        qp_management_[qpi]->outstanding_rdma_reads_.fetch_add(batch_size, std::memory_order_release);
         ret = ibv_post_send(qp_management_[qpi]->qp_, wr, &bad_wr);
     }
     if (ret) {
         SLIME_LOG_ERROR("Failed to post RDMA send : " << strerror(ret));
-        qp_management_[qpi]->outstanding_rdma_reads_.fetch_sub(batch_size, std::memory_order_relaxed);
+        qp_management_[qpi]->outstanding_rdma_reads_.fetch_sub(batch_size, std::memory_order_release);
         return -1;
     }
     delete[] wr;
@@ -550,8 +554,7 @@ int64_t RDMAContext::post_rc_oneside_batch(int qpi, RDMAAssignSharedPtr assign)
     }
     int ret = 0;
     {
-        std::unique_lock<std::mutex> lock(qp_management_[qpi]->rdma_post_send_mutex_);
-        qp_management_[qpi]->outstanding_rdma_reads_.fetch_add(assign->batch_size(), std::memory_order_relaxed);
+        qp_management_[qpi]->outstanding_rdma_reads_.fetch_add(assign->batch_size(), std::memory_order_release);
         ret = ibv_post_send(qp_management_[qpi]->qp_, wr, &bad_wr);
     }
 
@@ -631,7 +634,7 @@ int64_t RDMAContext::cq_poll_handle()
                     }
                     size_t batch_size = callback_with_qpi->callback_info_->batch_size_;
                     qp_management_[callback_with_qpi->qpi_]->outstanding_rdma_reads_.fetch_sub(
-                        batch_size, std::memory_order_relaxed);
+                        batch_size, std::memory_order_release);
                     delete callback_with_qpi;
                 }
             }
@@ -668,7 +671,8 @@ int64_t RDMAContext::wq_dispatch_handle(int qpi)
                 front_assign->callback_info_->callback_(callback_info_with_qpi_t::ASSIGNMENT_BATCH_OVERFLOW, 0);
                 qp_management_[qpi]->assign_queue_.pop();
             }
-            else if (batch_size + qp_management_[qpi]->outstanding_rdma_reads_ < SLIME_MAX_CQ_DEPTH) {
+            else if (qp_management_[qpi]->outstanding_rdma_reads_.load(std::memory_order_acquire)
+                     < SLIME_MAX_CQ_DEPTH - batch_size) {
                 SLIME_LOG_DEBUG("Schedule batch, batch size: ",
                                 batch_size,
                                 ". Outstanding: ",

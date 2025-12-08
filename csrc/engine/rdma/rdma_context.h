@@ -52,12 +52,13 @@ public:
         srand48(time(NULL));
     }
 
-    RDMAContext(size_t qp_num, size_t max_num_inline_data = 0)
+    RDMAContext(size_t qp_num, size_t max_num_inline_data = 0, bool bypass_dispatcher = false)
     {
         SLIME_LOG_DEBUG("Initializing qp management, num qp: " << qp_num);
 
         qp_list_len_         = qp_num;
         max_num_inline_data_ = max_num_inline_data;
+        bypass_dispatcher_ = bypass_dispatcher;
 
         qp_management_ = new qp_management_t*[qp_list_len_];
         for (int qpi = 0; qpi < qp_list_len_; qpi++) {
@@ -269,6 +270,8 @@ private:
     int64_t post_rc_oneside_batch(int qpi, RDMAAssignSharedPtr assign);
 
     int64_t service_level_{0};
+
+    bool bypass_dispatcher_{false};
 };
 
 }  // namespace slime

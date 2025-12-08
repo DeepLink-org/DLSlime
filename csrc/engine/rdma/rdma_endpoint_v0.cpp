@@ -2,6 +2,7 @@
 
 #include "device/device_api.h"
 #include "engine/assignment.h"
+#include "engine/rdma/rdma_assignment.h"
 #include "engine/rdma/rdma_buffer.h"
 #include "engine/rdma/rdma_common.h"
 #include "engine/rdma/rdma_context.h"
@@ -57,8 +58,8 @@ RDMAEndpointV0::RDMAEndpointV0(const std::string& dev_name,
         bypass_signal_ = true;
     qp_nums_ = qp_nums;
     // Initialize RDMA Contexts.
-    data_ctx_ = std::make_shared<RDMAContext>(qp_nums);
-    meta_ctx_ = std::make_shared<RDMAContext>(1, 256);
+    data_ctx_ = std::make_shared<RDMAContext>(qp_nums, 0, true);  // qp_num, inline_size, bypass_dispatcher
+    meta_ctx_ = std::make_shared<RDMAContext>(1, 256, true);      // qp_num, inline_size, bypass_dispatcher
 
     SLIME_ASSERT(1 == SLIME_AGG_QP_NUM, "cannot aggqp when sendrecv");
     SLIME_ASSERT(64 > SLIME_QP_NUM, "QP NUM must less than 64");
@@ -115,10 +116,8 @@ RDMAEndpointV0::RDMAEndpointV0(const std::string& dev_name,
     // These atomic flags serve as signaling mechanism between RDMA callback thread and Proxy threads.
     SLIME_LOG_DEBUG("Initializing scoreboards...");
     meta_arrived_scoreboard_ = new PaddedAtomicUint64[MAX_FIFO_DEPTH];
-    data_arrived_scoreboard_ = new PaddedAtomicUint64[MAX_FIFO_DEPTH];
     for (int i = 0; i < MAX_FIFO_DEPTH; ++i) {
         meta_arrived_scoreboard_[i].val.store(0);
-        data_arrived_scoreboard_[i].val.store(0);
     }
 
     // Initialize Rings
@@ -141,7 +140,6 @@ RDMAEndpointV0::~RDMAEndpointV0()
         free(local_meta_info_);
         free(remote_meta_info_);
         delete[] meta_arrived_scoreboard_;
-        delete[] data_arrived_scoreboard_;
 
         freeRing(send_buffer_ring_);
         freeRing(recv_buffer_ring_);
@@ -188,9 +186,10 @@ void RDMAEndpointV0::connect(const json& data_ctx_info, const json& meta_ctx_inf
 
     for (int i = 0; i < MAX_FIFO_DEPTH; ++i) {
         std::vector<Assignment> batch{Assignment(reinterpret_cast<uintptr_t>(dummy_), 0, 0, sizeof(int64_t))};
-        auto                    assign = meta_ctx_->submit(OpCode::RECV, batch, [this, i](int32_t status, int32_t imm) {
-            meta_arrived_scoreboard_[i].val.store(1, std::memory_order_release);
-        });
+        auto                    assign = meta_ctx_->post_recv_batch(
+            0, std::make_shared<RDMAAssign>(OpCode::RECV, batch, [this, i](int32_t status, int32_t imm) {
+                meta_arrived_scoreboard_[i].val.store(1, std::memory_order_release);
+            }));
     }
 
     for (int i = 0; i < MAX_FIFO_DEPTH; ++i) {
@@ -199,18 +198,15 @@ void RDMAEndpointV0::connect(const json& data_ctx_info, const json& meta_ctx_inf
         for (size_t qpi = 0; qpi < data_ctx_qp_num_; ++qpi) {
             std::vector<Assignment> batch{Assignment(reinterpret_cast<uintptr_t>(dummy_), 0, 0, sizeof(int64_t))};
 
-            data_ctx_->submit(
-                OpCode::RECV,
-                batch,
-                [signal, qpi](int32_t status, int32_t imm) {
+            data_ctx_->post_recv_batch(
+                qpi, std::make_shared<RDMAAssign>(OpCode::RECV, batch, [signal, qpi](int32_t status, int32_t imm) {
                     if (status == 0) {
                         signal->set_comm_done(qpi);
                     }
                     else {
                         SLIME_LOG_ERROR("Data Recv Failed during pre-post");
                     }
-                },
-                qpi);
+                }));
         }
     }
 
@@ -324,20 +320,23 @@ int32_t RDMAEndpointV0::sendProxy()
 
                     AssignmentBatch batch{assign};
 
-                    data_ctx_->submit(
-                        OpCode::WRITE_WITH_IMM,
-                        batch,
-                        [s_ctx, qpi](int32_t stat, int32_t imm_data) { s_ctx->signal->set_comm_done(qpi); },
+                    data_ctx_->post_rc_oneside_batch(
                         qpi,
-                        s_ctx->slot_id);
+                        std::make_shared<RDMAAssign>(
+                            OpCode::WRITE_WITH_IMM,
+                            batch,
+                            [s_ctx, qpi](int32_t stat, int32_t imm_data) { s_ctx->signal->set_comm_done(qpi); },
+                            false));
                 }
 
                 std::vector<Assignment> meta_batch{
                     Assignment(reinterpret_cast<uintptr_t>(dummy_), 0, 0, sizeof(int64_t))};
 
-                meta_ctx_->submit(OpCode::RECV, meta_batch, [this, slot](int32_t status, int32_t imm) {
-                    meta_arrived_scoreboard_[slot].val.store(true, std::memory_order_release);
-                });
+                meta_ctx_->post_recv_batch(
+                    0,
+                    std::make_shared<RDMAAssign>(OpCode::RECV, meta_batch, [this, slot](int32_t status, int32_t imm) {
+                        meta_arrived_scoreboard_[slot].val.store(true, std::memory_order_release);
+                    }));
             }
         }
         else {
@@ -369,7 +368,8 @@ int32_t RDMAEndpointV0::recvProxy()
                                   slot * sizeof(meta_info_t),
                                   sizeof(meta_info_t));
                 AssignmentBatch assign_batch{assign};
-                meta_ctx_->submit(OpCode::WRITE_WITH_IMM, assign_batch, nullptr, 0, 0);
+                meta_ctx_->post_rc_oneside_batch(
+                    0, std::make_shared<RDMAAssign>(OpCode::WRITE_WITH_IMM, assign_batch, nullptr, true));
 
                 while (!r_ctx->signal->is_gpu_ready()) {
                     cpu_relax();
@@ -383,15 +383,13 @@ int32_t RDMAEndpointV0::recvProxy()
                     std::vector<Assignment> batch{
                         Assignment(reinterpret_cast<uintptr_t>(dummy_), 0, 0, sizeof(int64_t))};
 
-                    data_ctx_->submit(
-                        OpCode::RECV,
-                        batch,
-                        [signal, qpi](int32_t status, int32_t imm) {
+                    data_ctx_->post_recv_batch(
+                        qpi,
+                        std::make_shared<RDMAAssign>(OpCode::RECV, batch, [signal, qpi](int32_t status, int32_t imm) {
                             if (status == 0) {
                                 signal->set_comm_done(qpi);
                             }
-                        },
-                        qpi);
+                        }));
                 }
             }
         }
