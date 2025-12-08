@@ -1,11 +1,11 @@
 import argparse
+import cProfile
 import os
 import time
-from tabulate import tabulate
-import cProfile
 
 import torch
 import torch.distributed as dist
+from tabulate import tabulate
 from torch.distributed import distributed_c10d
 
 # add dlslime backend
@@ -30,7 +30,7 @@ def benchmark_send_recv(args):
     if args.use_gpu:
         torch.cuda.set_device(rank)
         device = f"cuda:{rank}"
-        print("Device: cuda")
+        print(f"Device: {device}")
     else:
         device = "cpu"
         print("Device: cpu")
@@ -93,8 +93,8 @@ def benchmark_send_recv(args):
 
             [w.wait() for w in all_work]
 
-        if args.use_gpu:
-            torch.cuda.synchronize()
+            if args.use_gpu:
+                torch.cuda.synchronize()
         elapsed_time = time.time() - start_time
 
         total_data = size * num * args.iterations

@@ -34,21 +34,14 @@ void RDMABuffer::recvDoneCallback()
 
 bool RDMABuffer::waitSend()
 {
-    if (send_completed_ == num_pack_) {
-        return true;
-    }
-    while (send_completed_.load(std::memory_order_acquire) < num_pack_) _mm_pause();
+    signal_->wait_comm_done_cpu((1 << num_pack_) - 1);
     SLIME_LOG_DEBUG("complete to send the data.");
     return true;
 }
 
 bool RDMABuffer::waitRecv()
 {
-    if (recv_completed_ == 1) {
-        return true;
-    }
-
-    while (recv_completed_.load(std::memory_order_acquire) < 1) _mm_pause();
+    signal_->wait_comm_done_cpu((1 << num_pack_) - 1);
     SLIME_LOG_DEBUG("complete to recv the data.");
     return true;
 }

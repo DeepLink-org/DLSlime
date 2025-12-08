@@ -1,4 +1,5 @@
 #pragma once
+#include "device/signal.h"
 #include "engine/rdma/memory_pool.h"
 #include "engine/rdma/rdma_context.h"
 #include "engine/rdma/rdma_endpoint_v0.h"
@@ -61,8 +62,8 @@ public:
         return storage_view_batch_;
     }
 
-    void send(void* stream_handler=nullptr);
-    void recv(void* stream_handler=nullptr);
+    void send(void* stream_handler = nullptr);
+    void recv(void* stream_handler = nullptr);
 
     bool waitSend();
     bool waitRecv();
@@ -71,7 +72,7 @@ public:
     void recvDoneCallback();
 
 private:
-    std::shared_ptr<RDMAEndpoint> endpoint_;
+    std::shared_ptr<RDMAEndpoint>   endpoint_;
     std::shared_ptr<RDMAEndpointV0> endpointv0_;
 
     uintptr_t ptr_;
@@ -100,7 +101,8 @@ private:
 
     std::atomic<int32_t> slot_id_{0};
 
-    uint64_t num_pack_ = 1;
+    uint64_t                                     num_pack_{1};
+    std::shared_ptr<slime::device::DeviceSignal> signal_;
 };
 
 }  // namespace slime

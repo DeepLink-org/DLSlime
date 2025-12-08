@@ -158,7 +158,9 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=100):
                 # CUDA 校验需要把数据拷回 CPU，为了不影响后续测试，简单检查头尾
                 if not torch.equal(
                     send_tensor[:100].cpu(), recv_tensor[:100].cpu()
-                ) or not torch.equal(send_tensor[-100:].cpu(), recv_tensor[-100:].cpu()):
+                ) or not torch.equal(
+                    send_tensor[-100:].cpu(), recv_tensor[-100:].cpu()
+                ):
                     check_status = "FAIL"
             else:
                 if not torch.equal(send_tensor, recv_tensor):
@@ -168,7 +170,6 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=100):
                 f"{get_readable_size(size):<15} | {avg_latency_us:<15.2f} |"
                 f"{throughput_gbs:<20.4f} | {check_status:<10}"
             )
-
 
 
 if __name__ == "__main__":
@@ -193,3 +194,4 @@ if __name__ == "__main__":
         args.device = "cpu"
 
     run_benchmark(device_type=args.device, num_qp=args.qp, iterations=args.iters)
+    torch.cuda.synchronize()

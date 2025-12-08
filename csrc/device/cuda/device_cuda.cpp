@@ -1,6 +1,6 @@
 #include "cuda_signal.h"
-#include "device/cpu/cpu_signal.h"
 #include "device/device_api.h"
+#include "device/host/host_signal.h"
 
 namespace slime {
 namespace device {
@@ -9,11 +9,11 @@ std::shared_ptr<DeviceSignal> createSignal(bool bypass)
 {
 #ifdef SLIME_USE_CUDA
     if (bypass) {
-        return std::make_shared<CPUDeviceSignal>();
+        return std::make_shared<HostOnlySignal>();
     }
     return std::make_shared<CudaDeviceSignal>();
 #else
-    return std::make_shared<CPUDeviceSignal>();
+    return std::make_shared<HostOnlySignal>();
 #endif
 }
 
