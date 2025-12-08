@@ -21,5 +21,5 @@ inline const int SLIME_QP_NUM                    = get_env<int>("SLIME_QP_NUM", 
 inline const int SLIME_CQ_NUM                    = get_env<int>("SLIME_CQ_NUM", 1);
 inline const int SLIME_MAX_CQ_DEPTH              = get_env<int>("SLIME_MAX_CQ_DEPTH", 8192);
 inline const int SLIME_AGG_QP_NUM                = get_env<int>("SLIME_AGG_QP_NUM", 1);
-inline const int SLIME_BYPASS_DEVICE_SIGNAL             = get_env<int>("SLIME_BYPASS_SIGNAL", 1);
+inline const int SLIME_BYPASS_DEVICE_SIGNAL      = get_env<int>("SLIME_BYPASS_DEVICE_SIGNAL", 1);
 }  // namespace slime

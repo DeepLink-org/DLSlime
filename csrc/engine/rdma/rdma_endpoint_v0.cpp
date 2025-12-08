@@ -46,6 +46,7 @@ void RDMAEndpointV0::freeRing(jring_t* ring)
     }
 }
 
+<<<<<<< HEAD
 RDMAEndpointV0::RDMAEndpointV0(const std::string& dev_name,
                                size_t             ib_port,
                                const std::string& link_type,
@@ -54,6 +55,14 @@ RDMAEndpointV0::RDMAEndpointV0(const std::string& dev_name,
     SLIME_LOG_INFO("Init RDMAEndpointV0 Contexts and Devices...");
     SLIME_LOG_INFO("bypass Signal: ", SLIME_BYPASS_DEVICE_SIGNAL);
     if (SLIME_BYPASS_DEVICE_SIGNAL)
+=======
+RDMAEndpointV0::RDMAEndpointV0(
+    const std::string& dev_name, size_t ib_port, const std::string& link_type, size_t qp_nums)
+{
+    SLIME_LOG_INFO("Init RDMAEndpointV0 Contexts and Devices...");
+    SLIME_LOG_INFO("bypass Signal: ", SLIME_BYPASS_SIGNAL);
+    if (SLIME_BYPASS_SIGNAL)
+>>>>>>> main
         bypass_signal_ = true;
     qp_nums_ = qp_nums;
     // Initialize RDMA Contexts.

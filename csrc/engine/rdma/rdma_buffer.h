@@ -68,9 +68,6 @@ public:
     bool waitSend();
     bool waitRecv();
 
-    void sendDoneCallback();
-    void recvDoneCallback();
-
 private:
     std::shared_ptr<RDMAEndpoint>   endpoint_;
     std::shared_ptr<RDMAEndpointV0> endpointv0_;

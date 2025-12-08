@@ -20,18 +20,6 @@ void RDMABuffer::recv(void* stream_handler)
     endpointv0_->addBuffer(OpCode::RECV, shared_from_this(), stream_handler);
 }
 
-void RDMABuffer::sendDoneCallback()
-{
-    SLIME_LOG_DEBUG("Send done callback triggered");
-    send_completed_.fetch_add(1);
-}
-
-void RDMABuffer::recvDoneCallback()
-{
-    SLIME_LOG_DEBUG("Recv done callback triggered");
-    recv_completed_.fetch_add(1);
-}
-
 bool RDMABuffer::waitSend()
 {
     signal_->wait_comm_done_cpu((1 << num_pack_) - 1);
