@@ -7,7 +7,7 @@
 namespace slime {
 namespace device {
 
-class HostOnlySignal: public DeviceSignal {
+class alignas(64) HostOnlySignal: public DeviceSignal {
 public:
     struct Flags {
         std::atomic<int>      gpu_ready{0};
@@ -59,7 +59,6 @@ public:
     void wait_comm_done_cpu(uint32_t target_mask) override
     {
         while (flags_->comm_done.load(std::memory_order_acquire) != target_mask) {
-            SLIME_LOG_INFO(target_mask);
             _mm_pause();
         }
     }

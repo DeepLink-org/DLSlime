@@ -13,7 +13,7 @@ def get_readable_size(size_in_bytes):
     return f"{size_in_bytes:.1f} TB"
 
 
-def run_benchmark(device_type="cuda", num_qp=1, iterations=100):
+def run_benchmark(device_type="cuda", num_qp=1, iterations=200):
     # 检查设备
     nic_devices = available_nic()
     if len(nic_devices) < 2:

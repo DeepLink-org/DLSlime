@@ -1,6 +1,6 @@
 [build-system]
 build-backend = "scikit_build_core.build"
-requires = ["scikit-build-core>=0.10", "pybind11>=2.12"]
+requires = ["scikit-build-core>=0.10", "pybind11>=2.12", "ninja"]
 
 [project]
 authors = [
@@ -42,6 +42,7 @@ Repository = "https://github.com/DeepLink-org/DLSlime.git"
 # BUILD_NVLINK: OFF
 # USE_MACA: OFF
 cmake.args = [
+  "-G Ninja",
   "-DDLSLIME_INSTALL_PATH=dlslime",
   "-DBUILD_PYTHON=ON"
 ]

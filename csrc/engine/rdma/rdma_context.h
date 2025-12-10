@@ -7,6 +7,7 @@
 #include "engine/rdma/rdma_config.h"
 #include "engine/rdma/rdma_env.h"
 
+#include "jring.h"
 #include "json.hpp"
 #include "logging.h"
 
@@ -52,12 +53,14 @@ public:
         srand48(time(NULL));
     }
 
-    RDMAContext(size_t qp_num, size_t max_num_inline_data = 0)
+    RDMAContext(size_t qp_num, size_t max_num_inline_data = 0, bool with_backpressure = true)
     {
         SLIME_LOG_DEBUG("Initializing qp management, num qp: " << qp_num);
 
         qp_list_len_         = qp_num;
         max_num_inline_data_ = max_num_inline_data;
+
+        with_backpressure_ = with_backpressure;
 
         qp_management_ = new qp_management_t*[qp_list_len_];
         for (int qpi = 0; qpi < qp_list_len_; qpi++) {
@@ -181,6 +184,7 @@ public:
 private:
     inline static constexpr int      UNDEFINED_QPI      = -1;
     inline static constexpr uint32_t UNDEFINED_IMM_DATA = -1;
+    inline static constexpr uint32_t BACKPRESSURE_BUFFER_SIZE = 8192;
 
     std::string device_name_ = "";
 
@@ -206,21 +210,26 @@ private:
         std::mutex rdma_post_send_mutex_;
 
         /* Assignment Queue */
-        std::mutex                      assign_queue_mutex_;
-        std::queue<RDMAAssignSharedPtr> assign_queue_;
-        std::atomic<int>                outstanding_rdma_reads_{0};
+        struct jring* overflow_ring_;
+        void*         ring_memory_;
 
-        /* Has Runnable Assignment */
-        std::condition_variable has_runnable_event_;
-
-        /* async wq handler */
-        std::thread       wq_thread_;
-        std::atomic<bool> stop_wq_thread_{false};
+        std::atomic<uint32_t>   assign_slot_id_{0};
+        RDMAAssign*             assign_pool_;
+        std::atomic<int>        qp_outstanding_{0};
+        /* polling pool */
+        std::vector<ibv_send_wr> send_wr_pool_;
+        std::vector<ibv_recv_wr> recv_wr_pool_;
+        std::vector<ibv_sge>     send_sge_pool_;
+        std::vector<ibv_sge>     recv_sge_pool_;
 
         ~qp_management()
         {
             if (qp_)
                 ibv_destroy_qp(qp_);
+            free(assign_pool_);
+        }
+        inline size_t poolSize() {
+            return BACKPRESSURE_BUFFER_SIZE + SLIME_MAX_CQ_DEPTH * 2;
         }
     } qp_management_t;
 
@@ -253,22 +262,20 @@ private:
     std::thread       cq_thread_;
     std::atomic<bool> stop_cq_thread_{false};
 
-    std::vector<std::thread> wq_threads_;
-
     /* Completion Queue Polling */
     int64_t cq_poll_handle();
-    int64_t cq_poll_handle(int qpi);
-    /* Working Queue Dispatch */
-    int64_t wq_dispatch_handle(int qpi);
 
     /* Async RDMA SendRecv */
-    int64_t post_send_batch(int qpi, RDMAAssignSharedPtr assign);
-    int64_t post_recv_batch(int qpi, RDMAAssignSharedPtr assign);
+    int64_t post_send_batch(int qpi, RDMAAssign* assign);
+    int64_t post_recv_batch(int qpi, RDMAAssign* assign);
 
     /* Async RDMA Read */
-    int64_t post_rc_oneside_batch(int qpi, RDMAAssignSharedPtr assign);
+    int64_t post_rc_oneside_batch(int qpi, RDMAAssign* assign);
 
     int64_t service_level_{0};
+
+    bool with_backpressure_;
+    void drain_submission_queue(int qpi);
 };
 
 }  // namespace slime

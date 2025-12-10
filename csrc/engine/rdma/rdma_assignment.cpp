@@ -3,28 +3,47 @@
 #include <stdexcept>
 
 namespace slime {
-
-RDMAAssign::RDMAAssign(OpCode opcode, AssignmentBatch& batch, callback_fn_t callback, bool is_inline)
+void RDMAAssign::reset(OpCode opcode, size_t qpi, AssignmentBatch& batch, callback_fn_t callback, bool is_inline)
 {
-    opcode_ = opcode;
+    opcode_    = opcode;
+    qpi_       = qpi;
+    is_inline_ = is_inline;
+
+    if (callback != nullptr) {
+        callback_ = callback;
+    }
+    else {
+        callback_ = [this](int code, int imm_data) {
+            if (code != 0) {
+                for (int i = 0; i < batch_size_; ++i) {
+                    SLIME_LOG_ERROR("ERROR ASSIGNMENT: ", batch_[i].dump());
+                }
+            }
+            finished_.fetch_add(1, std::memory_order_release);
+        };
+    }
+
+    SLIME_ASSERT(callback_, "NULL CALLBACK!!");
+
+    finished_.store(0, std::memory_order_release);
+
+    if (batch.size() > MAX_ASSIGN_CAPACITY) {
+        SLIME_ABORT("Batch size too large for pooled object!");
+    }
 
     batch_size_ = batch.size();
-
-    batch_      = new Assignment[batch_size_];
-    std::move(batch.begin(), batch.end(), batch_);
-
-    callback_info_ = std::make_shared<callback_info_t>(opcode, batch_size_, callback, batch_);
-    is_inline_ = is_inline;
+    std::memcpy(batch_, batch.data(), sizeof(Assignment) * batch_size_);
 }
 
 void RDMAAssign::wait()
 {
-    callback_info_->wait();
+    while (finished_.load(std::memory_order_acquire) == 0)
+        _mm_pause();
 }
 
 bool RDMAAssign::query()
 {
-    return callback_info_->query();
+    return finished_.load() > 0;
 }
 
 json RDMAAssign::dump() const
@@ -45,7 +64,7 @@ RDMAAssignHandler::~RDMAAssignHandler() {}
 
 void RDMAAssignHandler::wait()
 {
-    for (RDMAAssignSharedPtr& rdma_assignment : rdma_assignment_batch_) {
+    for (RDMAAssign*& rdma_assignment : rdma_assignment_batch_) {
         rdma_assignment->wait();
     }
     return;
@@ -53,8 +72,9 @@ void RDMAAssignHandler::wait()
 
 bool RDMAAssignHandler::query()
 {
-    for (RDMAAssignSharedPtr& rdma_assignment : rdma_assignment_batch_) {
-        if (rdma_assignment->query()) return true;
+    for (RDMAAssign*& rdma_assignment : rdma_assignment_batch_) {
+        if (rdma_assignment->query())
+            return true;
     }
     return false;
 }
