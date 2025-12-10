@@ -27,8 +27,8 @@ set(OPS_LIBRARIES ${TORCH_LIBRARIES})
 if (BUILD_INTRA_OPS)
     set(
         INTRA_OPS_SRC
-        intra_ll/all_gather_intra_ll/all_gather_intra_ll.cu
-        intra_ll/all_gather_intra_ll/all_gather_intra_ll_buffer.cpp
+        intra_ll/all_to_all/all_to_all_intra_ll.cu
+        intra_ll/all_to_all/all_to_all_intra_ll_buffer.cpp
     )
     list(APPEND OPS_SRC ${INTRA_OPS_SRC})
     set(
@@ -52,6 +52,7 @@ if (BUILD_INTER_OPS)
         inter_ll/all_gather_inter_ll/all_gather_inter_ll_buffer.cpp
         nvshmem_runtime.cu
     )
+
     list(APPEND OPS_SRC ${INTER_OPS_SRC})
     set(
         INTER_OPS_INCLUDE_DIRS

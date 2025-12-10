@@ -33,7 +33,7 @@
 #include <torch/torch.h>
 
 #ifdef BUILD_INTRA_OPS
-#include "ops/intra_ll/all_gather_intra_ll/all_gather_intra_ll_buffer.h"
+#include "ops/intra_ll/all_to_all/all_to_all_intra_ll_buffer.h"
 #endif
 
 #ifdef BUILD_INTER_OPS
@@ -220,18 +220,17 @@ PYBIND11_MODULE(_slime_c, m)
 #endif
 
 #ifdef BUILD_INTRA_OPS
-    py::class_<slime::AllGatherIntraLLBuffer>(m, "AllGatherIntraLLBuffer")
-        .def(py::init<int32_t, int32_t, torch::Dtype, int32_t, int32_t>())
-        .def("buffer_info", &slime::AllGatherIntraLLBuffer::buffer_info)
-        .def("connect_full_mesh", &slime::AllGatherIntraLLBuffer::connectFullMesh)
-        .def("all_gather_ll",
-             &slime::AllGatherIntraLLBuffer::allGatherLL,
-             py::arg("q"),
-             py::arg("mask") = py::none(),
-             "AllGather with optional mask")
+    py::class_<slime::AllToAllIntraLLBuffer>(m, "AllToAllIntraLLBuffer")
+        .def(py::init<int32_t, int32_t, int32_t, int32_t, int64_t>())
+        .def("buffer_info", &slime::AllToAllIntraLLBuffer::buffer_info)
+        .def("connect_full_mesh", &slime::AllToAllIntraLLBuffer::connectFullMesh)
+        .def("get_local_buffer", &slime::AllToAllIntraLLBuffer::getLocalBuffer)
+        .def("get_buffer_size_hint", &slime::AllToAllIntraLLBuffer::get_buffer_size_hint)
+        .def("set_max_bs", &slime::AllToAllIntraLLBuffer::setMaxBs)
         .def("all_to_all_ll",
-             &slime::AllGatherIntraLLBuffer::allToAllLL,
-             py::arg("buffer_ori"),
+             &slime::AllToAllIntraLLBuffer::allToAllLL2D,
+             py::arg("x"),
+             py::arg("is_transpose") = false,
              py::arg("mask") = py::none(),
              "AllGather with optional mask");
 #endif
