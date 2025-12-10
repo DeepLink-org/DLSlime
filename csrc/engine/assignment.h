@@ -1,6 +1,9 @@
 #pragma once
 
+#include <algorithm>
+#include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <functional>
 #include <string>
 #include <vector>
@@ -24,9 +27,11 @@ enum class OpCode : uint8_t {
     WRITE_WITH_IMM
 };
 
-typedef struct Assignment {
+struct Assignment {
     friend std::ostream& operator<<(std::ostream& os, const Assignment& assignment);
     Assignment() = default;
+
+    // 构造函数保持不变...
     Assignment(const uintptr_t& mr_key, uint64_t target_offset, uint64_t source_offset, uint64_t length):
         mr_key(mr_key),
         remote_mr_key(mr_key),
@@ -49,7 +54,6 @@ typedef struct Assignment {
     {
     }
 
-    /* dump */
     json dump() const;
 
     uintptr_t mr_key{};
@@ -57,48 +61,74 @@ typedef struct Assignment {
     uint64_t  source_offset{};
     uint64_t  target_offset{};
     uint64_t  length{};
+};
 
-} assignment_t;
-
-inline void split_assign_by_max_length(OpCode           opcode,
-                                       AssignmentBatch& batch,
-                                       AssignmentBatch& batch_split_after_max_length,
-                                       size_t           max_length)
+inline void split_assign_by_max_length(OpCode                 opcode,
+                                       const AssignmentBatch& batch,
+                                       AssignmentBatch&       output,
+                                       size_t                 max_length)
 {
-    for (size_t i = 0; i < batch.size(); ++i) {
-        if (batch[i].length < max_length) {
-            batch_split_after_max_length.push_back(std::move(batch[i]));
+    if (batch.empty())
+        return;
+
+    size_t total_count = 0;
+    for (const auto& item : batch) {
+        if (item.length == 0)
+            continue;
+        total_count += (item.length + max_length - 1) / max_length;
+    }
+
+    output.reserve(output.size() + total_count);
+
+    for (const auto& item : batch) {
+        if (item.length <= max_length) {
+            output.emplace_back(item);
         }
         else {
-            for (size_t j = 0; j < batch[i].length; j += max_length) {
-                batch_split_after_max_length.push_back(
-                    Assignment(batch[i].mr_key,
-                               batch[i].remote_mr_key,
-                               batch[i].target_offset + j,
-                               batch[i].source_offset + j,
-                               std::min(static_cast<size_t>(max_length), batch[i].length - j)));
+            for (uint64_t offset = 0; offset < item.length; offset += max_length) {
+                uint64_t chunk_len = std::min(static_cast<uint64_t>(max_length), item.length - offset);
+                output.emplace_back(item.mr_key,
+                                    item.remote_mr_key,
+                                    item.target_offset + offset,
+                                    item.source_offset + offset,
+                                    chunk_len);
             }
         }
     }
 }
 
-inline void
-split_assign_by_step(OpCode opcode, AssignmentBatch& batch, std::vector<AssignmentBatch>& batch_split, size_t step)
+inline void split_assign_by_step(OpCode                        opcode,
+                                 const AssignmentBatch&        batch,
+                                 std::vector<AssignmentBatch>& batch_split,
+                                 size_t                        step)
 {
-    // split assignment by step
-    for (int i = 0; i < batch.size(); i += step) {
+    if (batch.empty() || step == 0)
+        return;
+
+    size_t num_chunks = (batch.size() + step - 1) / step;
+    batch_split.reserve(num_chunks);
+
+    for (size_t i = 0; i < batch.size(); i += step) {
+        size_t current_chunk_size = std::min(step, batch.size() - i);
+
         AssignmentBatch split_batch;
-        std::move(batch.begin() + i, std::min(batch.end(), batch.begin() + i + step), std::back_inserter(split_batch));
-        batch_split.push_back(split_batch);
+        split_batch.reserve(current_chunk_size);
+
+        split_batch.insert(split_batch.end(), batch.begin() + i, batch.begin() + i + current_chunk_size);
+
+        batch_split.emplace_back(std::move(split_batch));
     }
 }
 
-inline void
-nsplit_assign_by_step(OpCode opcode, AssignmentBatch& batch, std::vector<AssignmentBatch>& batch_nsplit, size_t nstep)
+inline void nsplit_assign_by_step(OpCode                        opcode,
+                                  const AssignmentBatch&        batch,
+                                  std::vector<AssignmentBatch>& batch_nsplit,
+                                  size_t                        nstep)
 {
-    // split assignment by nstep
+    if (nstep == 0)
+        return;
     size_t bsize = batch.size();
-    int    step  = (bsize + nstep - 1) / nstep;
+    size_t step = (bsize + nstep - 1) / nstep;
     split_assign_by_step(opcode, batch, batch_nsplit, step);
 }
 

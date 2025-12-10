@@ -20,33 +20,33 @@ except ImportError as e:
 
 def benchmark_send_recv(args):
     # Initialize process group
-    print("Initialize process group")
+    print("Initialize process group", flush=True)
     rank = 0 if args.mode == "send" else 1
-    backend_S = "cuda:dlslime,cpu:gloo" if args.use_gpu else "cpu:dlslime"
+    backend_S = "cuda:dlslime" if args.use_gpu else "cpu:dlslime"
     dist.init_process_group(backend_S, rank=rank, world_size=2)
     slime_group = dist.new_group(ranks=[0, 1], backend=backend_S)
-    print(backend_S)
+    print(backend_S, flush=True)
     print("rank: ", rank)
     if args.use_gpu:
         torch.cuda.set_device(rank)
         device = f"cuda:{rank}"
-        print(f"Device: {device}")
+        print(f"Device: {device}", flush=True)
     else:
         device = "cpu"
-        print("Device: cpu")
+        print("Device: cpu", flush=True)
 
     # Prepare data sizes to test (in bytes)
     if args.sizes:
         sizes = [int(s) for s in args.sizes]
     else:
-        sizes = [2**n for n in range(10, 31)]  # 256B to 256MB
+        sizes = [2**n for n in range(10, 30)]  # 256B to 256MB
 
-    print("Prepare data sizes: ", sizes)
+    print("Prepare data sizes: ", sizes, flush=True)
     benchmark_data = []
     num = 1
-    print("Start to test the bench")
+    print("Start to test the bench", flush=True)
     for size in sizes:
-        print(f"profiling size: {size}")
+        print(f"profiling size: {size}", flush=True)
         num_elements = max(1, size // 4)
         send_batch = [
             torch.ones(num_elements, device=device, dtype=torch.float32)
@@ -78,8 +78,8 @@ def benchmark_send_recv(args):
 
             [w.wait() for w in all_work]
 
-        if args.use_gpu:
-            torch.cuda.synchronize()
+            if args.use_gpu:
+                torch.cuda.synchronize()
         start_time = time.time()
         for _ in range(args.iterations):
             all_work = []
@@ -165,4 +165,5 @@ if __name__ == "__main__":
     os.environ["MASTER_PORT"] = args.master_port
     os.environ["NCCL_P2P_DISABLE"] = "1"
     os.environ["NCCL_SHM_DISABLE"] = "1"
+    import time
     benchmark_send_recv(args)

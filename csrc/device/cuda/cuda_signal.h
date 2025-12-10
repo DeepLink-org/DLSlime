@@ -14,7 +14,7 @@
 namespace slime {
 namespace device {
 
-class CudaDeviceSignal: public DeviceSignal {
+class alignas(64) CudaDeviceSignal: public DeviceSignal {
 public:
     struct Flags {
         volatile int      gpu_ready;

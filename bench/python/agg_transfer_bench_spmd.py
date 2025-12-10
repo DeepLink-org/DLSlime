@@ -24,10 +24,10 @@ from dlslime import _slime_torch
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--batch-size', type=int, default=1)
-parser.add_argument('--size', nargs='+', type=int, default=[n for n in range(8, 25)])
+parser.add_argument('--size', nargs='+', type=int, default=[n for n in range(8, 20)])
 parser.add_argument('--num-concurrency', type=int, default=16)
 parser.add_argument('--num-iteration', type=int, default=100)
-parser.add_argument('--opcode', type=str, choices=['read', 'write'], default='read')
+parser.add_argument('--opcode', type=str, choices=['read', 'write'], default='write')
 parser.add_argument('--with-imm-data', action='store_true', help='with-imm-data')
 parser.add_argument('--save-csv', action='store_true', help='Save benchmark results to CSV file')
 parser.add_argument('--csv-filename', type=str, default='./output.csv', help='Filename for CSV output')
@@ -90,7 +90,7 @@ rank_0_print(f'benchmarking transfer engine: {args.transfer_engine}')
 # import Python Package
 if args.transfer_engine == 'dlslime':
     if args.num_concurrency == 1:
-        SLIME_AGG_QP_NUM = set_env_when_no_default('SLIME_AGG_QP_NUM', str(2))
+        SLIME_AGG_QP_NUM = set_env_when_no_default('SLIME_AGG_QP_NUM', str(1))
         rank_0_print('[hint] SLIME_AGG_QP_NUM is set to None, '
                      'for high performance when args.num_concurrency=1, '
                      f'set {SLIME_AGG_QP_NUM=}.')
@@ -121,8 +121,8 @@ dist.init_process_group('cpu:gloo,cuda:nccl')
 transfer_group = dist.new_group(list(range(world_size)), backend='cuda:nccl')
 
 # TODO: for AFD Benchmark
-initiator_group = dist.new_group(list(range(num_channels)), backend='cpu:gloo,cuda:nccl')
-target_group = dist.new_group(list(range(num_channels, world_size)), backend='cpu:gloo,cuda:nccl')
+initiator_group = dist.new_group(list(range(num_channels)), backend='cpu:gloo,cuda:dlslime')
+target_group = dist.new_group(list(range(num_channels, world_size)), backend='cpu:gloo,cuda:dlslime')
 
 # Setting Info
 if args.transfer_engine == 'mooncake':
@@ -137,7 +137,7 @@ if args.with_imm_data and args.opcode != 'write':
 if args.transfer_engine in ['dlslime', 'mooncake']:
     rdma_devices = available_nic()
     rdma_device = rdma_devices[local_rank % len(rdma_devices)]
-    rank_0_print(f'setting NIC for {rdma_device}')
+    print(f'setting NIC for {rdma_device}')
 
 if args.transfer_engine == 'dlslime':
     rdma_endpoint = RDMAEndpoint(rdma_device, ib_port=1, link_type='RoCE', qp_num=qp_num)
@@ -251,11 +251,11 @@ def transfer_batch_concurrency_dlslime(role, opcode, mr_key, tensor, batch_size,
 
 
 def transfer_batch_concurrency_mooncake(role, opcode, mr_key, tensor, batch_size, num_concurrency):
-    assert opcode == 'read'
+    # assert opcode == 'read'
     if role == 'initiator':
         all_batch_ids_to_wait = []
         for concurrent_id in range(num_concurrency):
-            batch_id = rdma_endpoint.batch_transfer_async_read(
+            batch_id = rdma_endpoint.batch_transfer_async_write(
                 f"{all_endpoint_info[peer_rank]['local_ip']}:{all_endpoint_info[peer_rank]['endpoint']}",
                 [all_endpoint_info[rank]['kv_table'][mr_key][0] for _ in range(batch_size)],
                 [all_endpoint_info[peer_rank]['kv_table'][mr_key][0] for _ in range(batch_size)],

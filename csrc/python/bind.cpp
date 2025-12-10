@@ -140,7 +140,7 @@ PYBIND11_MODULE(_slime_c, m)
         .def(py::init<const uintptr_t&, const uintptr_t&, uint64_t, uint64_t, uint64_t>());
 
 #ifdef BUILD_RDMA
-    py::class_<slime::RDMAAssign, slime::RDMAAssignSharedPtr>(m, "RDMAAssign")
+    py::class_<slime::RDMAAssign, std::shared_ptr<slime::RDMAAssign>>(m, "RDMAAssign")
         .def("wait", &slime::RDMAAssign::wait, py::call_guard<py::gil_scoped_release>())
         .def("latency", &slime::RDMAAssign::latency, py::call_guard<py::gil_scoped_release>());
 
@@ -169,9 +169,9 @@ PYBIND11_MODULE(_slime_c, m)
             [](slime::RDMAContext&     self,
                slime::OpCode           opcode,
                std::vector<uintptr_t>& mr_keys,
-               std::vector<int>&       toff,
-               std::vector<int>&       soff,
-               std::vector<int>&       length) {
+               std::vector<size_t>&       toff,
+               std::vector<size_t>&       soff,
+               std::vector<size_t>&       length) {
                 std::vector<slime::Assignment> batch;
                 int                            bs = mr_keys.size();
                 for (int i = 0; i < bs; ++i) {

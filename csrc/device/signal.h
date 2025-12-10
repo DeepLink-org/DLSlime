@@ -4,7 +4,7 @@
 namespace slime {
 namespace device {
 
-class DeviceSignal {
+class alignas(64) DeviceSignal {
 public:
     virtual ~DeviceSignal() = default;
 

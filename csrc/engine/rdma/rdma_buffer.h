@@ -22,7 +22,7 @@ namespace slime {
 
 class RDMAEndpoint;
 
-class RDMABuffer: public std::enable_shared_from_this<RDMABuffer> {
+struct alignas(64) RDMABuffer: public std::enable_shared_from_this<RDMABuffer> {
     friend class RDMAEndpoint;
     friend class RDMAEndpointV0;
 

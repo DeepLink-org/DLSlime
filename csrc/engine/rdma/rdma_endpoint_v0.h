@@ -1,9 +1,13 @@
 #pragma once
 
+#include "device/host/host_signal.h"
 #include "device/signal.h"
+
 #include "engine/assignment.h"
 #include "engine/rdma/rdma_assignment.h"
+
 #include "jring.h"
+#include "json.hpp"
 #include "rdma_common.h"
 #include "rdma_context.h"
 
@@ -19,6 +23,8 @@
 #include <immintrin.h>
 
 namespace slime {
+
+using json = nlohmann::json;
 
 class RDMABuffer;
 
@@ -50,44 +56,42 @@ typedef struct alignas(64) ViewInfo {
     }
 } meta_info_t;
 
+struct alignas(64) PaddedAtomicUint64 {
+    std::atomic<uint64_t> val{0};
+};
+
 // Context for Send Operations
 struct alignas(64) SendContext {
-    int32_t                            slot_id;
-    std::shared_ptr<RDMABuffer>        buffer;
-    std::shared_ptr<RDMAAssignHandler> assign_handler;
+    int64_t                     slot_id;
+    std::shared_ptr<RDMABuffer> buffer;
+
+    // PaddedAtomicUint64 meta_arrived_;
 
     std::shared_ptr<slime::device::DeviceSignal> signal;
 
-    uint32_t expected_mask = 0;
+    uint64_t expected_mask = 0;
 
     void reset()
     {
-        buffer         = nullptr;
-        assign_handler = nullptr;
-        expected_mask  = 0;
+        buffer        = nullptr;
+        expected_mask = 0;
     }
 };
 
 // Context for Recv Operations
 struct alignas(64) RecvContext {
-    int32_t                            slot_id;
-    std::shared_ptr<RDMABuffer>        buffer;
-    std::shared_ptr<RDMAAssignHandler> assign_handler;
+    int64_t                     slot_id;
+    std::shared_ptr<RDMABuffer> buffer;
 
     std::shared_ptr<slime::device::DeviceSignal> signal;
 
-    uint32_t expected_mask = 0;
+    uint64_t expected_mask = 0;
 
     void reset()
     {
-        buffer         = nullptr;
-        assign_handler = nullptr;
-        expected_mask  = 0;
+        buffer        = nullptr;
+        expected_mask = 0;
     }
-};
-
-struct alignas(64) PaddedAtomicUint64 {
-    std::atomic<uint64_t> val{0};
 };
 
 // ==========================================
@@ -139,8 +143,6 @@ private:
     size_t                       data_ctx_qp_num_;
     size_t                       meta_ctx_qp_num_;
 
-    uintptr_t remote_meta_key_;
-
     // DMA-able memory regions for metadata exchange
     meta_info_t* remote_meta_info_;
     meta_info_t* local_meta_info_;
@@ -152,6 +154,13 @@ private:
     // Context Pools to avoid dynamic allocation
     std::vector<SendContext> send_ctx_pool_;
     std::vector<RecvContext> recv_ctx_pool_;
+
+    RDMAAssign* meta_send_assign_;
+    RDMAAssign* meta_recv_assign_;
+    RDMAAssign* data_send_assign_;
+    RDMAAssign* data_recv_assign_;
+
+    uintptr_t remote_meta_key_;
 
     // Scoreboards for signaling completion between RDMA callbacks and Proxy threads
     PaddedAtomicUint64* meta_arrived_scoreboard_;
