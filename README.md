@@ -360,6 +360,39 @@ torchrun --master-addr 10.130.8.145 --master-port 6006 --nnodes 2 --nproc-per-no
 | dlslime         | 8         | 67,108,864           | 64         | 8               | 87.771          | 391480          |
 | dlslime         | 8         | 134,217,728          | 64         | 8               | 175.518         | 391530          |
 
+### GDRDMA P2P Send/Recv
+```
+SLIME_QP_NUM=2 python bench/python/dlslime_torch_dist_sendrecv_bench.py --mode send --use-gpu --iterations 100
+```
+
+```
+SLIME_QP_NUM=2 python bench/python/dlslime_torch_dist_sendrecv_bench.py --mode recv --use-gpu --iterations 100
+```
+
+| Message Size (bytes)   | Avg Latency   | Bandwidth     | Device   |
+|------------------------|---------------|---------------|----------|
+| 1,024                  | 0.027 ms      | 37.65 MB/s    | GPU      |
+| 2,048                  | 0.028 ms      | 72.17 MB/s    | GPU      |
+| 4,096                  | 0.028 ms      | 144.81 MB/s   | GPU      |
+| 8,192                  | 0.028 ms      | 295.98 MB/s   | GPU      |
+| 16,384                 | 0.029 ms      | 564.15 MB/s   | GPU      |
+| 32,768                 | 0.031 ms      | 1069.90 MB/s  | GPU      |
+| 65,536                 | 0.031 ms      | 2083.20 MB/s  | GPU      |
+| 131,072                | 0.032 ms      | 4038.17 MB/s  | GPU      |
+| 262,144                | 0.036 ms      | 7299.42 MB/s  | GPU      |
+| 524,288                | 0.042 ms      | 12495.87 MB/s | GPU      |
+| 1,048,576              | 0.053 ms      | 19961.18 MB/s | GPU      |
+| 2,097,152              | 0.075 ms      | 27924.99 MB/s | GPU      |
+| 4,194,304              | 0.117 ms      | 35716.55 MB/s | GPU      |
+| 8,388,608              | 0.212 ms      | 39637.66 MB/s | GPU      |
+| 16,777,216             | 0.387 ms      | 43386.08 MB/s | GPU      |
+| 33,554,432             | 0.871 ms      | 38532.98 MB/s | GPU      |
+| 67,108,864             | 1.665 ms      | 40298.91 MB/s | GPU      |
+| 134,217,728            | 3.159 ms      | 42487.69 MB/s | GPU      |
+| 268,435,456            | 5.643 ms      | 47572.53 MB/s | GPU      |
+| 536,870,912            | 11.137 ms     | 48204.20 MB/s | GPU      |
+
+
 ### Heterogeneous Interconnection​
 
 - hardware configs
@@ -388,3 +421,7 @@ torchrun --master-addr 10.130.8.145 --master-port 6006 --nnodes 2 --nproc-per-no
 | D                 | 29317.66 | 28683.25 | 24515.30 | 27491.33 |
 
 detailed results: [bench](bench/results)
+
+
+
+

@@ -1,11 +1,22 @@
 cmake_minimum_required(VERSION 3.16)
 
+find_program(CCACHE_PROGRAM ccache)
+if(CCACHE_PROGRAM)
+    set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+    set(CMAKE_C_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+    set(CMAKE_CUDA_COMPILER_LAUNCHER "${CCACHE_PROGRAM}") # 连 CUDA 都能缓存！
+endif()
+
 project(_slime C CXX)
 
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/utils.cmake)
 
 # Slime options for transfer engine
 slime_option(BUILD_RDMA                "Build RDMA"                        ON)
+
+slime_option(USE_CUDA                  "USE in CUDA Platform"             OFF)
+slime_option(USE_MACA                  "USE in MACA Platform"             OFF)
+
 slime_option(BUILD_NVLINK              "Build NVLINK"                     OFF)
 slime_option(BUILD_NVSHMEM             "Build NVSHMEM"                    OFF)
 slime_option(BUILD_ASCEND_DIRECT       "Build Ascend direct transport"    OFF)

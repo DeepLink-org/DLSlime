@@ -40,5 +40,6 @@ T get_env(const char* name, T default_value)
 }
 
 inline const int SLIME_LOG_LEVEL = get_env<int>("SLIME_LOG_LEVEL", 0);
+inline const int SLIME_LOG_MUTEX = get_env<int>("SLIME_LOG_MUTEX", 0);
 
 }  // namespace slime

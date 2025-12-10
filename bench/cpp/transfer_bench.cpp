@@ -2,7 +2,7 @@
 #include "engine/rdma/rdma_assignment.h"
 #include "engine/rdma/rdma_config.h"
 #include "engine/rdma/rdma_context.h"
-#include "engine/rdma/rdma_scheduler.h"
+#include "engine/rdma/rdma_utils.h"
 #include "json.hpp"
 #include "logging.h"
 
@@ -103,7 +103,7 @@ int target(RDMAContext& rdma_context)
     rdma_context.init(FLAGS_device_name, FLAGS_ib_port, FLAGS_link_type);
 
     void* data = memory_allocate_target();
-    rdma_context.register_memory_region("buffer", (uintptr_t)data, FLAGS_buffer_size);
+    rdma_context.register_memory_region(0, (uintptr_t)data, FLAGS_buffer_size);
 
     SLIME_ASSERT_EQ(connect(rdma_context, send, recv), 0, "Connect Error");
 
@@ -127,7 +127,7 @@ int initiator(RDMAContext& rdma_context)
     rdma_context.init(FLAGS_device_name, FLAGS_ib_port, FLAGS_link_type);
 
     void* data = memory_allocate_initiator();
-    rdma_context.register_memory_region("buffer", (uintptr_t)data, FLAGS_buffer_size);
+    rdma_context.register_memory_region(0, (uintptr_t)data, FLAGS_buffer_size);
 
     SLIME_ASSERT_EQ(connect(rdma_context, send, recv), 0, "Connect Error");
 
@@ -150,18 +150,18 @@ int initiator(RDMAContext& rdma_context)
 
         int done = false;
 
-        RDMASchedulerAssignmentSharedPtrBatch rdma_assignment_batch;
+        std::vector<std::shared_ptr<RDMAAssignHandler>> rdma_assignment_batch;
         for (int concurrent_id = 0; concurrent_id < FLAGS_concurrent_num; ++concurrent_id) {
             AssignmentBatch batch;
             for (int i = 0; i < FLAGS_batch_size; ++i) {
-                batch.push_back(Assignment("buffer", i * FLAGS_block_size, i * FLAGS_block_size, FLAGS_block_size));
+                batch.push_back(Assignment(0, i * FLAGS_block_size, i * FLAGS_block_size, FLAGS_block_size));
             }
-            RDMASchedulerAssignmentSharedPtr rdma_assignment = rdma_context.submit(OpCode::READ, batch);
+            std::shared_ptr<RDMAAssignHandler> rdma_assignment = rdma_context.submit(OpCode::READ, batch);
             rdma_assignment_batch.emplace_back(rdma_assignment);
             total_bytes += FLAGS_batch_size * FLAGS_block_size;
             total_trips += 1;
         }
-        for (RDMASchedulerAssignmentSharedPtr& rdma_assignment : rdma_assignment_batch) {
+        for (std::shared_ptr<RDMAAssignHandler>& rdma_assignment : rdma_assignment_batch) {
             rdma_assignment->wait();
         }
     }

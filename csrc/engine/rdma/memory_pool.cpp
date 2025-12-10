@@ -10,7 +10,7 @@
 
 namespace slime {
 
-int RDMAMemoryPool::register_memory_region(const std::string& mr_key, uintptr_t data_ptr, uint64_t length)
+int RDMAMemoryPool::registerMemoryRegion(const uintptr_t& mr_key, uintptr_t data_ptr, uint64_t length)
 {
     std::unique_lock<std::mutex> lock(mrs_mutex_);
     if (mrs_.count(mr_key)) {
@@ -20,9 +20,7 @@ int RDMAMemoryPool::register_memory_region(const std::string& mr_key, uintptr_t 
     /* MemoryRegion Access Right = 777 */
     const static int access_rights = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_READ;
     ibv_mr*          mr            = ibv_reg_mr(pd_, (void*)data_ptr, length, access_rights);
-
     SLIME_ASSERT(mr, " Failed to register memory " << data_ptr);
-
     SLIME_LOG_DEBUG("Memory region: " << mr_key << ", " << (void*)data_ptr << " -- " << (void*)(data_ptr + length)
                                       << ", Device name: " << pd_->context->device->dev_name << ", Length: " << length
                                       << " (" << length / 1024 / 1024 << " MB)"
@@ -33,7 +31,7 @@ int RDMAMemoryPool::register_memory_region(const std::string& mr_key, uintptr_t 
     return 0;
 }
 
-int RDMAMemoryPool::unregister_memory_region(const std::string& mr_key)
+int RDMAMemoryPool::unregisterMemoryRegion(const uintptr_t& mr_key)
 {
     std::unique_lock<std::mutex> lock(mrs_mutex_);
     ibv_dereg_mr(mrs_[mr_key]);
@@ -41,10 +39,7 @@ int RDMAMemoryPool::unregister_memory_region(const std::string& mr_key)
     return 0;
 }
 
-int RDMAMemoryPool::register_remote_memory_region(const std::string& mr_key,
-                                                  uintptr_t          addr,
-                                                  size_t             length,
-                                                  uint32_t           rkey)
+int RDMAMemoryPool::registerRemoteMemoryRegion(const uintptr_t& mr_key, uintptr_t addr, size_t length, uint32_t rkey)
 {
     std::unique_lock<std::mutex> lock(remote_mrs_mutex_);
     remote_mrs_[mr_key] = remote_mr_t(addr, length, rkey);
@@ -53,7 +48,7 @@ int RDMAMemoryPool::register_remote_memory_region(const std::string& mr_key,
     return 0;
 }
 
-int RDMAMemoryPool::register_remote_memory_region(const std::string& mr_key, const json& mr_info)
+int RDMAMemoryPool::registerRemoteMemoryRegion(const uintptr_t& mr_key, const json& mr_info)
 {
     std::unique_lock<std::mutex> lock(remote_mrs_mutex_);
     remote_mrs_[mr_key] =
@@ -62,7 +57,7 @@ int RDMAMemoryPool::register_remote_memory_region(const std::string& mr_key, con
     return 0;
 }
 
-int RDMAMemoryPool::unregister_remote_memory_region(const std::string& mr_key)
+int RDMAMemoryPool::unregisterRemoteMemoryRegion(const uintptr_t& mr_key)
 {
     std::unique_lock<std::mutex> lock(remote_mrs_mutex_);
     remote_mrs_.erase(mr_key);
@@ -74,7 +69,9 @@ json RDMAMemoryPool::mr_info()
     std::unique_lock<std::mutex> lock(mrs_mutex_);
     json                         mr_info;
     for (auto& mr : mrs_) {
-        mr_info[mr.first] = {
+        SLIME_LOG_INFO("mr_info: ", mr_info.dump())
+        mr_info[std::to_string(mr.first)] = {
+            {"mr_key", (uintptr_t)mr.first},
             {"addr", (uintptr_t)mr.second->addr},
             {"rkey", mr.second->rkey},
             {"length", mr.second->length},

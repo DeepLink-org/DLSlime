@@ -29,13 +29,11 @@ add_library(
     memory_pool.cpp
     rdma_assignment.cpp
     rdma_context.cpp
-    rdma_scheduler.cpp
-    rdma_endpoint.cpp
+    rdma_endpoint_v0.cpp
     rdma_buffer.cpp
-    utils.cpp
 )
 
-target_link_libraries(_slime_rdma PUBLIC _slime_engine numa ibverbs)
+target_link_libraries(_slime_rdma PUBLIC _slime_device _slime_engine numa ibverbs)
 
 set_target_properties(
     _slime_rdma

@@ -1,11 +1,11 @@
 import argparse
+import cProfile
 import os
 import time
-from tabulate import tabulate
-import cProfile
 
 import torch
 import torch.distributed as dist
+from tabulate import tabulate
 from torch.distributed import distributed_c10d
 
 # add dlslime backend
@@ -17,39 +17,42 @@ except ImportError as e:
     print(e, "please install dlslime backend first")
     exit()
 
+
 def benchmark_send_recv(args):
     # Initialize process group
-    print("Initialize process group")
+    print("Initialize process group", flush=True)
     rank = 0 if args.mode == "send" else 1
     backend_S = "cuda:dlslime" if args.use_gpu else "cpu:dlslime"
     dist.init_process_group(backend_S, rank=rank, world_size=2)
     slime_group = dist.new_group(ranks=[0, 1], backend=backend_S)
-    print(backend_S)
+    print(backend_S, flush=True)
     print("rank: ", rank)
     if args.use_gpu:
         torch.cuda.set_device(rank)
-        device = "cuda"
-        print("Device: cuda")
+        device = f"cuda:{rank}"
+        print(f"Device: {device}", flush=True)
     else:
         device = "cpu"
-        print("Device: cpu")
+        print("Device: cpu", flush=True)
 
     # Prepare data sizes to test (in bytes)
     if args.sizes:
         sizes = [int(s) for s in args.sizes]
     else:
-        sizes = [2**n for n in range(11, 26)]  # 256B to 256MB
+        sizes = [2**n for n in range(10, 30)]  # 256B to 256MB
 
-    print("Prepare data sizes: ", sizes)
+    print("Prepare data sizes: ", sizes, flush=True)
     benchmark_data = []
-    num = 2
-    print("Start to test the bench")
+    num = 1
+    print("Start to test the bench", flush=True)
     for size in sizes:
+        print(f"profiling size: {size}", flush=True)
         num_elements = max(1, size // 4)
         send_batch = [
             torch.ones(num_elements, device=device, dtype=torch.float32)
             for _ in range(num)
         ]
+        # print(send_batch[0])
         recv_batch = [
             torch.zeros(num_elements, device=device, dtype=torch.float32)
             for _ in range(num)
@@ -57,26 +60,27 @@ def benchmark_send_recv(args):
 
         if args.use_gpu:
             torch.cuda.synchronize()
-            
-        for _ in range(25):
+
+        for _ in range(args.iterations):
             all_work = []
             reqs = []
             for i in range(num):
                 if rank == 0:
                     send_op = dist.isend(send_batch[i], dst=1, group=slime_group)
-                    reqs.extend([send_op])
+                    recv_op = dist.irecv(send_batch[i], src=1, group=slime_group)
+                    reqs.extend([send_op, recv_op])
                 else:
+                    send_op = dist.isend(send_batch[i], dst=0, group=slime_group)
                     recv_op = dist.irecv(recv_batch[i], src=0, group=slime_group)
-                    reqs.extend([recv_op])
+                    reqs.extend([send_op, recv_op])
             work = reqs
             all_work.extend(work)
 
             [w.wait() for w in all_work]
 
-        if args.use_gpu:
-            torch.cuda.synchronize()
+            if args.use_gpu:
+                torch.cuda.synchronize()
         start_time = time.time()
-        
         for _ in range(args.iterations):
             all_work = []
             for i in range(num):
@@ -84,13 +88,13 @@ def benchmark_send_recv(args):
                     send_op = dist.isend(send_batch[i], dst=1, group=slime_group)
                     all_work.extend([send_op])
                 else:
-                    recv_op = dist.irecv(recv_batch[i], src=0 ,group=slime_group)
+                    recv_op = dist.irecv(recv_batch[i], src=0, group=slime_group)
                     all_work.extend([recv_op])
 
             [w.wait() for w in all_work]
 
-        if args.use_gpu:
-            torch.cuda.synchronize()
+            if args.use_gpu:
+                torch.cuda.synchronize()
         elapsed_time = time.time() - start_time
 
         total_data = size * num * args.iterations
@@ -111,7 +115,7 @@ def benchmark_send_recv(args):
     if rank == 1 and benchmark_data:
         headers = ["Message Size (bytes)", "Avg Latency", "Bandwidth", "Device"]
         print("\nBenchmark Results:")
-        print(tabulate(benchmark_data, headers=headers, tablefmt="grid"))
+        print(tabulate(benchmark_data, headers=headers, tablefmt="github"))
 
     dist.destroy_process_group()
 
@@ -128,7 +132,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--master-addr",
         type=str,
-        default="localhost",
+        default="10.102.207.84",
         help="Master address for distributed training",
     )
     parser.add_argument(
@@ -146,7 +150,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--iterations",
         type=int,
-        default=1,
+        default=100,
         help="Number of iterations for benchmarking",
     )
 
@@ -159,5 +163,7 @@ if __name__ == "__main__":
     # Set environment variables
     os.environ["MASTER_ADDR"] = args.master_addr
     os.environ["MASTER_PORT"] = args.master_port
-
+    os.environ["NCCL_P2P_DISABLE"] = "1"
+    os.environ["NCCL_SHM_DISABLE"] = "1"
+    import time
     benchmark_send_recv(args)

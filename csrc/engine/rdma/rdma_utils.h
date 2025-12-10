@@ -1,15 +1,22 @@
+#pragma once
+
+#include <cstdlib>
 #include <functional>
+#include <iostream>
+#include <sstream>
+#include <string>
+#include <vector>
 
 #include <infiniband/verbs.h>
+#include <numa.h>
 
 #include "engine/rdma/ibv_helper.h"
 #include "engine/rdma/rdma_env.h"
-#include "engine/rdma/utils.h"
 #include "logging.h"
 
 namespace slime {
 
-std::vector<std::string> available_nic()
+inline std::vector<std::string> available_nic()
 {
     int                 num_devices;
     struct ibv_device** dev_list;
@@ -31,7 +38,7 @@ std::vector<std::string> available_nic()
     return available_devices;
 }
 
-int get_gid_index(std::string dev_name)
+inline int get_gid_index(std::string dev_name)
 {
     int                 num_devices;
     struct ibv_device** dev_list;
@@ -53,6 +60,22 @@ int get_gid_index(std::string dev_name)
         }
     }
     return -1;
+}
+
+inline int32_t socketId(const std::string& device_name)
+{
+    // Adapted from https://github.com/kvcache-ai/Mooncake.git
+    std::string   path = "/sys/class/infiniband/" + device_name + "/device/numa_node";
+    std::ifstream file(path);
+    if (file.is_open()) {
+        int socket_id;
+        file >> socket_id;
+        file.close();
+        return (socket_id < 0) ? 0 : socket_id;
+    }
+    else {
+        return 0;
+    }
 }
 
 }  // namespace slime

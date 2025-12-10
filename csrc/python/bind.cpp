@@ -26,8 +26,6 @@
 #include "engine/rdma/rdma_buffer.h"
 #include "engine/rdma/rdma_config.h"
 #include "engine/rdma/rdma_context.h"
-#include "engine/rdma/rdma_endpoint.h"
-#include "engine/rdma/rdma_scheduler.h"
 #include "engine/rdma/utils.h"
 #endif
 
@@ -137,64 +135,61 @@ PYBIND11_MODULE(_slime_c, m)
         .value("SEND", slime::OpCode::SEND)
         .value("RECV", slime::OpCode::RECV);
 
-    py::class_<slime::Assignment>(m, "Assignment").def(py::init<std::string, uint64_t, uint64_t, uint64_t>());
+    py::class_<slime::Assignment>(m, "Assignment")
+        .def(py::init<const uintptr_t&, uint64_t, uint64_t, uint64_t>())
+        .def(py::init<const uintptr_t&, const uintptr_t&, uint64_t, uint64_t, uint64_t>());
 
 #ifdef BUILD_RDMA
-    py::class_<slime::RDMAAssignment, slime::RDMAAssignmentSharedPtr>(m, "RDMAAssignment")
-        .def("wait", &slime::RDMAAssignment::wait, py::call_guard<py::gil_scoped_release>())
-        .def("latency", &slime::RDMAAssignment::latency, py::call_guard<py::gil_scoped_release>());
+    py::class_<slime::RDMAAssign, std::shared_ptr<slime::RDMAAssign>>(m, "RDMAAssign")
+        .def("wait", &slime::RDMAAssign::wait, py::call_guard<py::gil_scoped_release>())
+        .def("latency", &slime::RDMAAssign::latency, py::call_guard<py::gil_scoped_release>());
 
-    py::class_<slime::RDMASchedulerAssignment, slime::RDMASchedulerAssignmentSharedPtr>(m, "RDMASchedulerAssignment")
-        .def("wait", &slime::RDMASchedulerAssignment::wait, py::call_guard<py::gil_scoped_release>())
-        .def("latency", &slime::RDMASchedulerAssignment::latency, py::call_guard<py::gil_scoped_release>());
-
-    py::class_<slime::RDMAScheduler>(m, "RDMAScheduler")
-        .def(py::init<const std::vector<std::string>&>())
-        .def("register_memory_region", &slime::RDMAScheduler::register_memory_region)
-        .def("connect", &slime::RDMAScheduler::connect)
-        .def("submit_assignment", &slime::RDMAScheduler::submitAssignment)
-        .def("scheduler_info", &slime::RDMAScheduler::scheduler_info);
+    py::class_<slime::RDMAAssignHandler, std::shared_ptr<slime::RDMAAssignHandler>>(m, "RDMAAssignHandler")
+        .def("wait", &slime::RDMAAssignHandler::wait, py::call_guard<py::gil_scoped_release>())
+        .def("latency", &slime::RDMAAssignHandler::latency, py::call_guard<py::gil_scoped_release>());
 
     py::class_<slime::RDMAContext, std::shared_ptr<slime::RDMAContext>>(m, "rdma_context")
         .def(py::init<>())
         .def(py::init<size_t>())
         .def("init_rdma_context", &slime::RDMAContext::init)
-        .def("register_memory_region", &slime::RDMAContext::register_memory_region)
+        .def("register_memory_region",
+             static_cast<int64_t (slime::RDMAContext::*)(const uintptr_t&, uintptr_t, uint64_t)>(
+                 &slime::RDMAContext::registerMemoryRegion))
         .def("register_remote_memory_region",
-             static_cast<int64_t (slime::RDMAContext::*)(std::string, json)>(
-                 &slime::RDMAContext::register_remote_memory_region))
-        .def("reload_memory_pool", &slime::RDMAContext::reload_memory_pool)
+             static_cast<int64_t (slime::RDMAContext::*)(const uintptr_t&, json)>(
+                 &slime::RDMAContext::registerRemoteMemoryRegion))
+        .def("reload_memory_pool", &slime::RDMAContext::reloadMemoryPool)
         .def("endpoint_info", &slime::RDMAContext::endpoint_info)
         .def("connect", &slime::RDMAContext::connect)
         .def("launch_future", &slime::RDMAContext::launch_future)
         .def("stop_future", &slime::RDMAContext::stop_future)
         .def("submit", &slime::RDMAContext::submit, py::call_guard<py::gil_scoped_release>())
-        .def("submit_by_vector",
-             [](slime::RDMAContext&       self,
-                slime::OpCode             opcode,
-                std::vector<std::string>& mr_keys,
-                std::vector<int>&         toff,
-                std::vector<int>&         soff,
-                std::vector<int>&         length) {
-                 std::vector<slime::Assignment> batch;
-                 int                            bs = mr_keys.size();
-                 for (int i = 0; i < bs; ++i) {
-                     batch.emplace_back(slime::Assignment(mr_keys[i], toff[i], soff[i], length[i]));
-                 }
-                 return self.submit(opcode, batch);
-             });
+        .def(
+            "submit_by_vector",
+            [](slime::RDMAContext&     self,
+               slime::OpCode           opcode,
+               std::vector<uintptr_t>& mr_keys,
+               std::vector<size_t>&       toff,
+               std::vector<size_t>&       soff,
+               std::vector<size_t>&       length) {
+                std::vector<slime::Assignment> batch;
+                int                            bs = mr_keys.size();
+                for (int i = 0; i < bs; ++i) {
+                    batch.emplace_back(slime::Assignment(mr_keys[i], toff[i], soff[i], length[i]));
+                }
+                return self.submit(opcode, batch);
+            },
+            py::call_guard<py::gil_scoped_release>());
 
-    py::class_<slime::RDMAEndpoint, std::shared_ptr<slime::RDMAEndpoint>>(m, "rdma_endpoint")
+    py::class_<slime::RDMAEndpointV0, std::shared_ptr<slime::RDMAEndpointV0>>(m, "rdma_endpoint")
         .def(py::init<const std::string&, uint8_t, const std::string&, size_t>())
-        .def("context_connect", &slime::RDMAEndpoint::connect)
-        .def("get_data_context_info", &slime::RDMAEndpoint::getDataContextInfo)
-        .def("get_meta_context_info", &slime::RDMAEndpoint::getMetaContextInfo);
+        .def("context_connect", &slime::RDMAEndpointV0::connect)
+        .def("get_data_context_info", &slime::RDMAEndpointV0::dataCtxInfo)
+        .def("get_meta_context_info", &slime::RDMAEndpointV0::metaCtxInfo)
+        .def("register_memory_region", &slime::RDMAEndpointV0::registerMemoryRegion);
 
     py::class_<slime::RDMABuffer, std::shared_ptr<slime::RDMABuffer>>(m, "rdma_buffer")
-        .def(py::init<std::shared_ptr<slime::RDMAEndpoint>,
-                      std::vector<uintptr_t>,
-                      std::vector<size_t>,
-                      std::vector<size_t>>())
+        .def(py::init<std::shared_ptr<slime::RDMAEndpointV0>, uintptr_t, size_t, size_t>())
         .def("send", &slime::RDMABuffer::send)
         .def("recv", &slime::RDMABuffer::recv)
         .def("wait_send", &slime::RDMABuffer::waitSend)

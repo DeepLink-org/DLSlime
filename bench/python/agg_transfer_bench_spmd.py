@@ -20,12 +20,14 @@ import torch.distributed as dist
 from tabulate import tabulate
 from torch.distributed import distributed_c10d
 
+from dlslime import _slime_torch
+
 parser = argparse.ArgumentParser()
 parser.add_argument('--batch-size', type=int, default=1)
-parser.add_argument('--size', nargs='+', type=int, default=[n for n in range(8, 25)])
+parser.add_argument('--size', nargs='+', type=int, default=[n for n in range(8, 20)])
 parser.add_argument('--num-concurrency', type=int, default=16)
 parser.add_argument('--num-iteration', type=int, default=100)
-parser.add_argument('--opcode', type=str, choices=['read', 'write'], default='read')
+parser.add_argument('--opcode', type=str, choices=['read', 'write'], default='write')
 parser.add_argument('--with-imm-data', action='store_true', help='with-imm-data')
 parser.add_argument('--save-csv', action='store_true', help='Save benchmark results to CSV file')
 parser.add_argument('--csv-filename', type=str, default='./output.csv', help='Filename for CSV output')
@@ -88,7 +90,7 @@ rank_0_print(f'benchmarking transfer engine: {args.transfer_engine}')
 # import Python Package
 if args.transfer_engine == 'dlslime':
     if args.num_concurrency == 1:
-        SLIME_AGG_QP_NUM = set_env_when_no_default('SLIME_AGG_QP_NUM', str(2))
+        SLIME_AGG_QP_NUM = set_env_when_no_default('SLIME_AGG_QP_NUM', str(1))
         rank_0_print('[hint] SLIME_AGG_QP_NUM is set to None, '
                      'for high performance when args.num_concurrency=1, '
                      f'set {SLIME_AGG_QP_NUM=}.')
@@ -116,10 +118,11 @@ elif args.transfer_engine == 'mooncake':
     from dlslime import available_nic
 
 dist.init_process_group('cpu:gloo,cuda:nccl')
+transfer_group = dist.new_group(list(range(world_size)), backend='cuda:nccl')
 
 # TODO: for AFD Benchmark
-initiator_group = dist.new_group(list(range(num_channels)), backend='cpu:gloo,cuda:nccl')
-target_group = dist.new_group(list(range(num_channels, world_size)), backend='cpu:gloo,cuda:nccl')
+initiator_group = dist.new_group(list(range(num_channels)), backend='cpu:gloo,cuda:dlslime')
+target_group = dist.new_group(list(range(num_channels, world_size)), backend='cpu:gloo,cuda:dlslime')
 
 # Setting Info
 if args.transfer_engine == 'mooncake':
@@ -134,7 +137,7 @@ if args.with_imm_data and args.opcode != 'write':
 if args.transfer_engine in ['dlslime', 'mooncake']:
     rdma_devices = available_nic()
     rdma_device = rdma_devices[local_rank % len(rdma_devices)]
-    rank_0_print(f'setting NIC for {rdma_device}')
+    print(f'setting NIC for {rdma_device}')
 
 if args.transfer_engine == 'dlslime':
     rdma_endpoint = RDMAEndpoint(rdma_device, ib_port=1, link_type='RoCE', qp_num=qp_num)
@@ -152,18 +155,19 @@ elif args.transfer_engine == 'nixl':
 
 torch.cuda.set_device(local_rank)
 
-ttensors = [torch.ones([2 << rawsize], device='cuda') for rawsize in args.size]
+ttensors = [torch.ones([2 << rawsize], device=f'cuda:{local_rank}') for rawsize in args.size]
+print(local_rank)
 torch.cuda.synchronize()
 
 if args.transfer_engine == 'dlslime':
     for idx, ttensor in enumerate(ttensors):
-        rdma_endpoint.register_memory_region(f'buffer_{idx}', ttensor.data_ptr(), ttensor.storage_offset(),
+        rdma_endpoint.register_memory_region(idx, ttensor.data_ptr(), ttensor.storage_offset(),
                                              ttensor.numel() * ttensor.itemsize)
 elif args.transfer_engine == 'mooncake':
     for idx, ttensor in enumerate(ttensors):
         result = rdma_endpoint.register_memory(ttensor.data_ptr() + ttensor.storage_offset(),
                                                ttensor.numel() * ttensor.itemsize)
-        mooncake_endpoint_info['kv_table'][f'buffer_{idx}'] = (ttensor.data_ptr() + ttensor.storage_offset(),
+        mooncake_endpoint_info['kv_table'][idx] = (ttensor.data_ptr() + ttensor.storage_offset(),
                                                                ttensor.numel() * ttensor.itemsize)
         if result != 0:
             raise RuntimeError(f'Failed to register memory region: {result}')
@@ -173,7 +177,7 @@ elif args.transfer_engine == 'nixl':
     for idx, ttensor in enumerate(ttensors):
         nixl_memory_info.append(
             (ttensor.data_ptr() + ttensor.storage_offset(), ttensor.numel() * ttensor.itemsize, local_rank, ''))
-        nixl_endpoint_info['kv_table'][f'buffer_{idx}'] = (ttensor.data_ptr() + ttensor.storage_offset(),
+        nixl_endpoint_info['kv_table'][idx] = (ttensor.data_ptr() + ttensor.storage_offset(),
                                                            ttensor.numel() * ttensor.itemsize)
     reg_descs = agent.register_memory(nixl_memory_info, 'VRAM', is_sorted=False)
     if not reg_descs:  # Same as reg_descs if successful
@@ -247,11 +251,11 @@ def transfer_batch_concurrency_dlslime(role, opcode, mr_key, tensor, batch_size,
 
 
 def transfer_batch_concurrency_mooncake(role, opcode, mr_key, tensor, batch_size, num_concurrency):
-    assert opcode == 'read'
+    # assert opcode == 'read'
     if role == 'initiator':
         all_batch_ids_to_wait = []
         for concurrent_id in range(num_concurrency):
-            batch_id = rdma_endpoint.batch_transfer_async_read(
+            batch_id = rdma_endpoint.batch_transfer_async_write(
                 f"{all_endpoint_info[peer_rank]['local_ip']}:{all_endpoint_info[peer_rank]['endpoint']}",
                 [all_endpoint_info[rank]['kv_table'][mr_key][0] for _ in range(batch_size)],
                 [all_endpoint_info[peer_rank]['kv_table'][mr_key][0] for _ in range(batch_size)],
@@ -301,13 +305,13 @@ def transfer_batch_concurrency_nccl(role, opcode, mr_key, tensor, batch_size, nu
     for concurrent_id in range(num_concurrency):
         if role == 'target':
             reqs = [
-                distributed_c10d.P2POp(dist.isend, tensor, peer_rank, tag=iter_id * batch_size + batch_id)
+                distributed_c10d.P2POp(dist.isend, tensor, peer_rank, tag=iter_id * batch_size + batch_id, group=transfer_group)
                 for batch_id in range(batch_size)
             ]
             futures.extend(distributed_c10d.batch_isend_irecv(reqs))
         else:
             reqs = [
-                distributed_c10d.P2POp(dist.irecv, tensor, peer_rank, tag=iter_id * batch_size + batch_id)
+                distributed_c10d.P2POp(dist.irecv, tensor, peer_rank, tag=iter_id * batch_size + batch_id, group=transfer_group)
                 for batch_id in range(batch_size)
             ]
             futures.extend(distributed_c10d.batch_isend_irecv(reqs))
@@ -323,16 +327,16 @@ for idx, (rawsize, ttensor) in enumerate(zip(args.size, ttensors)):
     start_event.record()
     for iter_id in range(args.num_iteration):
         if args.transfer_engine == 'dlslime':
-            transfer_batch_concurrency_dlslime(role, args.opcode, f'buffer_{idx}', ttensor, args.batch_size,
+            transfer_batch_concurrency_dlslime(role, args.opcode, idx, ttensor, args.batch_size,
                                                args.num_concurrency)
         elif args.transfer_engine == 'mooncake':
-            transfer_batch_concurrency_mooncake(role, args.opcode, f'buffer_{idx}', ttensor, args.batch_size,
+            transfer_batch_concurrency_mooncake(role, args.opcode, idx, ttensor, args.batch_size,
                                                 args.num_concurrency)
         elif args.transfer_engine == 'nixl':
-            transfer_batch_concurrency_nixl(role, args.opcode, f'buffer_{idx}', ttensor, args.batch_size,
+            transfer_batch_concurrency_nixl(role, args.opcode, idx, ttensor, args.batch_size,
                                             args.num_concurrency)
         elif args.transfer_engine == 'nccl':
-            transfer_batch_concurrency_nccl(role, args.opcode, f'buffer_{idx}', ttensor, args.batch_size,
+            transfer_batch_concurrency_nccl(role, args.opcode, idx, ttensor, args.batch_size,
                                             args.num_concurrency)
         torch.cuda.synchronize()
     end_event.record()

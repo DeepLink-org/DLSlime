@@ -1,5 +1,4 @@
 # Python Wrapper
-slime_option(USE_MACA "USE in MACA Platform" OFF)
 
 # find pybind
 set(PYBIND11_FINDPYTHON ON)
@@ -19,20 +18,28 @@ run_python(TORCH_ENABLE_ABI
     "Failed to find torch ABI info"
 )
 
-run_python("TORCH_VERSION"
-    "import torch; print(torch.__version__)"
-    "Failed to get PyTorch version"
+    
+# 1. 先利用 run_python 获取当前 Torch 的版本号
+# 注意：使用 .split('+')[0] 是为了去掉可能的 cuda 后缀 (例如 2.9.0+cu118)，确保 CMake 能正确比较
+run_python(
+    "TORCH_CURRENT_VERSION"
+    "import torch; print(torch.__version__.split('+')[0])"
+    "Cannot get torch version"
 )
 
-if (TORCH_VERSION VERSION_LESS "2.9")
+if(TORCH_CURRENT_VERSION VERSION_GREATER_EQUAL "2.9")
+    message(STATUS "Torch version ${TORCH_CURRENT_VERSION} >= 2.9, using predefined TORCH_ENABLE_ABI.")
+    set(Torch_PYBIND11_BUILD_ABI ${TORCH_ENABLE_ABI})
+else()
+    message(STATUS "Torch version ${TORCH_CURRENT_VERSION} < 2.9, querying internal ABI string.")
     run_python(
         "Torch_PYBIND11_BUILD_ABI"
         "import torch; print(torch._C._PYBIND11_BUILD_ABI)"
-        "Cannot get TORCH_PYBIND11_BUILD_ABI (required for PyTorch < 2.9)"
+        "Cannot get TORCH_PYBIND11_BUILD_ABI"
     )
-else()
-    message(STATUS "PyTorch version >= 2.9, skipping Torch_PYBIND11_BUILD_ABI (not required)")
 endif()
+
+message(STATUS "Final Torch_PYBIND11_BUILD_ABI: ${Torch_PYBIND11_BUILD_ABI}")
 
 run_python("TORCH_WITH_CUDA" "import torch; print(torch.cuda.is_available())" "Cannot find torch DIR")
 
@@ -65,9 +72,8 @@ message(STATUS "TORCH PYBIND ABI:" ${Torch_PYBIND11_BUILD_ABI})
 # Common Compilation Flags
 add_compile_options("-DTORCH_API_INCLUDE_EXTENSION_H")
 add_compile_options("-D_GLIBCXX_USE_CXX11_ABI=${TORCH_ENABLE_ABI}")
-add_compile_options(-DPYBIND11_BUILD_ABI=\"${Torch_PYBIND11_BUILD_ABI}\")
-
-if (USE_MACA)
-    add_compile_definitions("USE_MACA")
-    message(STATUS "Build DLSlime under meta platform.")
+if(TORCH_CURRENT_VERSION VERSION_LESS "2.9")
+    add_compile_options(-DPYBIND11_BUILD_ABI=\"${Torch_PYBIND11_BUILD_ABI}\")
 endif()
+
+
