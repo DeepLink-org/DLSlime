@@ -48,8 +48,8 @@ if (BUILD_INTER_OPS)
 
     set(
         INTER_OPS_SRC
-        inter_ll/all_to_all_inter_ll/all_to_all_inter_ll.cu
-        inter_ll/all_to_all_inter_ll/all_to_all_inter_ll_buffer.cpp
+        inter_ll/all_gather_inter_ll/all_gather_inter_ll.cu
+        inter_ll/all_gather_inter_ll/all_gather_inter_ll_buffer.cpp
         nvshmem_runtime.cu
     )
 
