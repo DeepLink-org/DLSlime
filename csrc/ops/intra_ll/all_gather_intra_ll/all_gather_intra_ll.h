@@ -1,0 +1,30 @@
+#pragma once
+
+#include <cstdint>
+#include <cstdlib>
+
+#include <torch/torch.h>
+
+namespace slime {
+
+void all_gather_intra_ll(torch::Tensor                q,
+                         int8_t**                     ipc_buffer_ptr,
+                         int**                        ipc_signal_ptr,
+                         int32_t                      max_bs,
+                         int32_t                      msg_size,
+                         int32_t                      itemsize,
+                         int32_t                      world_size,
+                         int32_t                      rank,
+                         c10::optional<torch::Tensor> mask);
+
+void all_to_all_intra_ll(torch::Tensor                buffer_ori,
+                         int8_t**                     ipc_buffer_ptr,
+                         int**                        ipc_signal_ptr,
+                         int32_t                      max_bs,
+                         int32_t                      msg_size,
+                         int32_t                      itemsize,
+                         int32_t                      world_size,
+                         int32_t                      rank,
+                         c10::optional<torch::Tensor> mask);
+
+}  // namespace slime
