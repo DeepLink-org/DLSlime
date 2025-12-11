@@ -29,11 +29,38 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=200):
     print(f"Initializing Endpoints: Send[{dev0}] <-> Recv[{dev1}]")
     print(f"Tensor Device: {device_type.upper()}")
 
-    # 初始化 Endpoint
+    # 1. 创建 Endpoint
     send_endpoint = _slime_c.rdma_endpoint(dev0, 1, "RoCE", num_qp)
     recv_endpoint = _slime_c.rdma_endpoint(dev1, 1, "RoCE", num_qp)
 
-    # 建立连接
+    # 2. [NEW] 创建并配置 RDMA Worker
+    # 如果两个 Endpoint 在同一个物理设备上（或 Loopback），我们可以用一个 Worker。
+    # 如果是不同的设备，为了最佳性能，建议创建两个 Worker 分别绑定 NUMA。
+    
+    workers = []
+    
+    if dev0 == dev1:
+        # Loopback 模式：只需要一个 Worker
+        print(f"Loopback mode: Creating 1 Worker on {dev0}")
+        worker = _slime_c.rdma_worker(dev0, 0)
+        worker.add_endpoint(send_endpoint)
+        worker.add_endpoint(recv_endpoint)
+        worker.start()
+        workers.append(worker)
+    else:
+        # 双卡模式：两个 Worker
+        print(f"Dual-NIC mode: Creating Worker 0 on {dev0} and Worker 1 on {dev1}")
+        worker0 = _slime_c.rdma_worker(dev0, 0)
+        worker0.add_endpoint(send_endpoint)
+        worker0.start()
+        workers.append(worker0)
+
+        worker1 = _slime_c.rdma_worker(dev1, 1)
+        worker1.add_endpoint(recv_endpoint)
+        worker1.start()
+        workers.append(worker1)
+
+    # 3. 建立连接 (QPs Exchange)
     send_endpoint.context_connect(
         recv_endpoint.get_data_context_info(), recv_endpoint.get_meta_context_info()
     )
@@ -42,8 +69,6 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=200):
     )
 
     # 定义测试大小：2KB 到 128MB
-    # 2KB = 2 * 1024
-    # 128MB = 128 * 1024 * 1024
     start_size = 512
     end_size = 1024 * 1024 * 1024
 
@@ -58,40 +83,24 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=200):
     )
     print("-" * 70)
 
-    for size in test_sizes:
-        if 1:
-            # 1. 准备数据
-            # 使用 uint8，这样 numel 就等于 bytes
-            if device_type == "cuda":
-                send_tensor = torch.randint(
-                    0, 255, (size,), dtype=torch.uint8, device="cuda:0"
-                )
-                recv_tensor = torch.zeros((size,), dtype=torch.uint8, device="cuda:1")
-                torch.cuda.synchronize()
-            else:
-                send_tensor = torch.randint(
-                    0, 255, (size,), dtype=torch.uint8, device="cpu"
-                )
-                recv_tensor = torch.zeros((size,), dtype=torch.uint8, device="cpu")
+    try:
+        for size in test_sizes:
+            if 1:
+                # 准备数据
+                if device_type == "cuda":
+                    send_tensor = torch.randint(
+                        0, 255, (size,), dtype=torch.uint8, device="cuda:0"
+                    )
+                    recv_tensor = torch.zeros((size,), dtype=torch.uint8, device="cuda:1")
+                    torch.cuda.synchronize()
+                else:
+                    send_tensor = torch.randint(
+                        0, 255, (size,), dtype=torch.uint8, device="cpu"
+                    )
+                    recv_tensor = torch.zeros((size,), dtype=torch.uint8, device="cpu")
 
-            # 2. 注册 RDMA Buffer (MR 注册通常发生在这里)
-            send_buffer = _slime_c.rdma_buffer(
-                send_endpoint,
-                send_tensor.data_ptr(),
-                send_tensor.storage_offset(),
-                send_tensor.numel(),
-            )
-            recv_buffer = _slime_c.rdma_buffer(
-                recv_endpoint,
-                recv_tensor.data_ptr(),
-                recv_tensor.storage_offset(),
-                recv_tensor.numel(),
-            )
-
-            # 3. 预热 (Warmup)
-            # 让 MR 建立，TLB 预热，消除第一次慢启动的影响
-            warmup_iters = 10
-            for _ in range(warmup_iters):
+                # 创建 Buffer
+                # 注意：buf 构造时会自动将请求入队到 Ring，Worker 会在后台处理
                 send_buffer = _slime_c.rdma_buffer(
                     send_endpoint,
                     send_tensor.data_ptr(),
@@ -104,72 +113,76 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=200):
                     recv_tensor.storage_offset(),
                     recv_tensor.numel(),
                 )
-                recv_buffer.recv(None)
-                send_buffer.send(None)
-                send_buffer.wait_send()
-                recv_buffer.wait_recv()
 
-            if device_type == "cuda":
-                torch.cuda.synchronize()
+                # Warmup
+                warmup_iters = 10
+                for _ in range(warmup_iters):
+                    # 重新创建 buffer 模拟每次新的传输
+                    sb = _slime_c.rdma_buffer(
+                        send_endpoint, send_tensor.data_ptr(), 0, size
+                    )
+                    rb = _slime_c.rdma_buffer(
+                        recv_endpoint, recv_tensor.data_ptr(), 0, size
+                    )
+                    
+                    rb.recv(None) # 入队 Recv Task
+                    sb.send(None) # 入队 Send Task
+                    
+                    sb.wait_send() # 阻塞等待信号
+                    rb.wait_recv() # 阻塞等待信号
 
-            # 4. 正式评测
-            t_start = time.perf_counter()
+                if device_type == "cuda":
+                    torch.cuda.synchronize()
 
-            for _ in range(iterations):
-                send_buffer = _slime_c.rdma_buffer(
-                    send_endpoint,
-                    send_tensor.data_ptr(),
-                    send_tensor.storage_offset(),
-                    send_tensor.numel(),
+                # 正式评测
+                t_start = time.perf_counter()
+
+                for _ in range(iterations):
+                    sb = _slime_c.rdma_buffer(
+                        send_endpoint, send_tensor.data_ptr(), 0, size
+                    )
+                    rb = _slime_c.rdma_buffer(
+                        recv_endpoint, recv_tensor.data_ptr(), 0, size
+                    )
+                    
+                    rb.recv(None)
+                    sb.send(None)
+                    
+                    sb.wait_send()
+                    rb.wait_recv()
+
+                if device_type == "cuda":
+                    torch.cuda.synchronize()
+
+                t_end = time.perf_counter()
+
+                total_time = t_end - t_start
+                avg_latency_s = total_time / iterations
+                avg_latency_us = avg_latency_s * 1e6
+                throughput_gbs = (size * iterations) / total_time / 1e9
+
+                check_status = "OK"
+                if device_type == "cuda":
+                    if not torch.equal(
+                        send_tensor[:100].cpu(), recv_tensor[:100].cpu()
+                    ) or not torch.equal(
+                        send_tensor[-100:].cpu(), recv_tensor[-100:].cpu()
+                    ):
+                        check_status = "FAIL"
+                else:
+                    if not torch.equal(send_tensor, recv_tensor):
+                        check_status = "FAIL"
+
+                print(
+                    f"{get_readable_size(size):<15} | {avg_latency_us:<15.2f} |"
+                    f"{throughput_gbs:<20.4f} | {check_status:<10}"
                 )
-                recv_buffer = _slime_c.rdma_buffer(
-                    recv_endpoint,
-                    recv_tensor.data_ptr(),
-                    recv_tensor.storage_offset(),
-                    recv_tensor.numel(),
-                )
-                # 标准 RDMA 流程：先 Post Recv，再 Post Send
-                recv_buffer.recv(None)
-                send_buffer.send(None)
-                # 等待完成
-                # 注意：Stop-and-Wait 模式。如果是流水线模式，吞吐量会更高，
-                # 但这里我们测的是单次操作的 Latency
-                send_buffer.wait_send()
-                recv_buffer.wait_recv()
-
-            if device_type == "cuda":
-                torch.cuda.synchronize()
-
-            t_end = time.perf_counter()
-
-            # 5. 计算指标
-            total_time = t_end - t_start
-            avg_latency_s = total_time / iterations
-            avg_latency_us = avg_latency_s * 1e6
-
-            # Bandwidth in GB/s (1 GB = 10^9 Bytes for network, or 1024^3 for storage.
-            # Usually network throughput uses GB/s = Bytes / 1e9 / s or GiB/s)
-            # 这里我们用 GB/s (10^9)
-            throughput_gbs = (size * iterations) / total_time / 1e9
-
-            # 6. 数据校验 (抽样检查，避免大内存 copy 耗时)
-            check_status = "OK"
-            if device_type == "cuda":
-                # CUDA 校验需要把数据拷回 CPU，为了不影响后续测试，简单检查头尾
-                if not torch.equal(
-                    send_tensor[:100].cpu(), recv_tensor[:100].cpu()
-                ) or not torch.equal(
-                    send_tensor[-100:].cpu(), recv_tensor[-100:].cpu()
-                ):
-                    check_status = "FAIL"
-            else:
-                if not torch.equal(send_tensor, recv_tensor):
-                    check_status = "FAIL"
-
-            print(
-                f"{get_readable_size(size):<15} | {avg_latency_us:<15.2f} |"
-                f"{throughput_gbs:<20.4f} | {check_status:<10}"
-            )
+    
+    finally:
+        # [NEW] 清理：停止 Worker
+        print("Stopping workers...")
+        for w in workers:
+            w.stop()
 
 
 if __name__ == "__main__":
@@ -188,10 +201,10 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    # 如果没有 CUDA，强制回退到 CPU
     if args.device == "cuda" and not torch.cuda.is_available():
         print("CUDA not available, switching to CPU.")
         args.device = "cpu"
 
     run_benchmark(device_type=args.device, num_qp=args.qp, iterations=args.iters)
-    torch.cuda.synchronize()
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()

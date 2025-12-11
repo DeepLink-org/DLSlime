@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <torch/python.h>
 
 #include <torch/csrc/distributed/c10d/Backend.hpp>
@@ -10,8 +11,8 @@
 
 #include <pybind11/chrono.h>
 
+#include "engine/rdma/rdma_worker.h"
 #include "engine/rdma/rdma_endpoint_v0.h"
-#include "engine/rdma/utils.h"
 
 namespace slime {
 namespace c10d {
@@ -74,7 +75,7 @@ class TORCH_API slimeBackend: public ::c10d::Backend {
 public:
     slimeBackend(const c10::intrusive_ptr<::c10d::Store>& store, int rank = -1, int size = -1);
 
-    ~slimeBackend() override = default;
+    ~slimeBackend() override;
 
     const std::string getBackendName() const override
     {
@@ -199,12 +200,13 @@ public:
     }
 
 private:
-    void                                       exchangeChannelInfo();
-    c10::intrusive_ptr<::c10d::Store>          store_;
+    void                                         exchangeChannelInfo();
+    c10::intrusive_ptr<::c10d::Store>            store_;
     std::vector<std::shared_ptr<RDMAEndpointV0>> end_point_set_;
-    std::vector<json>                          local_channel_info_;
-    std::vector<json>                          global_channel_info_;
-    uint64_t                                   seq_{0};
+    std::shared_ptr<RDMAWorker>                  worker_;
+    std::vector<json>                            local_channel_info_;
+    std::vector<json>                            global_channel_info_;
+    uint64_t                                     seq_{0};
 
     // for batched_isend_irecv
     bool                                          group_active_{false};

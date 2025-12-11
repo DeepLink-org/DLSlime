@@ -1,7 +1,9 @@
 #include "slime_backend.h"
 #include "engine/rdma/rdma_buffer.h"
 #include "engine/rdma/rdma_endpoint_v0.h"
+#include "engine/rdma/rdma_utils.h"
 #include "engine/rdma/rdma_env.h"
+#include "engine/rdma/rdma_worker.h" // [重要] 确保包含 Worker 头文件
 #include "logging.h"
 
 #ifdef SLIME_USE_CUDA
@@ -14,11 +16,16 @@
 namespace slime {
 namespace c10d {
 
+// ------------------------------------------------------------
+// 辅助函数
+// ------------------------------------------------------------
+
 int mod_positive(int a, int b)
 {
     int r = a % b;
     return (r < 0) ? r + b : r;
 }
+
 void logAndThrow(const std::string& logMessage, const std::string& errorMessage)
 {
     LOG(ERROR) << logMessage;
@@ -46,6 +53,10 @@ static uint32_t checkTag(int32_t tag)
     return (uint32_t)tag;
 }
 
+// ------------------------------------------------------------
+// SendWork 实现
+// ------------------------------------------------------------
+
 SendWork::SendWork(std::vector<at::Tensor>& tensor, std::shared_ptr<::slime::RDMABuffer> buffer, uint64_t seq):
     Work(-1, ::c10d::OpType::SEND), tensor_(tensor), buffer_(std::move(buffer)), seq_(seq)
 {
@@ -71,6 +82,10 @@ bool SendWork::wait(std::chrono::milliseconds timeout)
     return sendCompleted;
 }
 
+// ------------------------------------------------------------
+// RecvWork 实现
+// ------------------------------------------------------------
+
 RecvWork::RecvWork(std::vector<at::Tensor>& tensor, std::shared_ptr<::slime::RDMABuffer> buffer, uint64_t seq):
     Work(-1, ::c10d::OpType::RECV), tensor_(tensor), buffer_(std::move(buffer)), srcRank_(-1), seq_(seq)
 {
@@ -95,10 +110,14 @@ bool RecvWork::wait(std::chrono::milliseconds timeout)
     finishAndThrow(exception);
     return recvCompleted;
 }
+
+// ------------------------------------------------------------
+// slimeBackend 核心方法实现
+// ------------------------------------------------------------
+
 c10::intrusive_ptr<::c10d::Work> slimeBackend::send(std::vector<at::Tensor>& tensors, int dstRank, int tag)
 {
-
-    size_t                 batch_size = tensors.size();
+    size_t                batch_size = tensors.size();
     std::vector<uintptr_t> ptrs;
     std::vector<size_t>    data_size;
     std::vector<size_t>    offset;
@@ -121,6 +140,8 @@ c10::intrusive_ptr<::c10d::Work> slimeBackend::send(std::vector<at::Tensor>& ten
 
     auto buf = std::make_shared<RDMABuffer>(
         end_point_set_[mod_positive(dstRank - rank_, size_ - 1)], ptrs[0], offset[0], data_size[0]);
+    
+    // 将任务放入 Ring，Worker 线程会自动处理
     buf->send(stream_handle);
 
     ++seq_;
@@ -135,7 +156,7 @@ c10::intrusive_ptr<::c10d::Work> slimeBackend::send(std::vector<at::Tensor>& ten
 
 c10::intrusive_ptr<::c10d::Work> slimeBackend::recv(std::vector<at::Tensor>& tensors, int srcRank, int tag)
 {
-    size_t                 batch_size = tensors.size();
+    size_t                batch_size = tensors.size();
     std::vector<uintptr_t> ptrs;
     std::vector<size_t>    data_size;
     std::vector<size_t>    offset;
@@ -158,6 +179,8 @@ c10::intrusive_ptr<::c10d::Work> slimeBackend::recv(std::vector<at::Tensor>& ten
 
     auto buf = std::make_shared<RDMABuffer>(
         end_point_set_[mod_positive(srcRank - rank_, size_ - 1)], ptrs[0], offset[0], data_size[0]);
+    
+    // 将任务放入 Ring，Worker 线程会自动处理
     buf->recv(stream_handle);
     ++seq_;
 
@@ -170,10 +193,13 @@ c10::intrusive_ptr<::c10d::Work> slimeBackend::recv(std::vector<at::Tensor>& ten
     return recv_work;
 }
 
+// ------------------------------------------------------------
+// 构造与析构
+// ------------------------------------------------------------
+
 slimeBackend::slimeBackend(const c10::intrusive_ptr<::c10d::Store>& store, int rank, int size):
     Backend(rank, size), store_(store)
 {
-
     std::vector<std::string> available_devices = available_nic();
     size_t                   idx               = rank_ % available_devices.size();
 
@@ -183,16 +209,25 @@ slimeBackend::slimeBackend(const c10::intrusive_ptr<::c10d::Store>& store, int r
     uint8_t           ib_port   = 1;
     size_t            qp_num    = SLIME_QP_NUM;
 
-    for (int i = 0; i < size - 1; ++i) {
+    worker_ = std::make_shared<RDMAWorker>(dev_name, rank);
 
-        // TODO: the different end_point in the rank can use different RDMA dev to transmit the message.
-        end_point_set_.push_back(std::make_shared<RDMAEndpointV0>(dev_name, ib_port, link_type, qp_num));
+    for (int i = 0; i < size - 1; ++i) {
+        // 创建 Endpoint
+        auto endpoint = std::make_shared<RDMAEndpointV0>(nullptr, nullptr, qp_num);
+        end_point_set_.push_back(endpoint);
+
+        // [New] 将 Endpoint 托管给 Worker
+        // 必须在 worker start 之前添加，保证 vector 安全
+        worker_->addEndpoint(endpoint);
 
         json channel_info;
         channel_info["data_channel"] = end_point_set_[i]->dataCtxInfo();
         channel_info["meta_channel"] = end_point_set_[i]->metaCtxInfo();
         local_channel_info_.push_back(channel_info);
     }
+
+    // [New] 启动 Worker 线程
+    worker_->start();
 
     exchangeChannelInfo();
 
@@ -203,9 +238,19 @@ slimeBackend::slimeBackend(const c10::intrusive_ptr<::c10d::Store>& store, int r
         }
     }
     catch (const std::runtime_error& e) {
+        // 如果连接失败，停止 Worker 防止悬挂
+        worker_->stop(); 
         auto err = e.what();
         auto msg = c10::str("RDMA Endpoint connection is failed with ", err);
         logAndThrow(msg, msg);
+    }
+}
+
+// [New] 析构函数：确保 Worker 停止
+slimeBackend::~slimeBackend()
+{
+    if (worker_) {
+        worker_->stop();
     }
 }
 
@@ -229,9 +274,10 @@ void slimeBackend::exchangeChannelInfo()
         global_channel_info_[i] = json::parse(recv_channel_info);
     }
 }
+
 c10::intrusive_ptr<::c10d::Backend> slimeBackend::createSlimeBackend(const c10::intrusive_ptr<::c10d::Store>& store,
-                                                                     int                                      rank,
-                                                                     int                                      size,
+                                                                     int                                     rank,
+                                                                     int                                     size,
                                                                      const std::chrono::duration<float>&)
 
 {

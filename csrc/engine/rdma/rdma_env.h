@@ -19,7 +19,7 @@ inline const int SLIME_SERVICE_LEVEL             = get_env<int>("SLIME_SERVICE_L
 inline const int SLIME_GID_INDEX                 = get_env<int>("SLIME_GID_INDEX", -1);
 inline const int SLIME_QP_NUM                    = get_env<int>("SLIME_QP_NUM", 1);
 inline const int SLIME_CQ_NUM                    = get_env<int>("SLIME_CQ_NUM", 1);
-inline const int SLIME_MAX_CQ_DEPTH              = get_env<int>("SLIME_MAX_CQ_DEPTH", 8192);
+inline const int SLIME_MAX_CQ_DEPTH              = get_env<int>("SLIME_MAX_CQ_DEPTH", 65536);
 inline const int SLIME_AGG_QP_NUM                = get_env<int>("SLIME_AGG_QP_NUM", 1);
 inline const int SLIME_BYPASS_DEVICE_SIGNAL      = get_env<int>("SLIME_BYPASS_DEVICE_SIGNAL", 1);
 }  // namespace slime

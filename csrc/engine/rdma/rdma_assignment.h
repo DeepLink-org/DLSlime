@@ -43,6 +43,7 @@ static const std::map<OpCode, ibv_wr_opcode> ASSIGN_OP_2_IBV_WR_OP = {
 struct alignas(64) RDMAAssign {
     static constexpr size_t MAX_ASSIGN_CAPACITY = 4096;
     friend class RDMAContext;
+    friend class RDMAEndpointV0;
     friend std::ostream& operator<<(std::ostream& os, const RDMAAssign& assignment);
 
 public:

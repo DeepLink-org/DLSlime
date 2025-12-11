@@ -26,7 +26,8 @@
 #include "engine/rdma/rdma_buffer.h"
 #include "engine/rdma/rdma_config.h"
 #include "engine/rdma/rdma_context.h"
-#include "engine/rdma/utils.h"
+#include "engine/rdma/rdma_utils.h"
+#include "engine/rdma/rdma_worker.h"  // [NEW] 包含 Worker 头文件
 #endif
 
 #if defined(BUILD_INTRA_OPS) || defined(BUILD_INTER_OPS)
@@ -160,33 +161,21 @@ PYBIND11_MODULE(_slime_c, m)
                  &slime::RDMAContext::registerRemoteMemoryRegion))
         .def("reload_memory_pool", &slime::RDMAContext::reloadMemoryPool)
         .def("endpoint_info", &slime::RDMAContext::endpoint_info)
-        .def("connect", &slime::RDMAContext::connect)
         .def("launch_future", &slime::RDMAContext::launch_future)
-        .def("stop_future", &slime::RDMAContext::stop_future)
-        .def("submit", &slime::RDMAContext::submit, py::call_guard<py::gil_scoped_release>())
-        .def(
-            "submit_by_vector",
-            [](slime::RDMAContext&     self,
-               slime::OpCode           opcode,
-               std::vector<uintptr_t>& mr_keys,
-               std::vector<size_t>&       toff,
-               std::vector<size_t>&       soff,
-               std::vector<size_t>&       length) {
-                std::vector<slime::Assignment> batch;
-                int                            bs = mr_keys.size();
-                for (int i = 0; i < bs; ++i) {
-                    batch.emplace_back(slime::Assignment(mr_keys[i], toff[i], soff[i], length[i]));
-                }
-                return self.submit(opcode, batch);
-            },
-            py::call_guard<py::gil_scoped_release>());
+        .def("stop_future", &slime::RDMAContext::stop_future);
 
     py::class_<slime::RDMAEndpointV0, std::shared_ptr<slime::RDMAEndpointV0>>(m, "rdma_endpoint")
-        .def(py::init<const std::string&, uint8_t, const std::string&, size_t>())
+        .def(py::init<std::shared_ptr<slime::RDMAContext>, std::shared_ptr<slime::RDMAContext>, size_t>())
         .def("context_connect", &slime::RDMAEndpointV0::connect)
         .def("get_data_context_info", &slime::RDMAEndpointV0::dataCtxInfo)
         .def("get_meta_context_info", &slime::RDMAEndpointV0::metaCtxInfo)
         .def("register_memory_region", &slime::RDMAEndpointV0::registerMemoryRegion);
+
+    py::class_<slime::RDMAWorker, std::shared_ptr<slime::RDMAWorker>>(m, "rdma_worker")
+        .def(py::init<const std::string&, int>())
+        .def("start", &slime::RDMAWorker::start)
+        .def("stop", &slime::RDMAWorker::stop)
+        .def("add_endpoint", &slime::RDMAWorker::addEndpoint);
 
     py::class_<slime::RDMABuffer, std::shared_ptr<slime::RDMABuffer>>(m, "rdma_buffer")
         .def(py::init<std::shared_ptr<slime::RDMAEndpointV0>, uintptr_t, size_t, size_t>())
@@ -231,7 +220,7 @@ PYBIND11_MODULE(_slime_c, m)
              &slime::AllToAllIntraLLBuffer::allToAllLL2D,
              py::arg("x"),
              py::arg("is_transpose") = false,
-             py::arg("mask") = py::none(),
+             py::arg("mask")         = py::none(),
              "AllGather with optional mask");
 #endif
 
