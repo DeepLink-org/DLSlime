@@ -1,12 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
 
-find_program(CCACHE_PROGRAM ccache)
-if(CCACHE_PROGRAM)
-    set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
-    set(CMAKE_C_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
-    set(CMAKE_CUDA_COMPILER_LAUNCHER "${CCACHE_PROGRAM}") # 连 CUDA 都能缓存！
-endif()
-
 project(_slime C CXX)
 
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/utils.cmake)
