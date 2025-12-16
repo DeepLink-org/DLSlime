@@ -47,3 +47,5 @@ cmake.args = [
   "-DBUILD_PYTHON=ON"
 ]
 cmake.build-type = "Release"
+
+build-dir = "build"
