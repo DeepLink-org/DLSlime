@@ -6,6 +6,7 @@
 #include "engine/assignment.h"
 #include "engine/rdma/rdma_assignment.h"
 
+#include "engine/rdma/rdma_channel.h"
 #include "jring.h"
 #include "json.hpp"
 #include "rdma_common.h"
@@ -102,7 +103,7 @@ class RDMAEndpointV0: public std::enable_shared_from_this<RDMAEndpointV0> {
     friend class RDMABuffer;
 
 public:
-    explicit RDMAEndpointV0(const std::string& dev_name, size_t ib_port, const std::string& link_type, size_t qp_nums);
+    explicit RDMAEndpointV0(std::shared_ptr<RDMAContext> ctx, size_t qp_nums);
     ~RDMAEndpointV0();
 
     /**
@@ -114,34 +115,31 @@ public:
     /**
      * @brief Establish connection and start proxy threads.
      */
-    void connect(const json& data_ctx_info, const json& meta_ctx_info);
+    void connect(const json& remote_endpoint_info);
 
-    inline json dataCtxInfo() const
+    inline json endpointInfo() const
     {
-        return data_ctx_->endpoint_info();
-    }
-
-    inline json metaCtxInfo() const
-    {
-        auto endpoint_info               = meta_ctx_->endpoint_info();
-        endpoint_info["remote_meta_key"] = uintptr_t(remote_meta_info_);
+        json endpoint_info = json{{"mr_info", ctx_->memory_pool_->mr_info()},
+                                  {"meta_channel_info", meta_channel_->channelInfo()},
+                                  {"data_channel_info", data_channel_->channelInfo()},
+                                  {"remote_meta_key", uintptr_t(remote_meta_info_)}};
         return endpoint_info;
     }
 
     inline int32_t registerMemoryRegion(uintptr_t mr_key, uintptr_t ptr, size_t length)
     {
-        return data_ctx_->registerMemoryRegion(mr_key, ptr, length);
+        return ctx_->registerMemoryRegion(mr_key, ptr, length);
     }
 
 private:
     bool bypass_signal_{false};
 
-    int64_t qp_nums_;
+    int64_t num_qp_;
 
-    std::shared_ptr<RDMAContext> data_ctx_;
-    std::shared_ptr<RDMAContext> meta_ctx_;
-    size_t                       data_ctx_qp_num_;
-    size_t                       meta_ctx_qp_num_;
+    std::shared_ptr<RDMAContext> ctx_;
+
+    std::unique_ptr<RDMAChannel> meta_channel_;
+    std::unique_ptr<RDMAChannel> data_channel_;
 
     // DMA-able memory regions for metadata exchange
     meta_info_t* remote_meta_info_;

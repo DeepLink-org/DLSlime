@@ -33,13 +33,6 @@
 
 namespace slime {
 
-RDMAContext::RDMAContext(size_t qp_num, size_t max_num_inline_data, bool with_backpressure):
-    num_qp_(qp_num), max_num_inline_data_(max_num_inline_data)
-{
-    SLIME_LOG_DEBUG("Initializing qp management, num qp: " << qp_num);
-    channel_ = std::make_unique<RDMAChannel>();
-}
-
 RDMAContext::~RDMAContext()
 {
     stop_future();
@@ -172,26 +165,7 @@ int64_t RDMAContext::init(const std::string& dev_name, uint8_t ib_port, const st
     cq_           = ibv_create_cq(ib_ctx_, SLIME_MAX_CQ_DEPTH, NULL, comp_channel_, 0);
     SLIME_ASSERT(cq_, "create CQ failed");
 
-    channel_->init(shared_from_this(), num_qp_, max_num_inline_data_);
-
-    return 0;
-}
-
-json RDMAContext::endpoint_info() const
-{
-    json endpoint_info = json{{"rdma_info", channel_->channelInfo()}, {"mr_info", memory_pool_->mr_info()}};
-    return endpoint_info;
-}
-
-int64_t RDMAContext::connect(const json& endpoint_info_json)
-{
-    SLIME_LOG_INFO("RDMA context remote connecting");
-    SLIME_LOG_DEBUG("RDMA context remote configuration: ", endpoint_info_json);
-    // Register Remote Memory Region
-    for (auto& item : endpoint_info_json["mr_info"].items()) {
-        registerRemoteMemoryRegion(item.value()["mr_key"].get<uintptr_t>(), item.value());
-    }
-    channel_->connect(endpoint_info_json["rdma_info"]);
+    launch_future();
     return 0;
 }
 

@@ -150,7 +150,6 @@ PYBIND11_MODULE(_slime_c, m)
 
     py::class_<slime::RDMAContext, std::shared_ptr<slime::RDMAContext>>(m, "rdma_context")
         .def(py::init<>())
-        .def(py::init<size_t>())
         .def("init_rdma_context", &slime::RDMAContext::init)
         .def("register_memory_region",
              static_cast<int64_t (slime::RDMAContext::*)(const uintptr_t&, uintptr_t, uint64_t)>(
@@ -159,16 +158,13 @@ PYBIND11_MODULE(_slime_c, m)
              static_cast<int64_t (slime::RDMAContext::*)(const uintptr_t&, json)>(
                  &slime::RDMAContext::registerRemoteMemoryRegion))
         .def("reload_memory_pool", &slime::RDMAContext::reloadMemoryPool)
-        .def("endpoint_info", &slime::RDMAContext::endpoint_info)
-        .def("connect", &slime::RDMAContext::connect)
         .def("launch_future", &slime::RDMAContext::launch_future)
         .def("stop_future", &slime::RDMAContext::stop_future);
 
     py::class_<slime::RDMAEndpointV0, std::shared_ptr<slime::RDMAEndpointV0>>(m, "rdma_endpoint")
-        .def(py::init<const std::string&, uint8_t, const std::string&, size_t>())
-        .def("context_connect", &slime::RDMAEndpointV0::connect)
-        .def("get_data_context_info", &slime::RDMAEndpointV0::dataCtxInfo)
-        .def("get_meta_context_info", &slime::RDMAEndpointV0::metaCtxInfo)
+        .def(py::init<std::shared_ptr<slime::RDMAContext>, size_t>())
+        .def("connect", &slime::RDMAEndpointV0::connect)
+        .def("endpoint_info", &slime::RDMAEndpointV0::endpointInfo)
         .def("register_memory_region", &slime::RDMAEndpointV0::registerMemoryRegion);
 
     py::class_<slime::RDMABuffer, std::shared_ptr<slime::RDMABuffer>>(m, "rdma_buffer")

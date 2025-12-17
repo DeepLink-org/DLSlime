@@ -30,16 +30,16 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=200):
     print(f"Tensor Device: {device_type.upper()}")
 
     # 初始化 Endpoint
-    send_endpoint = _slime_c.rdma_endpoint(dev0, 1, "RoCE", num_qp)
-    recv_endpoint = _slime_c.rdma_endpoint(dev1, 1, "RoCE", num_qp)
+    ctx = _slime_c.rdma_context()
+    ctx.init_rdma_context(dev0, 1, "RoCE")
+    send_endpoint = _slime_c.rdma_endpoint(ctx, num_qp)
+    ctx = _slime_c.rdma_context()
+    ctx.init_rdma_context(dev0, 1, "RoCE")
+    recv_endpoint = _slime_c.rdma_endpoint(ctx, num_qp)
 
     # 建立连接
-    send_endpoint.context_connect(
-        recv_endpoint.get_data_context_info(), recv_endpoint.get_meta_context_info()
-    )
-    recv_endpoint.context_connect(
-        send_endpoint.get_data_context_info(), send_endpoint.get_meta_context_info()
-    )
+    send_endpoint.connect(recv_endpoint.endpoint_info())
+    recv_endpoint.connect(send_endpoint.endpoint_info())
 
     # 定义测试大小：2KB 到 128MB
     # 2KB = 2 * 1024

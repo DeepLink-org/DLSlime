@@ -48,31 +48,17 @@ void RDMAEndpointV0::freeRing(jring_t* ring)
     }
 }
 
-RDMAEndpointV0::RDMAEndpointV0(const std::string& dev_name,
-                               size_t             ib_port,
-                               const std::string& link_type,
-                               size_t             qp_nums)
+RDMAEndpointV0::RDMAEndpointV0(std::shared_ptr<RDMAContext> ctx, size_t num_qp): ctx_(ctx), num_qp_(num_qp)
 {
     SLIME_LOG_INFO("Init RDMAEndpointV0 Contexts and Devices...");
     SLIME_LOG_INFO("bypass Signal: ", SLIME_BYPASS_DEVICE_SIGNAL);
     if (SLIME_BYPASS_DEVICE_SIGNAL)
         bypass_signal_ = true;
-    qp_nums_ = qp_nums;
-    // Initialize RDMA Contexts.
-    data_ctx_ = std::make_shared<RDMAContext>(qp_nums, 0, false);  // qp_num, inline_size, bypass_dispatcher
-    meta_ctx_ = std::make_shared<RDMAContext>(1, 256, false);      // qp_num, inline_size, bypass_dispatcher
+
+    num_qp_ = num_qp;
 
     SLIME_ASSERT(1 == SLIME_AGG_QP_NUM, "cannot aggqp when sendrecv");
     SLIME_ASSERT(64 > SLIME_QP_NUM, "QP NUM must less than 64");
-
-    data_ctx_->init(dev_name, ib_port, link_type);
-    meta_ctx_->init(dev_name, ib_port, link_type);
-
-    data_ctx_qp_num_ = data_ctx_->num_qp_;
-    meta_ctx_qp_num_ = meta_ctx_->num_qp_;
-
-    SLIME_LOG_INFO("Data Plane QP Num: ", data_ctx_qp_num_);
-    SLIME_LOG_INFO("Control Plane QP Num: ", meta_ctx_qp_num_);
 
     size_t meta_buffer_size = sizeof(meta_info_t) * MAX_FIFO_DEPTH;
 
@@ -123,17 +109,21 @@ RDMAEndpointV0::RDMAEndpointV0(const std::string& dev_name,
 
     // Register Memory Regions (MR)
     // Registering these upfront prevents expensive registration calls during runtime.
-    meta_ctx_->registerMemoryRegion(
+    ctx_->registerMemoryRegion(
         reinterpret_cast<uintptr_t>(dummy_), reinterpret_cast<uintptr_t>(dummy_), sizeof(int64_t));
-    meta_ctx_->registerMemoryRegion(reinterpret_cast<uintptr_t>(remote_meta_info_),
-                                    reinterpret_cast<uintptr_t>(remote_meta_info_),
-                                    meta_buffer_size);
-    meta_ctx_->registerMemoryRegion(
+    ctx_->registerMemoryRegion(reinterpret_cast<uintptr_t>(remote_meta_info_),
+                               reinterpret_cast<uintptr_t>(remote_meta_info_),
+                               meta_buffer_size);
+    ctx_->registerMemoryRegion(
         reinterpret_cast<uintptr_t>(local_meta_info_), reinterpret_cast<uintptr_t>(local_meta_info_), meta_buffer_size);
-    data_ctx_->registerMemoryRegion(
-        reinterpret_cast<uintptr_t>(dummy_), reinterpret_cast<uintptr_t>(dummy_), sizeof(int64_t));
 
     SLIME_LOG_INFO("Memory Regions Registered.");
+
+    data_channel_ = std::make_unique<RDMAChannel>();
+    meta_channel_ = std::make_unique<RDMAChannel>();
+
+    meta_channel_->init(ctx_, 1, 256);
+    data_channel_->init(ctx_, num_qp_, 0);
 
     // Initialize Scoreboards
     // These atomic flags serve as signaling mechanism between RDMA callback thread and Proxy threads.
@@ -156,8 +146,6 @@ RDMAEndpointV0::~RDMAEndpointV0()
 {
     try {
         proxyDestroy();
-        data_ctx_->stop_future();
-        meta_ctx_->stop_future();
 
         free(dummy_);
         free(local_meta_info_);
@@ -197,13 +185,18 @@ void RDMAEndpointV0::proxyDestroy()
     SLIME_LOG_INFO("RDMA Proxy Threads Stopped.");
 }
 
-void RDMAEndpointV0::connect(const json& data_ctx_info, const json& meta_ctx_info)
+void RDMAEndpointV0::connect(const json& remote_endpoint_info)
 {
     SLIME_LOG_INFO("Establishing RDMA Connection...");
-    data_ctx_->connect(data_ctx_info);
-    meta_ctx_->connect(meta_ctx_info);
 
-    remote_meta_key_ = meta_ctx_info["remote_meta_key"];
+    for (auto& item : remote_endpoint_info["mr_info"].items()) {
+        ctx_->registerRemoteMemoryRegion(item.value()["mr_key"].get<uintptr_t>(), item.value());
+    }
+
+    meta_channel_->connect(remote_endpoint_info["meta_channel_info"]);
+    data_channel_->connect(remote_endpoint_info["data_channel_info"]);
+
+    remote_meta_key_ = remote_endpoint_info["remote_meta_key"];
 
     SLIME_LOG_INFO("Connection Established. Pre-posting RECV requests...");
 
@@ -212,12 +205,12 @@ void RDMAEndpointV0::connect(const json& data_ctx_info, const json& meta_ctx_inf
         meta_recv_assign_[i].reset(OpCode::RECV, 0, batch, [this, i](int32_t status, int32_t imm) {
             meta_arrived_scoreboard_[i].val.store(1, std::memory_order_release);
         });
-        auto assign = meta_ctx_->channel_->post_recv_batch(0, &(meta_recv_assign_[i]));
+        meta_channel_->post_recv_batch(0, &(meta_recv_assign_[i]));
     }
 
     for (int i = 0; i < MAX_FIFO_DEPTH; ++i) {
         auto signal = recv_ctx_pool_[i].signal;
-        for (size_t qpi = 0; qpi < data_ctx_qp_num_; ++qpi) {
+        for (size_t qpi = 0; qpi < num_qp_; ++qpi) {
             std::vector<Assignment> batch{Assignment(reinterpret_cast<uintptr_t>(dummy_), 0, 0, sizeof(int64_t))};
 
             data_recv_assign_[i].reset(OpCode::RECV, qpi, batch, [signal, qpi](int32_t status, int32_t imm) {
@@ -228,27 +221,25 @@ void RDMAEndpointV0::connect(const json& data_ctx_info, const json& meta_ctx_inf
                     SLIME_LOG_ERROR("Data Recv Failed during pre-post");
                 }
             });
-            data_ctx_->channel_->post_recv_batch(qpi, &(data_recv_assign_[i]));
+            data_channel_->post_recv_batch(qpi, &(data_recv_assign_[i]));
         }
     }
 
     proxyInit();
 
-    data_ctx_->launch_future();
-    meta_ctx_->launch_future();
     SLIME_LOG_INFO("RDMA Contexts Launched.");
 }
 
 int32_t RDMAEndpointV0::addBuffer(OpCode opcode, std::shared_ptr<RDMABuffer> buffer, void* stream_handle)
 {
-    auto buffer_mr = data_ctx_->get_mr(buffer->ptr_);
+    auto buffer_mr = ctx_->get_mr(buffer->ptr_);
     if (not(buffer_mr and buffer_mr->length == buffer->data_size_)) {
         SLIME_LOG_DEBUG("Registering new MR for buffer: ", buffer->ptr_);
-        data_ctx_->registerMemoryRegion(buffer->ptr_, buffer->ptr_, buffer->data_size_);
+        ctx_->registerMemoryRegion(buffer->ptr_, buffer->ptr_, buffer->data_size_);
     }
 
-    uint32_t target_mask = (1 << qp_nums_) - 1;
-    buffer->num_pack_    = qp_nums_;
+    uint32_t target_mask = (1 << num_qp_) - 1;
+    buffer->num_pack_    = num_qp_;
 
     if (OpCode::SEND == opcode) {
         uint64_t slot    = send_slot_id_.fetch_add(1, std::memory_order_release) % MAX_FIFO_DEPTH;
@@ -284,7 +275,7 @@ int32_t RDMAEndpointV0::addBuffer(OpCode opcode, std::shared_ptr<RDMABuffer> buf
         ctx->signal->record_gpu_ready();
         buffer->signal_ = ctx->signal;
 
-        local_meta_info_[slot].r_key_ = data_ctx_->get_mr(buffer->ptr_)->rkey;
+        local_meta_info_[slot].r_key_ = ctx_->get_mr(buffer->ptr_)->rkey;
         local_meta_info_[slot].view_  = buffer->view_;
 
         while (jring_enqueue_burst(recv_buffer_ring_, (void**)&ctx, 1, nullptr) == 0) {
@@ -296,7 +287,7 @@ int32_t RDMAEndpointV0::addBuffer(OpCode opcode, std::shared_ptr<RDMABuffer> buf
 
 int32_t RDMAEndpointV0::sendProxy()
 {
-    bindToSocket(socketId(data_ctx_->device_name_));
+    bindToSocket(socketId(ctx_->device_name_));
 
     void* buf_ptrs[BURST_SIZE];
 
@@ -321,13 +312,13 @@ int32_t RDMAEndpointV0::sendProxy()
 
                 auto meta = remote_meta_info_[slot];
 
-                data_ctx_->registerRemoteMemoryRegion(
+                ctx_->registerRemoteMemoryRegion(
                     meta.view_.data_ptr, meta.view_.data_ptr, meta.view_.length, meta.r_key_);
 
                 size_t total_len  = s_ctx->buffer->data_size_;
-                size_t chunk_size = (total_len + qp_nums_ - 1) / qp_nums_;
+                size_t chunk_size = (total_len + num_qp_ - 1) / num_qp_;
 
-                for (size_t qpi = 0; qpi < qp_nums_; ++qpi) {
+                for (size_t qpi = 0; qpi < num_qp_; ++qpi) {
                     size_t offset = qpi * chunk_size;
 
                     if (offset >= total_len)
@@ -348,7 +339,7 @@ int32_t RDMAEndpointV0::sendProxy()
                         batch,
                         [s_ctx, qpi](int32_t stat, int32_t imm_data) { s_ctx->signal->set_comm_done(qpi); },
                         false);
-                    data_ctx_->channel_->post_rc_oneside_batch(qpi, &(data_send_assign_[slot]));
+                    data_channel_->post_rc_oneside_batch(qpi, &(data_send_assign_[slot]));
                 }
 
                 std::vector<Assignment> meta_batch{
@@ -358,7 +349,7 @@ int32_t RDMAEndpointV0::sendProxy()
                     OpCode::RECV, 0, meta_batch, [this, s_ctx](int32_t status, int32_t imm) {
                         meta_arrived_scoreboard_[s_ctx->slot_id].val.store(1, std::memory_order_release);
                     });
-                auto assign = meta_ctx_->channel_->post_recv_batch(0, &(meta_recv_assign_[s_ctx->slot_id]));
+                auto assign = meta_channel_->post_recv_batch(0, &(meta_recv_assign_[s_ctx->slot_id]));
             }
         }
         else {
@@ -370,7 +361,7 @@ int32_t RDMAEndpointV0::sendProxy()
 
 int32_t RDMAEndpointV0::recvProxy()
 {
-    bindToSocket(socketId(data_ctx_->device_name_));
+    bindToSocket(socketId(ctx_->device_name_));
     SLIME_LOG_INFO("RecvProxy Thread running on NUMA node.");
 
     void* buf_ptrs[BURST_SIZE];
@@ -391,7 +382,7 @@ int32_t RDMAEndpointV0::recvProxy()
                                   sizeof(meta_info_t));
                 AssignmentBatch assign_batch{assign};
                 meta_send_assign_[slot].reset(OpCode::WRITE_WITH_IMM, 0, assign_batch, nullptr, true);
-                meta_ctx_->channel_->post_rc_oneside_batch(0, &(meta_send_assign_[slot]));
+                meta_channel_->post_rc_oneside_batch(0, &(meta_send_assign_[slot]));
 
                 while (!r_ctx->signal->is_gpu_ready()) {
                     cpu_relax();
@@ -399,7 +390,7 @@ int32_t RDMAEndpointV0::recvProxy()
 
                 const uint32_t TARGET_MASK = r_ctx->expected_mask;
 
-                for (size_t qpi = 0; qpi < data_ctx_qp_num_; ++qpi) {
+                for (size_t qpi = 0; qpi < num_qp_; ++qpi) {
                     std::vector<Assignment> batch{
                         Assignment(reinterpret_cast<uintptr_t>(dummy_), 0, 0, sizeof(int64_t))};
 
@@ -411,7 +402,7 @@ int32_t RDMAEndpointV0::recvProxy()
                             SLIME_LOG_ERROR("Data Recv Failed during pre-post");
                         }
                     });
-                    data_ctx_->channel_->post_recv_batch(qpi, &(data_recv_assign_[slot]));
+                    data_channel_->post_recv_batch(qpi, &(data_recv_assign_[slot]));
                 }
             }
         }

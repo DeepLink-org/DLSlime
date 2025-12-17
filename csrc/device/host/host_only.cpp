@@ -9,7 +9,7 @@ namespace device {
 
 std::shared_ptr<DeviceSignal> createSignal(bool bypass)
 {
-    SLIME_LOG_INFO("create signal cpu.");
+    SLIME_LOG_DEBUG("create signal cpu.");
     return std::make_shared<HostOnlySignal>();
 }
 

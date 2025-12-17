@@ -116,6 +116,7 @@ int32_t RDMAChannel::connect(json remote_rdma_info_json)
     if (ibv_req_notify_cq(ctx_->cq_, 0)) {
         SLIME_ABORT("Failed to request notify for CQ");
     }
+    SLIME_LOG_INFO("RDMA exchange done");
     return 0;
 }
 
@@ -192,7 +193,6 @@ int32_t RDMAChannel::modify_qp_to_r2s()
         if (ret) {
             SLIME_ABORT("Failed to modify QP to RTS");
         }
-        SLIME_LOG_INFO("RDMA exchange done");
     }
     return 0;
 }

@@ -32,7 +32,7 @@ class RDMAChannel;
 
 using json = nlohmann::json;
 
-class RDMAContext : public std::enable_shared_from_this<RDMAContext>{
+class RDMAContext: public std::enable_shared_from_this<RDMAContext> {
 
     friend class RDMAEndpoint;  // RDMA Endpoint need to use the register memory pool in context
     friend class RDMAEndpointV0;
@@ -43,7 +43,7 @@ public:
       A context of rdma QP.
     */
 
-    RDMAContext(size_t qp_num = 1, size_t max_num_inline_data = 0, bool with_backpressure = true);
+    RDMAContext() = default;
 
     ~RDMAContext();
 
@@ -91,13 +91,8 @@ public:
         return 0;
     }
 
-    /* RDMA Link Construction */
-    int64_t connect(const json& endpoint_info_json);
-
     void launch_future();
     void stop_future();
-
-    json endpoint_info() const;
 
     std::string get_dev_ib() const
     {
@@ -130,8 +125,6 @@ private:
     int64_t                  gidx_;
 
     std::unique_ptr<RDMAMemoryPool> memory_pool_;
-
-    std::unique_ptr<RDMAChannel> channel_;
 
     int32_t num_qp_;
     int32_t last_qp_selection_{-1};

@@ -1,5 +1,6 @@
 #include "slime_backend.h"
 #include "engine/rdma/rdma_buffer.h"
+#include "engine/rdma/rdma_context.h"
 #include "engine/rdma/rdma_endpoint_v0.h"
 #include "engine/rdma/rdma_env.h"
 #include "logging.h"
@@ -183,14 +184,15 @@ slimeBackend::slimeBackend(const c10::intrusive_ptr<::c10d::Store>& store, int r
     uint8_t           ib_port   = 1;
     size_t            qp_num    = SLIME_QP_NUM;
 
+    std::shared_ptr<RDMAContext> context = std::make_shared<RDMAContext>();
+    context->init(dev_name, ib_port, link_type);
     for (int i = 0; i < size - 1; ++i) {
 
         // TODO: the different end_point in the rank can use different RDMA dev to transmit the message.
-        end_point_set_.push_back(std::make_shared<RDMAEndpointV0>(dev_name, ib_port, link_type, qp_num));
+        end_point_set_.push_back(std::make_shared<RDMAEndpointV0>(context, qp_num));
 
         json channel_info;
-        channel_info["data_channel"] = end_point_set_[i]->dataCtxInfo();
-        channel_info["meta_channel"] = end_point_set_[i]->metaCtxInfo();
+        channel_info = end_point_set_[i]->endpointInfo();
         local_channel_info_.push_back(channel_info);
     }
 
@@ -199,7 +201,7 @@ slimeBackend::slimeBackend(const c10::intrusive_ptr<::c10d::Store>& store, int r
     try {
         for (int i = 0; i < size_ - 1; ++i) {
             json cur_channel_info = global_channel_info_[mod_positive(rank_ + i + 1, size_)][size_ - 2 - i];
-            end_point_set_[i]->connect(cur_channel_info["data_channel"], cur_channel_info["meta_channel"]);
+            end_point_set_[i]->connect(cur_channel_info);
         }
     }
     catch (const std::runtime_error& e) {
