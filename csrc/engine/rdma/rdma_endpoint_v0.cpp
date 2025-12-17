@@ -4,6 +4,7 @@
 #include "engine/assignment.h"
 #include "engine/rdma/rdma_assignment.h"
 #include "engine/rdma/rdma_buffer.h"
+#include "engine/rdma/rdma_channel.h"
 #include "engine/rdma/rdma_common.h"
 #include "engine/rdma/rdma_context.h"
 #include "engine/rdma/rdma_env.h"
@@ -67,8 +68,8 @@ RDMAEndpointV0::RDMAEndpointV0(const std::string& dev_name,
     data_ctx_->init(dev_name, ib_port, link_type);
     meta_ctx_->init(dev_name, ib_port, link_type);
 
-    data_ctx_qp_num_ = data_ctx_->qp_list_len_;
-    meta_ctx_qp_num_ = meta_ctx_->qp_list_len_;
+    data_ctx_qp_num_ = data_ctx_->num_qp_;
+    meta_ctx_qp_num_ = meta_ctx_->num_qp_;
 
     SLIME_LOG_INFO("Data Plane QP Num: ", data_ctx_qp_num_);
     SLIME_LOG_INFO("Control Plane QP Num: ", meta_ctx_qp_num_);
@@ -211,7 +212,7 @@ void RDMAEndpointV0::connect(const json& data_ctx_info, const json& meta_ctx_inf
         meta_recv_assign_[i].reset(OpCode::RECV, 0, batch, [this, i](int32_t status, int32_t imm) {
             meta_arrived_scoreboard_[i].val.store(1, std::memory_order_release);
         });
-        auto assign = meta_ctx_->post_recv_batch(0, &(meta_recv_assign_[i]));
+        auto assign = meta_ctx_->channel_->post_recv_batch(0, &(meta_recv_assign_[i]));
     }
 
     for (int i = 0; i < MAX_FIFO_DEPTH; ++i) {
@@ -227,7 +228,7 @@ void RDMAEndpointV0::connect(const json& data_ctx_info, const json& meta_ctx_inf
                     SLIME_LOG_ERROR("Data Recv Failed during pre-post");
                 }
             });
-            data_ctx_->post_recv_batch(qpi, &(data_recv_assign_[i]));
+            data_ctx_->channel_->post_recv_batch(qpi, &(data_recv_assign_[i]));
         }
     }
 
@@ -347,7 +348,7 @@ int32_t RDMAEndpointV0::sendProxy()
                         batch,
                         [s_ctx, qpi](int32_t stat, int32_t imm_data) { s_ctx->signal->set_comm_done(qpi); },
                         false);
-                    data_ctx_->post_rc_oneside_batch(qpi, &(data_send_assign_[slot]));
+                    data_ctx_->channel_->post_rc_oneside_batch(qpi, &(data_send_assign_[slot]));
                 }
 
                 std::vector<Assignment> meta_batch{
@@ -357,7 +358,7 @@ int32_t RDMAEndpointV0::sendProxy()
                     OpCode::RECV, 0, meta_batch, [this, s_ctx](int32_t status, int32_t imm) {
                         meta_arrived_scoreboard_[s_ctx->slot_id].val.store(1, std::memory_order_release);
                     });
-                auto assign = meta_ctx_->post_recv_batch(0, &(meta_recv_assign_[s_ctx->slot_id]));
+                auto assign = meta_ctx_->channel_->post_recv_batch(0, &(meta_recv_assign_[s_ctx->slot_id]));
             }
         }
         else {
@@ -390,7 +391,7 @@ int32_t RDMAEndpointV0::recvProxy()
                                   sizeof(meta_info_t));
                 AssignmentBatch assign_batch{assign};
                 meta_send_assign_[slot].reset(OpCode::WRITE_WITH_IMM, 0, assign_batch, nullptr, true);
-                meta_ctx_->post_rc_oneside_batch(0, &(meta_send_assign_[slot]));
+                meta_ctx_->channel_->post_rc_oneside_batch(0, &(meta_send_assign_[slot]));
 
                 while (!r_ctx->signal->is_gpu_ready()) {
                     cpu_relax();
@@ -410,7 +411,7 @@ int32_t RDMAEndpointV0::recvProxy()
                             SLIME_LOG_ERROR("Data Recv Failed during pre-post");
                         }
                     });
-                    data_ctx_->post_recv_batch(qpi, &(data_recv_assign_[slot]));
+                    data_ctx_->channel_->post_recv_batch(qpi, &(data_recv_assign_[slot]));
                 }
             }
         }

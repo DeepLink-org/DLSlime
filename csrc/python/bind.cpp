@@ -162,24 +162,7 @@ PYBIND11_MODULE(_slime_c, m)
         .def("endpoint_info", &slime::RDMAContext::endpoint_info)
         .def("connect", &slime::RDMAContext::connect)
         .def("launch_future", &slime::RDMAContext::launch_future)
-        .def("stop_future", &slime::RDMAContext::stop_future)
-        .def("submit", &slime::RDMAContext::submit, py::call_guard<py::gil_scoped_release>())
-        .def(
-            "submit_by_vector",
-            [](slime::RDMAContext&     self,
-               slime::OpCode           opcode,
-               std::vector<uintptr_t>& mr_keys,
-               std::vector<size_t>&       toff,
-               std::vector<size_t>&       soff,
-               std::vector<size_t>&       length) {
-                std::vector<slime::Assignment> batch;
-                int                            bs = mr_keys.size();
-                for (int i = 0; i < bs; ++i) {
-                    batch.emplace_back(slime::Assignment(mr_keys[i], toff[i], soff[i], length[i]));
-                }
-                return self.submit(opcode, batch);
-            },
-            py::call_guard<py::gil_scoped_release>());
+        .def("stop_future", &slime::RDMAContext::stop_future);
 
     py::class_<slime::RDMAEndpointV0, std::shared_ptr<slime::RDMAEndpointV0>>(m, "rdma_endpoint")
         .def(py::init<const std::string&, uint8_t, const std::string&, size_t>())
@@ -231,7 +214,7 @@ PYBIND11_MODULE(_slime_c, m)
              &slime::AllToAllIntraLLBuffer::allToAllLL2D,
              py::arg("x"),
              py::arg("is_transpose") = false,
-             py::arg("mask") = py::none(),
+             py::arg("mask")         = py::none(),
              "AllGather with optional mask");
 #endif
 

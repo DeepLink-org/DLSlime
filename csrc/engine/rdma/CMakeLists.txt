@@ -27,6 +27,7 @@ add_library(
     ibv_helper.cpp
     memory_pool.cpp
     rdma_assignment.cpp
+    rdma_channel.cpp
     rdma_context.cpp
     rdma_endpoint_v0.cpp
     rdma_buffer.cpp
