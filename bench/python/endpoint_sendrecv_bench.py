@@ -74,40 +74,26 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=200):
                 )
                 recv_tensor = torch.zeros((size,), dtype=torch.uint8, device="cpu")
 
-            # 2. 注册 RDMA Buffer (MR 注册通常发生在这里)
-            send_buffer = _slime_c.rdma_buffer(
-                send_endpoint,
-                send_tensor.data_ptr(),
-                send_tensor.storage_offset(),
-                send_tensor.numel(),
-            )
-            recv_buffer = _slime_c.rdma_buffer(
-                recv_endpoint,
-                recv_tensor.data_ptr(),
-                recv_tensor.storage_offset(),
-                recv_tensor.numel(),
-            )
-
             # 3. 预热 (Warmup)
             # 让 MR 建立，TLB 预热，消除第一次慢启动的影响
-            warmup_iters = 10
+            warmup_iters = 1
             for _ in range(warmup_iters):
-                send_buffer = _slime_c.rdma_buffer(
-                    send_endpoint,
+                send_slot = send_endpoint.send(
                     send_tensor.data_ptr(),
                     send_tensor.storage_offset(),
                     send_tensor.numel(),
+                    None,
                 )
-                recv_buffer = _slime_c.rdma_buffer(
-                    recv_endpoint,
+
+                recv_slot = recv_endpoint.recv(
                     recv_tensor.data_ptr(),
                     recv_tensor.storage_offset(),
                     recv_tensor.numel(),
+                    None
                 )
-                recv_buffer.recv(None)
-                send_buffer.send(None)
-                send_buffer.wait_send()
-                recv_buffer.wait_recv()
+
+                send_endpoint.wait_send(send_slot)
+                recv_endpoint.wait_recv(recv_slot)
 
             if device_type == "cuda":
                 torch.cuda.synchronize()
@@ -116,26 +102,22 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=200):
             t_start = time.perf_counter()
 
             for _ in range(iterations):
-                send_buffer = _slime_c.rdma_buffer(
-                    send_endpoint,
+                send_slot = send_endpoint.send(
                     send_tensor.data_ptr(),
                     send_tensor.storage_offset(),
                     send_tensor.numel(),
+                    None,
                 )
-                recv_buffer = _slime_c.rdma_buffer(
-                    recv_endpoint,
+
+                recv_slot = recv_endpoint.recv(
                     recv_tensor.data_ptr(),
                     recv_tensor.storage_offset(),
                     recv_tensor.numel(),
+                    None
                 )
-                # 标准 RDMA 流程：先 Post Recv，再 Post Send
-                recv_buffer.recv(None)
-                send_buffer.send(None)
-                # 等待完成
-                # 注意：Stop-and-Wait 模式。如果是流水线模式，吞吐量会更高，
-                # 但这里我们测的是单次操作的 Latency
-                send_buffer.wait_send()
-                recv_buffer.wait_recv()
+
+                send_endpoint.wait_send(send_slot)
+                recv_endpoint.wait_recv(recv_slot)
 
             if device_type == "cuda":
                 torch.cuda.synchronize()

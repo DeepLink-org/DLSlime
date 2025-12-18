@@ -8,18 +8,6 @@
 
 namespace slime {
 
-void RDMABuffer::send(void* stream_handler)
-{
-    send_completed_.store(0, std::memory_order_release); 
-    endpointv0_->addBuffer(OpCode::SEND, shared_from_this(), stream_handler);
-}
-
-void RDMABuffer::recv(void* stream_handler)
-{
-    recv_completed_.store(0, std::memory_order_release); 
-    endpointv0_->addBuffer(OpCode::RECV, shared_from_this(), stream_handler);
-}
-
 bool RDMABuffer::waitSend()
 {
     signal_->wait_comm_done_cpu((1 << num_pack_) - 1);

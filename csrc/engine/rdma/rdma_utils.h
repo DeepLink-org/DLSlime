@@ -2,19 +2,25 @@
 
 #include <cstdlib>
 #include <functional>
+#include <immintrin.h>
 #include <iostream>
+#include <numa.h>
 #include <sstream>
 #include <string>
 #include <vector>
 
 #include <infiniband/verbs.h>
-#include <numa.h>
 
 #include "engine/rdma/ibv_helper.h"
 #include "engine/rdma/rdma_env.h"
 #include "logging.h"
 
 namespace slime {
+
+inline void cpu_relax()
+{
+    _mm_pause();
+}
 
 inline std::vector<std::string> available_nic()
 {

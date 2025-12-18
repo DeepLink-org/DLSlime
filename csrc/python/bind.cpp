@@ -26,7 +26,7 @@
 #include "engine/rdma/rdma_buffer.h"
 #include "engine/rdma/rdma_config.h"
 #include "engine/rdma/rdma_context.h"
-#include "engine/rdma/utils.h"
+#include "engine/rdma/rdma_utils.h"
 #endif
 
 #if defined(BUILD_INTRA_OPS) || defined(BUILD_INTER_OPS)
@@ -165,14 +165,10 @@ PYBIND11_MODULE(_slime_c, m)
         .def(py::init<std::shared_ptr<slime::RDMAContext>, size_t>())
         .def("connect", &slime::RDMAEndpointV0::connect)
         .def("endpoint_info", &slime::RDMAEndpointV0::endpointInfo)
-        .def("register_memory_region", &slime::RDMAEndpointV0::registerMemoryRegion);
-
-    py::class_<slime::RDMABuffer, std::shared_ptr<slime::RDMABuffer>>(m, "rdma_buffer")
-        .def(py::init<std::shared_ptr<slime::RDMAEndpointV0>, uintptr_t, size_t, size_t>())
-        .def("send", &slime::RDMABuffer::send)
-        .def("recv", &slime::RDMABuffer::recv)
-        .def("wait_send", &slime::RDMABuffer::waitSend)
-        .def("wait_recv", &slime::RDMABuffer::waitRecv);
+        .def("send", &slime::RDMAEndpointV0::send)
+        .def("recv", &slime::RDMAEndpointV0::recv)
+        .def("wait_send", &slime::RDMAEndpointV0::waitSend)
+        .def("wait_recv", &slime::RDMAEndpointV0::waitRecv);
 
     m.def("available_nic", &slime::available_nic);
 #endif
