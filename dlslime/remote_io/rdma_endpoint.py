@@ -144,7 +144,7 @@ class RDMAEndpoint(BaseEndpoint):
         self,
         batch: List[Assignment],
         async_op=False,
-    ) -> _slime_c.RDMAAssign:
+    ):
         rdma_assignment = self._ctx.submit(_slime_c.OpCode.SEND, [
             _slime_c.Assignment(
                 assign.mr_key,
@@ -163,7 +163,7 @@ class RDMAEndpoint(BaseEndpoint):
         batch: List[Assignment],
         qpi: int = -1,
         async_op=False,
-    ) -> _slime_c.RDMAAssign:
+    ):
         """
         Perform batched receive of SEND, SEND_WITH_IMM_DATA
             and WRITE_WITH_IMM_DATA operations.
@@ -253,7 +253,7 @@ class RDMAEndpoint(BaseEndpoint):
         qpi: int = -1,
         imm_data: int = -1,
         async_op=False,
-    ) -> _slime_c.RDMAAssign:
+    ):
         """Perform batched write with immediate data to remote MR.
 
         Args:

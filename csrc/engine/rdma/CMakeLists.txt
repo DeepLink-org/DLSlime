@@ -30,6 +30,7 @@ add_library(
     rdma_channel.cpp
     rdma_context.cpp
     rdma_endpoint_v0.cpp
+    rdma_io_endpoint.cpp
     rdma_worker.cpp
 )
 

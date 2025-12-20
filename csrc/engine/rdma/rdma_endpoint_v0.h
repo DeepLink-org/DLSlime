@@ -25,7 +25,7 @@ namespace slime {
 
 using json = nlohmann::json;
 
-static const size_t MAX_FIFO_DEPTH = 4096;
+
 static const int    BURST_SIZE     = 128;
 
 enum class SendContextState : uint8_t {
@@ -136,6 +136,8 @@ public:
 
     int32_t waitRecv(int32_t slot_id);
 
+    int32_t process();
+
 private:
     bool bypass_signal_{false};
 
@@ -165,9 +167,6 @@ private:
 
     int32_t sendProcess();
     int32_t recvProcess();
-
-    jring_t* createRing(const char* name, size_t count);
-    void     freeRing(jring_t* ring);
 
     int64_t* dummy_;
 };

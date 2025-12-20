@@ -26,6 +26,7 @@
 #include "engine/rdma/rdma_config.h"
 #include "engine/rdma/rdma_context.h"
 #include "engine/rdma/rdma_endpoint_v0.h"
+#include "engine/rdma/rdma_io_endpoint.h"
 #include "engine/rdma/rdma_utils.h"
 #include "engine/rdma/rdma_worker.h"
 #endif
@@ -141,14 +142,6 @@ PYBIND11_MODULE(_slime_c, m)
         .def(py::init<const uintptr_t&, const uintptr_t&, uint64_t, uint64_t, uint64_t>());
 
 #ifdef BUILD_RDMA
-    py::class_<slime::RDMAAssign, std::shared_ptr<slime::RDMAAssign>>(m, "RDMAAssign")
-        .def("wait", &slime::RDMAAssign::wait, py::call_guard<py::gil_scoped_release>())
-        .def("latency", &slime::RDMAAssign::latency, py::call_guard<py::gil_scoped_release>());
-
-    py::class_<slime::RDMAAssignHandler, std::shared_ptr<slime::RDMAAssignHandler>>(m, "RDMAAssignHandler")
-        .def("wait", &slime::RDMAAssignHandler::wait, py::call_guard<py::gil_scoped_release>())
-        .def("latency", &slime::RDMAAssignHandler::latency, py::call_guard<py::gil_scoped_release>());
-
     py::class_<slime::RDMAContext, std::shared_ptr<slime::RDMAContext>>(m, "rdma_context")
         .def(py::init<>())
         .def("init_rdma_context", &slime::RDMAContext::init)
@@ -171,11 +164,52 @@ PYBIND11_MODULE(_slime_c, m)
         .def("wait_send", &slime::RDMAEndpointV0::waitSend)
         .def("wait_recv", &slime::RDMAEndpointV0::waitRecv);
 
+    py::class_<slime::RDMAIOEndpoint, std::shared_ptr<slime::RDMAIOEndpoint>>(m, "rdma_io_endpoint")
+        .def(py::init<std::shared_ptr<slime::RDMAContext>, size_t>(), py::arg("ctx"), py::arg("num_qp"))
+        .def("connect", &slime::RDMAIOEndpoint::connect)
+        .def("endpoint_info", &slime::RDMAIOEndpoint::endpointInfo)
+        .def("register_memory_region", &slime::RDMAIOEndpoint::registerMemoryRegion)
+
+        // Initiator Operations
+        .def("read",
+             &slime::RDMAIOEndpoint::read,
+             py::arg("local_ptr"),
+             py::arg("remote_ptr"),
+             py::arg("len"),
+             py::arg("rkey"),
+             py::arg("stream") = nullptr)
+        .def("write",
+             &slime::RDMAIOEndpoint::write,
+             py::arg("local_ptr"),
+             py::arg("remote_ptr"),
+             py::arg("len"),
+             py::arg("rkey"),
+             py::arg("stream") = nullptr)
+        .def("write_with_imm",
+             &slime::RDMAIOEndpoint::writeWithImm,
+             py::arg("local_ptr"),
+             py::arg("remote_ptr"),
+             py::arg("len"),
+             py::arg("rkey"),
+             py::arg("imm_data"),
+             py::arg("stream") = nullptr)
+
+        // Target Operations
+        .def("recv_imm", &slime::RDMAIOEndpoint::recvImm, py::arg("stream") = nullptr)
+
+        // Synchronization
+        .def("wait", &slime::RDMAIOEndpoint::wait, py::arg("slot_id"))
+        .def("wait_recv", &slime::RDMAIOEndpoint::waitRecv, py::arg("slot_id"));
+
+    // 4. RDMAWorker (核心调度器)
     py::class_<slime::RDMAWorker, std::shared_ptr<slime::RDMAWorker>>(m, "rdma_worker")
         .def(py::init<std::string, int>(), py::arg("dev_name"), py::arg("id"))
         .def("start", &slime::RDMAWorker::start)
         .def("stop", &slime::RDMAWorker::stop)
-        .def("add_endpoint", &slime::RDMAWorker::addEndpoint, py::arg("endpoint"));
+        // 绑定 V0 Endpoint
+        .def("add_endpoint", &slime::RDMAWorker::addEndpoint, py::arg("endpoint"))
+        // 绑定 IO Endpoint [新增]
+        .def("add_io_endpoint", &slime::RDMAWorker::addIOEndpoint, py::arg("endpoint"));
 
     m.def("available_nic", &slime::available_nic);
 #endif

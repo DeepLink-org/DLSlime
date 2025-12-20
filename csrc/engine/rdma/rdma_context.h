@@ -36,6 +36,7 @@ class RDMAContext: public std::enable_shared_from_this<RDMAContext> {
 
     friend class RDMAEndpoint;  // RDMA Endpoint need to use the register memory pool in context
     friend class RDMAEndpointV0;
+    friend class RDMAIOEndpoint;
     friend class RDMAChannel;
 
 public:

@@ -8,7 +8,9 @@
 #include "engine/rdma/rdma_context.h"
 #include "engine/rdma/rdma_env.h"
 #include "engine/rdma/rdma_utils.h"
+
 #include "logging.h"
+#include "utils.h"
 
 #include <atomic>
 #include <cstddef>
@@ -20,34 +22,6 @@
 #include <vector>
 
 namespace slime {
-
-jring_t* RDMAEndpointV0::createRing(const char* name, size_t count)
-{
-    size_t ring_sz = jring_get_buf_ring_size(sizeof(void*), count);
-
-    void* mem = nullptr;
-    // Align to 64 bytes to match cache line size, preventing false sharing.
-    if (posix_memalign(&mem, 64, ring_sz) != 0) {
-        throw std::runtime_error(std::string("Failed to allocate ring memory: ") + name);
-    }
-
-    jring_t* r = (jring_t*)mem;
-
-    // Initialize ring: MP=1 (Multi-Producer safe), MC=1 (Multi-Consumer safe).
-    // This allows multiple threads to enqueue requests if needed.
-    if (jring_init(r, count, sizeof(void*), 1, 1) < 0) {
-        free(mem);
-        throw std::runtime_error(std::string("Failed to init ring: ") + name);
-    }
-    return r;
-}
-
-void RDMAEndpointV0::freeRing(jring_t* ring)
-{
-    if (ring) {
-        free(ring);
-    }
-}
 
 RDMAEndpointV0::RDMAEndpointV0(std::shared_ptr<RDMAContext> ctx, size_t num_qp): ctx_(ctx), num_qp_(num_qp)
 {
@@ -70,16 +44,16 @@ RDMAEndpointV0::RDMAEndpointV0(std::shared_ptr<RDMAContext> ctx, size_t num_qp):
 
     // Allocate context pools aligned to cache lines.
     void* raw_send_ctx = nullptr;
-    if (posix_memalign(&raw_send_ctx, 64, sizeof(SendContext) * MAX_FIFO_DEPTH) != 0)
+    if (posix_memalign(&raw_send_ctx, 64, sizeof(SendContext) * SLIME_MAX_SLOT_FIFO_DEPTH) != 0)
         throw std::runtime_error("remote meta alloc fail");
     send_ctx_pool_ = static_cast<SendContext*>(raw_send_ctx);
 
     void* raw_recv_ctx = nullptr;
-    if (posix_memalign(&raw_recv_ctx, 64, sizeof(RecvContext) * MAX_FIFO_DEPTH) != 0)
+    if (posix_memalign(&raw_recv_ctx, 64, sizeof(RecvContext) * SLIME_MAX_SLOT_FIFO_DEPTH) != 0)
         throw std::runtime_error("remote meta alloc fail");
     recv_ctx_pool_ = static_cast<RecvContext*>(raw_recv_ctx);
 
-    for (int i = 0; i < MAX_FIFO_DEPTH; ++i) {
+    for (int i = 0; i < SLIME_MAX_SLOT_FIFO_DEPTH; ++i) {
         send_ctx_pool_[i].signal = slime::device::createSignal(bypass_signal_);
         recv_ctx_pool_[i].signal = slime::device::createSignal(bypass_signal_);
     }
@@ -89,7 +63,7 @@ RDMAEndpointV0::RDMAEndpointV0(std::shared_ptr<RDMAContext> ctx, size_t num_qp):
     ctx_->registerOrAccessMemoryRegion(
         reinterpret_cast<uintptr_t>(dummy_), reinterpret_cast<uintptr_t>(dummy_), sizeof(int64_t));
 
-    for (int i = 0; i < MAX_FIFO_DEPTH; ++i) {
+    for (int i = 0; i < SLIME_MAX_SLOT_FIFO_DEPTH; ++i) {
         ctx_->registerOrAccessMemoryRegion(reinterpret_cast<uintptr_t>(&(send_ctx_pool_[i].remote_meta_info_)),
                                            reinterpret_cast<uintptr_t>(&(send_ctx_pool_[i].remote_meta_info_)),
                                            sizeof(meta_info_t));
@@ -108,7 +82,7 @@ RDMAEndpointV0::RDMAEndpointV0(std::shared_ptr<RDMAContext> ctx, size_t num_qp):
     data_channel_->init(ctx_, num_qp_, 0);
 
     // Initialize Rings. Size is double the depth to handle potential overflow gracefully.
-    size_t ring_size  = MAX_FIFO_DEPTH * 2;
+    size_t ring_size  = SLIME_MAX_SLOT_FIFO_DEPTH * 2;
     send_buffer_ring_ = createRing("send_buf", ring_size);
     recv_buffer_ring_ = createRing("recv_buf", ring_size);
 
@@ -136,7 +110,7 @@ json RDMAEndpointV0::endpointInfo() const
 {
     json remote_meta_key = {};
 
-    for (int i = 0; i < MAX_FIFO_DEPTH; ++i) {
+    for (int i = 0; i < SLIME_MAX_SLOT_FIFO_DEPTH; ++i) {
         remote_meta_key.push_back((uintptr_t)(&(send_ctx_pool_[i].remote_meta_info_)));
     }
     json endpoint_info = json{{"mr_info", ctx_->memory_pool_->mr_info()},
@@ -159,14 +133,14 @@ void RDMAEndpointV0::connect(const json& remote_endpoint_info)
 
     SLIME_LOG_INFO("Connection Established. Pre-posting RECV requests...");
 
-    SLIME_ASSERT_EQ(remote_endpoint_info["remote_meta_key"].size(), MAX_FIFO_DEPTH, "FIFO Depth mismatch");
+    SLIME_ASSERT_EQ(remote_endpoint_info["remote_meta_key"].size(), SLIME_MAX_SLOT_FIFO_DEPTH, "FIFO Depth mismatch");
 
-    for (int i = 0; i < MAX_FIFO_DEPTH; ++i) {
+    for (int i = 0; i < SLIME_MAX_SLOT_FIFO_DEPTH; ++i) {
         recv_ctx_pool_[i].remote_meta_key_ = remote_endpoint_info["remote_meta_key"][i];
     }
 
     // Pre-post RECV requests for Meta Channel to handle incoming handshake signals.
-    for (int i = 0; i < MAX_FIFO_DEPTH; ++i) {
+    for (int i = 0; i < SLIME_MAX_SLOT_FIFO_DEPTH; ++i) {
         SendContext*            send_ctx = &(send_ctx_pool_[i]);
         std::vector<Assignment> batch{Assignment(reinterpret_cast<uintptr_t>(dummy_), 0, 0, sizeof(int64_t))};
         send_ctx->meta_recv_assign_.reset(OpCode::RECV, 0, batch, [send_ctx](int32_t status, int32_t imm) {
@@ -176,7 +150,7 @@ void RDMAEndpointV0::connect(const json& remote_endpoint_info)
     }
 
     // Pre-post RECV requests for Data Channel to handle completion signals (Imm Data).
-    for (int i = 0; i < MAX_FIFO_DEPTH; ++i) {
+    for (int i = 0; i < SLIME_MAX_SLOT_FIFO_DEPTH; ++i) {
         RecvContext* recv_ctx = &(recv_ctx_pool_[i]);
         for (size_t qpi = 0; qpi < num_qp_; ++qpi) {
             std::vector<Assignment> batch{Assignment(reinterpret_cast<uintptr_t>(dummy_), 0, 0, sizeof(int64_t))};
@@ -208,7 +182,7 @@ int32_t RDMAEndpointV0::send(uintptr_t data_ptr, size_t offset, size_t length, v
 
     // Acquire a slot from the FIFO pool.
     uint32_t target_mask = (1 << num_qp_) - 1;
-    uint64_t slot        = send_slot_id_.fetch_add(1, std::memory_order_release) % MAX_FIFO_DEPTH;
+    uint64_t slot        = send_slot_id_.fetch_add(1, std::memory_order_release) % SLIME_MAX_SLOT_FIFO_DEPTH;
 
     SendContext* s_ctx = &(send_ctx_pool_[slot]);
 
@@ -238,7 +212,7 @@ int32_t RDMAEndpointV0::recv(uintptr_t data_ptr, size_t offset, size_t length, v
     }
 
     uint32_t target_mask = (1 << num_qp_) - 1;
-    uint64_t slot        = recv_slot_id_.fetch_add(1, std::memory_order_release) % MAX_FIFO_DEPTH;
+    uint64_t slot        = recv_slot_id_.fetch_add(1, std::memory_order_release) % SLIME_MAX_SLOT_FIFO_DEPTH;
 
     RecvContext* r_ctx = &(recv_ctx_pool_[slot]);
 
@@ -274,6 +248,11 @@ int32_t RDMAEndpointV0::waitRecv(int32_t slot_id)
 }
 
 // In rdma_endpoint_v0.cc
+
+int32_t RDMAEndpointV0::process()
+{
+    return sendProcess() + recvProcess();
+}
 
 // Returns: Number of tasks processed (0 indicates idle).
 int32_t RDMAEndpointV0::sendProcess()
