@@ -3,7 +3,6 @@
 #include "device/device_api.h"
 #include "engine/assignment.h"
 #include "engine/rdma/rdma_assignment.h"
-#include "engine/rdma/rdma_buffer.h"
 #include "engine/rdma/rdma_channel.h"
 #include "engine/rdma/rdma_common.h"
 #include "engine/rdma/rdma_context.h"
@@ -109,7 +108,7 @@ RDMAEndpointV0::RDMAEndpointV0(std::shared_ptr<RDMAContext> ctx, size_t num_qp):
     data_channel_->init(ctx_, num_qp_, 0);
 
     // Initialize Rings. Size is double the depth to handle potential overflow gracefully.
-    size_t ring_size      = MAX_FIFO_DEPTH * 2;
+    size_t ring_size  = MAX_FIFO_DEPTH * 2;
     send_buffer_ring_ = createRing("send_buf", ring_size);
     recv_buffer_ring_ = createRing("recv_buf", ring_size);
 
@@ -119,8 +118,6 @@ RDMAEndpointV0::RDMAEndpointV0(std::shared_ptr<RDMAContext> ctx, size_t num_qp):
 RDMAEndpointV0::~RDMAEndpointV0()
 {
     try {
-        // Ensure proxy threads are stopped before freeing memory to avoid use-after-free.
-        proxyDestroy();
 
         free(dummy_);
         free(send_ctx_pool_);
@@ -133,29 +130,6 @@ RDMAEndpointV0::~RDMAEndpointV0()
     catch (const std::exception& e) {
         SLIME_LOG_ERROR("Exception in RDMAEndpoint destructor: ", e.what());
     }
-}
-
-void RDMAEndpointV0::proxyInit()
-{
-    send_proxy_thread_ = std::thread([this]() { this->sendProxy(); });
-    recv_proxy_thread_ = std::thread([this]() { this->recvProxy(); });
-
-    SLIME_LOG_INFO("RDMA Proxy Threads Started.");
-}
-
-void RDMAEndpointV0::proxyDestroy()
-{
-    SLIME_LOG_INFO("Stopping RDMA proxy threads...");
-
-    stop_send_proxy_signal_.store(true, std::memory_order_release);
-    stop_recv_proxy_signal_.store(true, std::memory_order_release);
-
-    if (send_proxy_thread_.joinable())
-        send_proxy_thread_.join();
-    if (recv_proxy_thread_.joinable())
-        recv_proxy_thread_.join();
-
-    SLIME_LOG_INFO("RDMA Proxy Threads Stopped.");
 }
 
 json RDMAEndpointV0::endpointInfo() const
@@ -193,7 +167,7 @@ void RDMAEndpointV0::connect(const json& remote_endpoint_info)
 
     // Pre-post RECV requests for Meta Channel to handle incoming handshake signals.
     for (int i = 0; i < MAX_FIFO_DEPTH; ++i) {
-        SendContext* send_ctx = &(send_ctx_pool_[i]);
+        SendContext*            send_ctx = &(send_ctx_pool_[i]);
         std::vector<Assignment> batch{Assignment(reinterpret_cast<uintptr_t>(dummy_), 0, 0, sizeof(int64_t))};
         send_ctx->meta_recv_assign_.reset(OpCode::RECV, 0, batch, [send_ctx](int32_t status, int32_t imm) {
             send_ctx->meta_arrived_flag_.val.store(1, std::memory_order_release);
@@ -219,8 +193,6 @@ void RDMAEndpointV0::connect(const json& remote_endpoint_info)
         }
     }
 
-    proxyInit();
-
     SLIME_LOG_INFO("RDMA Contexts Launched.");
 }
 
@@ -240,7 +212,7 @@ int32_t RDMAEndpointV0::send(uintptr_t data_ptr, size_t offset, size_t length, v
 
     SendContext* s_ctx = &(send_ctx_pool_[slot]);
 
-    s_ctx->slot_id                    = slot;
+    s_ctx->slot_id                = slot;
     s_ctx->local_meta_info_.view_ = {data_ptr, offset, length};
     s_ctx->expected_mask          = target_mask;
 
@@ -301,201 +273,194 @@ int32_t RDMAEndpointV0::waitRecv(int32_t slot_id)
     return 0;
 }
 
-int32_t RDMAEndpointV0::sendProxy()
+// In rdma_endpoint_v0.cc
+
+// Returns: Number of tasks processed (0 indicates idle).
+int32_t RDMAEndpointV0::sendProcess()
 {
-    SLIME_LOG_INFO("SendProxy Reactor Thread Started.");
+    int work_done = 0;
 
-    // Bind to the NUMA node closest to the NIC to minimize PCIe/Memory latency.
-    bindToSocket(socketId(ctx_->device_name_));
-
-    void* new_burst_buf[BURST_SIZE];
-
-    while (!stop_send_proxy_signal_.load(std::memory_order_relaxed)) {
-
-        // ============================================================
-        // Stage 1: Ingest - Dequeue from Ring
-        // ============================================================
-        int n = jring_dequeue_burst(send_buffer_ring_, new_burst_buf, BURST_SIZE, nullptr);
+    // ============================================================
+    // Stage 1: Ingest - Dequeue from Ring
+    // ============================================================
+    // Attempt to dequeue a burst of tasks.
+    int n = jring_dequeue_burst(send_buffer_ring_, send_new_burst_buf_, BURST_SIZE, nullptr);
+    if (n > 0) {
+        work_done += n;
         for (int i = 0; i < n; ++i) {
-            auto* s_ctx = (SendContext*)new_burst_buf[i];
+            auto* s_ctx = (SendContext*)send_new_burst_buf_[i];
             pending_send_queue_.push_back(s_ctx);
         }
+    }
 
-        // ============================================================
-        // Stage 2: State Machine Execution
-        // ============================================================
-        auto it = pending_send_queue_.begin();
+    // ============================================================
+    // Stage 2: State Machine Execution
+    // ============================================================
+    auto it = pending_send_queue_.begin();
 
-        if (it != pending_send_queue_.end()) {
-            SendContext* s_ctx          = *it;
-            bool         task_completed = false;
+    if (it != pending_send_queue_.end()) {
+        SendContext* s_ctx          = *it;
+        bool         task_completed = false;
 
-            switch (s_ctx->state_) {
-                case SendContextState::WAIT_GPU_READY:
-                    // Check if GPU has finished producing data.
-                    if (s_ctx->signal->is_gpu_ready()) {
-                        s_ctx->state_ = SendContextState::WAIT_META;
-                        goto CHECK_META_READY;
+        switch (s_ctx->state_) {
+            case SendContextState::WAIT_GPU_READY:
+                // Non-blocking check for GPU signal.
+                if (s_ctx->signal->is_gpu_ready()) {
+                    s_ctx->state_ = SendContextState::WAIT_META;
+                    goto CHECK_META_READY;
+                }
+                break;
+
+            CHECK_META_READY:
+            case SendContextState::WAIT_META:
+                // Non-blocking check for remote meta signal (atomic load).
+                if (s_ctx->meta_arrived_flag_.val.load(std::memory_order_acquire)) {
+                    s_ctx->meta_arrived_flag_.val.store(false, std::memory_order_release);
+                    s_ctx->state_ = SendContextState::POST_DATA_SEND;
+
+                    // Update remote MR info.
+                    ctx_->registerOrAccessRemoteMemoryRegion(s_ctx->remote_meta_info_.view_.data_ptr,
+                                                             s_ctx->remote_meta_info_.view_.data_ptr,
+                                                             s_ctx->remote_meta_info_.view_.length,
+                                                             s_ctx->remote_meta_info_.r_key_);
+
+                    // Chunk data across QPs.
+                    size_t total_len  = s_ctx->remote_meta_info_.view_.length;
+                    size_t chunk_size = (total_len + num_qp_ - 1) / num_qp_;
+
+                    for (size_t qpi = 0; qpi < num_qp_; ++qpi) {
+                        size_t offset = qpi * chunk_size;
+                        if (offset >= total_len)
+                            break;
+
+                        size_t current_len = std::min(chunk_size, total_len - offset);
+
+                        Assignment      assign(s_ctx->local_meta_info_.view_.data_ptr,
+                                          s_ctx->remote_meta_info_.view_.data_ptr,
+                                          offset,
+                                          offset,
+                                          current_len);
+                        AssignmentBatch batch{assign};
+
+                        s_ctx->data_send_assign_.reset(
+                            OpCode::WRITE_WITH_IMM,
+                            qpi,
+                            batch,
+                            [s_ctx, qpi](int32_t stat, int32_t imm_data) { s_ctx->signal->set_comm_done(qpi); },
+                            false);
+
+                        data_channel_->post_rc_oneside_batch(qpi, &(s_ctx->data_send_assign_));
                     }
-                    break;
 
-                CHECK_META_READY:
-                case SendContextState::WAIT_META:
-                    // Check if the receiver has notified us (via RDMA Write or Recv completion).
-                    if (s_ctx->meta_arrived_flag_.val.load(std::memory_order_acquire)) {
-                        s_ctx->meta_arrived_flag_.val.store(false, std::memory_order_release);
-                        s_ctx->state_ = SendContextState::POST_DATA_SEND;
+                    // Prepare for next handshake (Post Recv).
+                    std::vector<Assignment> meta_batch{
+                        Assignment(reinterpret_cast<uintptr_t>(dummy_), 0, 0, sizeof(int64_t))};
 
-                        // Ensure remote MR info is updated.
-                        ctx_->registerOrAccessRemoteMemoryRegion(s_ctx->remote_meta_info_.view_.data_ptr,
-                                                                 s_ctx->remote_meta_info_.view_.data_ptr,
-                                                                 s_ctx->remote_meta_info_.view_.length,
-                                                                 s_ctx->remote_meta_info_.r_key_);
+                    s_ctx->meta_recv_assign_.reset(
+                        OpCode::RECV, 0, meta_batch, [this, s_ctx](int32_t status, int32_t imm) {
+                            s_ctx->meta_arrived_flag_.val.store(1, std::memory_order_release);
+                        });
+                    meta_channel_->post_recv_batch(0, &(s_ctx->meta_recv_assign_));
 
-                        // Chunk the data across multiple QPs for parallel transmission.
-                        size_t total_len  = s_ctx->remote_meta_info_.view_.length;
-                        size_t chunk_size = (total_len + num_qp_ - 1) / num_qp_;
+                    task_completed = true;
+                }
+                break;
 
-                        for (size_t qpi = 0; qpi < num_qp_; ++qpi) {
-                            size_t offset = qpi * chunk_size;
-                            if (offset >= total_len)
-                                break;
-
-                            size_t current_len = std::min(chunk_size, total_len - offset);
-
-                            // Note: Offset applies to both source and destination (assuming 1:1 mapping).
-                            Assignment      assign(s_ctx->local_meta_info_.view_.data_ptr,
-                                              s_ctx->remote_meta_info_.view_.data_ptr,
-                                              offset,
-                                              offset,
-                                              current_len);
-                            AssignmentBatch batch{assign};
-
-                            // Use WRITE_WITH_IMM to notify the receiver upon completion.
-                            s_ctx->data_send_assign_.reset(
-                                OpCode::WRITE_WITH_IMM,
-                                qpi,
-                                batch,
-                                [s_ctx, qpi](int32_t stat, int32_t imm_data) { s_ctx->signal->set_comm_done(qpi); },
-                                false);
-
-                            data_channel_->post_rc_oneside_batch(qpi, &(s_ctx->data_send_assign_));
-                        }
-
-                        // Post a RECV WQE for the next handshake (Meta channel).
-                        std::vector<Assignment> meta_batch{
-                            Assignment(reinterpret_cast<uintptr_t>(dummy_), 0, 0, sizeof(int64_t))};
-
-                        s_ctx->meta_recv_assign_.reset(
-                            OpCode::RECV, 0, meta_batch, [this, s_ctx](int32_t status, int32_t imm) {
-                                s_ctx->meta_arrived_flag_.val.store(1, std::memory_order_release);
-                            });
-                        meta_channel_->post_recv_batch(0, &(s_ctx->meta_recv_assign_));
-
-                        task_completed = true;
-                    }
-                    break;
-
-                default:
-                    break;
-            }
-
-            if (task_completed) {
-                pending_send_queue_.pop_front();
-            }
+            default:
+                break;
         }
 
-        // Backoff to reduce CPU usage when idle.
-        if (n == 0 && pending_send_queue_.empty()) {
-            cpu_relax();
+        if (task_completed) {
+            pending_send_queue_.pop_front();
+            work_done++;
+        }
+        else {
+            // Task is still pending, so we are "busy" waiting.
+            // Marking as work_done=1 prevents the worker from sleeping too aggressively
+            // if we are just waiting for a GPU signal or network packet.
+            // However, to save power, we might strictly return 0 here if no state transition occurred.
+            // For low latency, return 1.
+            // work_done++;
         }
     }
-    return 0;
+
+    // Note: cpu_relax() is removed from here and handled by the Worker.
+    return work_done;
 }
 
-int32_t RDMAEndpointV0::recvProxy()
+// Returns: Number of tasks processed (0 indicates idle).
+int32_t RDMAEndpointV0::recvProcess()
 {
-    bindToSocket(socketId(ctx_->device_name_));
-    SLIME_LOG_INFO("RecvProxy Reactor Thread Started.");
+    int work_done = 0;
 
-    void* new_burst_buf[BURST_SIZE];
-
-    while (!stop_recv_proxy_signal_.load(std::memory_order_relaxed)) {
-
-        int n = jring_dequeue_burst(recv_buffer_ring_, new_burst_buf, BURST_SIZE, nullptr);
+    int n = jring_dequeue_burst(recv_buffer_ring_, recv_new_burst_buf_, BURST_SIZE, nullptr);
+    if (n > 0) {
+        work_done += n;
         for (int i = 0; i < n; ++i) {
-            auto* r_ctx = (RecvContext*)new_burst_buf[i];
-            // Initial state: wait for local GPU buffer safety.
+            auto* r_ctx   = (RecvContext*)recv_new_burst_buf_[i];
             r_ctx->state_ = RecvContextState::WAIT_GPU_BUF;
             pending_recv_queue_.push_back(r_ctx);
         }
+    }
 
-        auto it = pending_recv_queue_.begin();
-        if (it != pending_recv_queue_.end()) {
-            RecvContext* r_ctx          = *it;
-            bool         task_completed = false;
+    auto it = pending_recv_queue_.begin();
+    if (it != pending_recv_queue_.end()) {
+        RecvContext* r_ctx          = *it;
+        bool         task_completed = false;
 
-            switch (r_ctx->state_) {
-                case RecvContextState::WAIT_GPU_BUF: {
-                    // Ensure the buffer is not being used by kernels before RDMA overwrites it.
-                    if (r_ctx->signal->is_gpu_ready()) {
-                        r_ctx->state_ = RecvContextState::INIT_SEND_META;
-                        goto SEND_META;
-                    }
-                    break;
+        switch (r_ctx->state_) {
+            case RecvContextState::WAIT_GPU_BUF: {
+                if (r_ctx->signal->is_gpu_ready()) {
+                    r_ctx->state_ = RecvContextState::INIT_SEND_META;
+                    goto SEND_META;
                 }
-
-                SEND_META:
-                case RecvContextState::INIT_SEND_META: {
-                    // Critical Order: Post Recv WQEs BEFORE sending Meta info.
-                    // This prevents RNR (Receiver Not Ready) errors if the sender responds immediately.
-                    for (size_t qpi = 0; qpi < num_qp_; ++qpi) {
-                        std::vector<Assignment> batch{Assignment(reinterpret_cast<uintptr_t>(dummy_), 0, 0, 8)};
-
-                        r_ctx->data_recv_assign_.reset(
-                            OpCode::RECV, qpi, batch, [r_ctx, qpi](int32_t status, int32_t imm) {
-                                if (status == 0) {
-                                    r_ctx->signal->set_comm_done(qpi);
-                                }
-                                else {
-                                    SLIME_LOG_ERROR("Data Recv Failed during completion");
-                                }
-                            });
-                        data_channel_->post_recv_batch(qpi, &(r_ctx->data_recv_assign_));
-                    }
-
-                    // After WQEs are posted, safe to exchange Meta info.
-                    int slot = r_ctx->slot_id;
-                    Assignment      assign(reinterpret_cast<uintptr_t>(&(r_ctx->local_meta_info_)),
-                                      r_ctx->remote_meta_key_,
-                                      0,
-                                      0,
-                                      sizeof(meta_info_t));
-                    AssignmentBatch assign_batch{assign};
-
-                    r_ctx->meta_send_assign_.reset(OpCode::WRITE_WITH_IMM, 0, assign_batch, nullptr, true);
-                    meta_channel_->post_rc_oneside_batch(0, &(r_ctx->meta_send_assign_));
-
-                    // Reset state for next round (though r_ctx is effectively done for this op).
-                    r_ctx->state_ = RecvContextState::WAIT_GPU_BUF;
-                    task_completed = true;
-                    break;
-                }
-
-                default:
-                    break;
+                break;
             }
 
-            if (task_completed) {
-                pending_recv_queue_.pop_front();
+            SEND_META:
+            case RecvContextState::INIT_SEND_META: {
+                // Step 1: Pre-post Recv WQEs (Correct Order).
+                for (size_t qpi = 0; qpi < num_qp_; ++qpi) {
+                    std::vector<Assignment> batch{Assignment(reinterpret_cast<uintptr_t>(dummy_), 0, 0, 8)};
+                    r_ctx->data_recv_assign_.reset(OpCode::RECV, qpi, batch, [r_ctx, qpi](int32_t status, int32_t imm) {
+                        if (status == 0) {
+                            r_ctx->signal->set_comm_done(qpi);
+                        }
+                        else {
+                            SLIME_LOG_ERROR("Data Recv Failed during completion");
+                        }
+                    });
+                    data_channel_->post_recv_batch(qpi, &(r_ctx->data_recv_assign_));
+                }
+
+                // Step 2: Send Meta to notify sender.
+                int             slot = r_ctx->slot_id;
+                Assignment      assign(reinterpret_cast<uintptr_t>(&(r_ctx->local_meta_info_)),
+                                  r_ctx->remote_meta_key_,
+                                  0,
+                                  0,
+                                  sizeof(meta_info_t));
+                AssignmentBatch assign_batch{assign};
+
+                r_ctx->meta_send_assign_.reset(OpCode::WRITE_WITH_IMM, 0, assign_batch, nullptr, true);
+                meta_channel_->post_rc_oneside_batch(0, &(r_ctx->meta_send_assign_));
+
+                r_ctx->state_  = RecvContextState::WAIT_GPU_BUF;
+                task_completed = true;
+                break;
             }
+
+            default:
+                break;
         }
 
-        if (n == 0 && pending_recv_queue_.empty()) {
-            cpu_relax();
+        if (task_completed) {
+            pending_recv_queue_.pop_front();
+            work_done++;
         }
     }
-    return 0;
+
+    return work_done;
 }
 
 }  // namespace slime

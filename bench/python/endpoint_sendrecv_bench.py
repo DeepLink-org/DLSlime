@@ -16,30 +16,29 @@ def get_readable_size(size_in_bytes):
 def run_benchmark(device_type="cuda", num_qp=1, iterations=200):
     # 检查设备
     nic_devices = available_nic()
-    if len(nic_devices) < 2:
-        print(
-            f"Warning: Only {len(nic_devices)} RDMA device found. Trying loopback on device 0 if possible, or script might fail."
-        )
-        dev0 = nic_devices[0]
-        dev1 = nic_devices[0]  # Loopback
-    else:
-        dev0 = nic_devices[0]
-        dev1 = nic_devices[1]
+    dev = nic_devices[0]
 
-    print(f"Initializing Endpoints: Send[{dev0}] <-> Recv[{dev1}]")
+    print(f"Initializing Endpoints: Send[{dev}] <-> Recv[{dev}]")
     print(f"Tensor Device: {device_type.upper()}")
 
     # 初始化 Endpoint
+
     ctx = _slime_c.rdma_context()
-    ctx.init_rdma_context(dev0, 1, "RoCE")
+    ctx.init_rdma_context(dev, 1, "RoCE")
+
+    worker= _slime_c.rdma_worker(dev, 0)
+
     send_endpoint = _slime_c.rdma_endpoint(ctx, num_qp)
-    ctx = _slime_c.rdma_context()
-    ctx.init_rdma_context(dev0, 1, "RoCE")
     recv_endpoint = _slime_c.rdma_endpoint(ctx, num_qp)
+
+    worker.add_endpoint(send_endpoint)
+    worker.add_endpoint(recv_endpoint)
 
     # 建立连接
     send_endpoint.connect(recv_endpoint.endpoint_info())
     recv_endpoint.connect(send_endpoint.endpoint_info())
+
+    worker.start()
 
     # 定义测试大小：2KB 到 128MB
     # 2KB = 2 * 1024
@@ -89,7 +88,7 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=200):
                     recv_tensor.data_ptr(),
                     recv_tensor.storage_offset(),
                     recv_tensor.numel(),
-                    None
+                    None,
                 )
 
                 send_endpoint.wait_send(send_slot)
@@ -113,7 +112,7 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=200):
                     recv_tensor.data_ptr(),
                     recv_tensor.storage_offset(),
                     recv_tensor.numel(),
-                    None
+                    None,
                 )
 
                 send_endpoint.wait_send(send_slot)

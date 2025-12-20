@@ -1,8 +1,8 @@
 #include "slime_backend.h"
-#include "engine/rdma/rdma_buffer.h"
 #include "engine/rdma/rdma_context.h"
 #include "engine/rdma/rdma_endpoint_v0.h"
 #include "engine/rdma/rdma_env.h"
+#include "engine/rdma/rdma_worker.h"
 #include "logging.h"
 
 #ifdef SLIME_USE_CUDA
@@ -189,16 +189,20 @@ slimeBackend::slimeBackend(const c10::intrusive_ptr<::c10d::Store>& store, int r
     size_t            qp_num    = SLIME_QP_NUM;
 
     std::shared_ptr<RDMAContext> context = std::make_shared<RDMAContext>();
+    rdma_worker_ = std::make_shared<RDMAWorker>(dev_name, rank);
     context->init(dev_name, ib_port, link_type);
     for (int i = 0; i < size - 1; ++i) {
 
+        auto endpoint = std::make_shared<RDMAEndpointV0>(context, qp_num);
         // TODO: the different end_point in the rank can use different RDMA dev to transmit the message.
-        end_point_set_.push_back(std::make_shared<RDMAEndpointV0>(context, qp_num));
+        end_point_set_.push_back(endpoint);
+        rdma_worker_->addEndpoint(endpoint);
 
         json channel_info;
         channel_info = end_point_set_[i]->endpointInfo();
         local_channel_info_.push_back(channel_info);
     }
+    rdma_worker_->start();
 
     exchangeChannelInfo();
 

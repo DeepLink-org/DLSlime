@@ -12,6 +12,7 @@
 
 #include "engine/rdma/rdma_endpoint_v0.h"
 #include "engine/rdma/rdma_utils.h"
+#include "engine/rdma/rdma_worker.h"
 
 namespace slime {
 namespace c10d {
@@ -209,6 +210,7 @@ public:
 private:
     void                                         exchangeChannelInfo();
     c10::intrusive_ptr<::c10d::Store>            store_;
+    std::shared_ptr<RDMAWorker>                  rdma_worker_;
     std::vector<std::shared_ptr<RDMAEndpointV0>> end_point_set_;
     std::vector<json>                            local_channel_info_;
     std::vector<json>                            global_channel_info_;

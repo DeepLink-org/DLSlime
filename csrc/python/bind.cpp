@@ -23,10 +23,11 @@
 
 #ifdef BUILD_RDMA
 #include "engine/rdma/rdma_assignment.h"
-#include "engine/rdma/rdma_buffer.h"
 #include "engine/rdma/rdma_config.h"
 #include "engine/rdma/rdma_context.h"
+#include "engine/rdma/rdma_endpoint_v0.h"
 #include "engine/rdma/rdma_utils.h"
+#include "engine/rdma/rdma_worker.h"
 #endif
 
 #if defined(BUILD_INTRA_OPS) || defined(BUILD_INTER_OPS)
@@ -169,6 +170,12 @@ PYBIND11_MODULE(_slime_c, m)
         .def("recv", &slime::RDMAEndpointV0::recv)
         .def("wait_send", &slime::RDMAEndpointV0::waitSend)
         .def("wait_recv", &slime::RDMAEndpointV0::waitRecv);
+
+    py::class_<slime::RDMAWorker, std::shared_ptr<slime::RDMAWorker>>(m, "rdma_worker")
+        .def(py::init<std::string, int>(), py::arg("dev_name"), py::arg("id"))
+        .def("start", &slime::RDMAWorker::start)
+        .def("stop", &slime::RDMAWorker::stop)
+        .def("add_endpoint", &slime::RDMAWorker::addEndpoint, py::arg("endpoint"));
 
     m.def("available_nic", &slime::available_nic);
 #endif

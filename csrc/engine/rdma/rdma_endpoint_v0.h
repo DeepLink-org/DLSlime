@@ -25,8 +25,6 @@ namespace slime {
 
 using json = nlohmann::json;
 
-class RDMABuffer;
-
 static const size_t MAX_FIFO_DEPTH = 4096;
 static const int    BURST_SIZE     = 128;
 
@@ -119,14 +117,12 @@ struct alignas(64) RecvContext {
 };
 
 class RDMAEndpointV0: public std::enable_shared_from_this<RDMAEndpointV0> {
-    friend class RDMABuffer;
+    friend class RDMAWorker;
 
 public:
     explicit RDMAEndpointV0(std::shared_ptr<RDMAContext> ctx, size_t qp_nums);
 
     ~RDMAEndpointV0();
-
-    int32_t addBuffer(OpCode opcode, std::shared_ptr<RDMABuffer> buffer, void* stream_handle = nullptr);
 
     void connect(const json& remote_endpoint_info);
 
@@ -164,17 +160,11 @@ private:
     std::atomic<uint64_t> send_slot_id_{0};
     std::atomic<uint64_t> recv_slot_id_{0};
 
-    std::atomic<bool> stop_send_proxy_signal_{false};
-    std::atomic<bool> stop_recv_proxy_signal_{false};
+    void* send_new_burst_buf_[BURST_SIZE];
+    void* recv_new_burst_buf_[BURST_SIZE];
 
-    std::thread send_proxy_thread_;
-    std::thread recv_proxy_thread_;
-
-    void proxyInit();
-    void proxyDestroy();
-
-    int32_t sendProxy();
-    int32_t recvProxy();
+    int32_t sendProcess();
+    int32_t recvProcess();
 
     jring_t* createRing(const char* name, size_t count);
     void     freeRing(jring_t* ring);
