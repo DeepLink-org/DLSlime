@@ -27,13 +27,15 @@ jring_t* RDMAEndpointV0::createRing(const char* name, size_t count)
     size_t ring_sz = jring_get_buf_ring_size(sizeof(void*), count);
 
     void* mem = nullptr;
+    // Align to 64 bytes to match cache line size, preventing false sharing.
     if (posix_memalign(&mem, 64, ring_sz) != 0) {
         throw std::runtime_error(std::string("Failed to allocate ring memory: ") + name);
     }
 
     jring_t* r = (jring_t*)mem;
 
-    // Initialize ring: MP=1 (Multi-Producer safe), MC=1 (Multi-Consumer safe)
+    // Initialize ring: MP=1 (Multi-Producer safe), MC=1 (Multi-Consumer safe).
+    // This allows multiple threads to enqueue requests if needed.
     if (jring_init(r, count, sizeof(void*), 1, 1) < 0) {
         free(mem);
         throw std::runtime_error(std::string("Failed to init ring: ") + name);
@@ -57,14 +59,17 @@ RDMAEndpointV0::RDMAEndpointV0(std::shared_ptr<RDMAContext> ctx, size_t num_qp):
 
     num_qp_ = num_qp;
 
+    // Aggregation logic is not supported in V0 Send/Recv mode.
     SLIME_ASSERT(1 == SLIME_AGG_QP_NUM, "cannot aggqp when sendrecv");
     SLIME_ASSERT(64 > SLIME_QP_NUM, "QP NUM must less than 64");
 
+    // Allocate dummy buffer for Immediate Data payload or signaling.
     void* dummy_mem = nullptr;
     if (posix_memalign(&dummy_mem, 64, sizeof(int64_t)) != 0)
         throw std::runtime_error("dummy alloc fail");
     dummy_ = (int64_t*)dummy_mem;
 
+    // Allocate context pools aligned to cache lines.
     void* raw_send_ctx = nullptr;
     if (posix_memalign(&raw_send_ctx, 64, sizeof(SendContext) * MAX_FIFO_DEPTH) != 0)
         throw std::runtime_error("remote meta alloc fail");
@@ -80,18 +85,18 @@ RDMAEndpointV0::RDMAEndpointV0(std::shared_ptr<RDMAContext> ctx, size_t num_qp):
         recv_ctx_pool_[i].signal = slime::device::createSignal(bypass_signal_);
     }
 
-    // Register Memory Regions (MR)
-    // Registering these upfront prevents expensive registration calls during runtime.
-    ctx_->registerMemoryRegion(
+    // Register Memory Regions (MR) upfront.
+    // Dynamic registration during the datapath is expensive and should be avoided.
+    ctx_->registerOrAccessMemoryRegion(
         reinterpret_cast<uintptr_t>(dummy_), reinterpret_cast<uintptr_t>(dummy_), sizeof(int64_t));
 
     for (int i = 0; i < MAX_FIFO_DEPTH; ++i) {
-        ctx_->registerMemoryRegion(reinterpret_cast<uintptr_t>(&(send_ctx_pool_[i].remote_meta_info_)),
-                                   reinterpret_cast<uintptr_t>(&(send_ctx_pool_[i].remote_meta_info_)),
-                                   sizeof(meta_info_t));
-        ctx_->registerMemoryRegion(reinterpret_cast<uintptr_t>(&(recv_ctx_pool_[i].local_meta_info_)),
-                                   reinterpret_cast<uintptr_t>(&(recv_ctx_pool_[i].local_meta_info_)),
-                                   sizeof(meta_info_t));
+        ctx_->registerOrAccessMemoryRegion(reinterpret_cast<uintptr_t>(&(send_ctx_pool_[i].remote_meta_info_)),
+                                           reinterpret_cast<uintptr_t>(&(send_ctx_pool_[i].remote_meta_info_)),
+                                           sizeof(meta_info_t));
+        ctx_->registerOrAccessMemoryRegion(reinterpret_cast<uintptr_t>(&(recv_ctx_pool_[i].local_meta_info_)),
+                                           reinterpret_cast<uintptr_t>(&(recv_ctx_pool_[i].local_meta_info_)),
+                                           sizeof(meta_info_t));
     }
 
     SLIME_LOG_INFO("Memory Regions Registered.");
@@ -99,12 +104,12 @@ RDMAEndpointV0::RDMAEndpointV0(std::shared_ptr<RDMAContext> ctx, size_t num_qp):
     data_channel_ = std::make_unique<RDMAChannel>();
     meta_channel_ = std::make_unique<RDMAChannel>();
 
+    // Meta channel uses 1 QP (latency sensitive), Data channel uses num_qp_ (throughput sensitive).
     meta_channel_->init(ctx_, 1, 256);
     data_channel_->init(ctx_, num_qp_, 0);
 
-    // Initialize Rings
-    // Size is double the depth to handle potential overflow gracefully.
-    size_t ring_size  = MAX_FIFO_DEPTH * 2;
+    // Initialize Rings. Size is double the depth to handle potential overflow gracefully.
+    size_t ring_size      = MAX_FIFO_DEPTH * 2;
     send_buffer_ring_ = createRing("send_buf", ring_size);
     recv_buffer_ring_ = createRing("recv_buf", ring_size);
 
@@ -114,13 +119,12 @@ RDMAEndpointV0::RDMAEndpointV0(std::shared_ptr<RDMAContext> ctx, size_t num_qp):
 RDMAEndpointV0::~RDMAEndpointV0()
 {
     try {
+        // Ensure proxy threads are stopped before freeing memory to avoid use-after-free.
         proxyDestroy();
 
         free(dummy_);
-
         free(send_ctx_pool_);
         free(recv_ctx_pool_);
-
         freeRing(send_buffer_ring_);
         freeRing(recv_buffer_ring_);
 
@@ -173,7 +177,7 @@ void RDMAEndpointV0::connect(const json& remote_endpoint_info)
     SLIME_LOG_INFO("Establishing RDMA Connection...");
 
     for (auto& item : remote_endpoint_info["mr_info"].items()) {
-        ctx_->registerRemoteMemoryRegion(item.value()["mr_key"].get<uintptr_t>(), item.value());
+        ctx_->registerOrAccessRemoteMemoryRegion(item.value()["mr_key"].get<uintptr_t>(), item.value());
     }
 
     meta_channel_->connect(remote_endpoint_info["meta_channel_info"]);
@@ -187,8 +191,9 @@ void RDMAEndpointV0::connect(const json& remote_endpoint_info)
         recv_ctx_pool_[i].remote_meta_key_ = remote_endpoint_info["remote_meta_key"][i];
     }
 
+    // Pre-post RECV requests for Meta Channel to handle incoming handshake signals.
     for (int i = 0; i < MAX_FIFO_DEPTH; ++i) {
-        SendContext*            send_ctx = &(send_ctx_pool_[i]);
+        SendContext* send_ctx = &(send_ctx_pool_[i]);
         std::vector<Assignment> batch{Assignment(reinterpret_cast<uintptr_t>(dummy_), 0, 0, sizeof(int64_t))};
         send_ctx->meta_recv_assign_.reset(OpCode::RECV, 0, batch, [send_ctx](int32_t status, int32_t imm) {
             send_ctx->meta_arrived_flag_.val.store(1, std::memory_order_release);
@@ -196,6 +201,7 @@ void RDMAEndpointV0::connect(const json& remote_endpoint_info)
         meta_channel_->post_recv_batch(0, &(send_ctx->meta_recv_assign_));
     }
 
+    // Pre-post RECV requests for Data Channel to handle completion signals (Imm Data).
     for (int i = 0; i < MAX_FIFO_DEPTH; ++i) {
         RecvContext* recv_ctx = &(recv_ctx_pool_[i]);
         for (size_t qpi = 0; qpi < num_qp_; ++qpi) {
@@ -220,26 +226,30 @@ void RDMAEndpointV0::connect(const json& remote_endpoint_info)
 
 int32_t RDMAEndpointV0::send(uintptr_t data_ptr, size_t offset, size_t length, void* stream_handle)
 {
+    // Fast path: check MR cache.
     storage_view_t view{data_ptr, offset, length};
     auto           buffer_mr = ctx_->get_mr(data_ptr);
     if (not(buffer_mr and buffer_mr->length == length)) {
         SLIME_LOG_DEBUG("Registering new MR for buffer: ", data_ptr);
-        ctx_->registerMemoryRegion(data_ptr, data_ptr, length);
+        ctx_->registerOrAccessMemoryRegion(data_ptr, data_ptr, length);
     }
 
+    // Acquire a slot from the FIFO pool.
     uint32_t target_mask = (1 << num_qp_) - 1;
     uint64_t slot        = send_slot_id_.fetch_add(1, std::memory_order_release) % MAX_FIFO_DEPTH;
 
     SendContext* s_ctx = &(send_ctx_pool_[slot]);
 
-    s_ctx->slot_id                = slot;
+    s_ctx->slot_id                    = slot;
     s_ctx->local_meta_info_.view_ = {data_ptr, offset, length};
     s_ctx->expected_mask          = target_mask;
 
+    // Reset signal and bind to the compute stream for synchronization.
     s_ctx->signal->reset_all();
     s_ctx->signal->bind_stream(stream_handle);
     s_ctx->signal->record_gpu_ready();
 
+    // Enqueue to the ring (lock-free producer).
     while (jring_enqueue_burst(send_buffer_ring_, (void**)&s_ctx, 1, nullptr) == 0) {
         cpu_relax();
     }
@@ -252,7 +262,7 @@ int32_t RDMAEndpointV0::recv(uintptr_t data_ptr, size_t offset, size_t length, v
     auto buffer_mr = ctx_->get_mr(data_ptr);
     if (not(buffer_mr and buffer_mr->length == length)) {
         SLIME_LOG_DEBUG("Registering new MR for buffer: ", data_ptr);
-        ctx_->registerMemoryRegion(data_ptr, data_ptr, length);
+        ctx_->registerOrAccessMemoryRegion(data_ptr, data_ptr, length);
     }
 
     uint32_t target_mask = (1 << num_qp_) - 1;
@@ -280,6 +290,7 @@ int32_t RDMAEndpointV0::recv(uintptr_t data_ptr, size_t offset, size_t length, v
 
 int32_t RDMAEndpointV0::waitSend(int32_t slot_id)
 {
+    // Blocking wait on CPU until the communication is marked done.
     send_ctx_pool_[slot_id].signal->wait_comm_done_cpu((1 << send_ctx_pool_[slot_id].expected_mask) - 1);
     return 0;
 }
@@ -292,74 +303,110 @@ int32_t RDMAEndpointV0::waitRecv(int32_t slot_id)
 
 int32_t RDMAEndpointV0::sendProxy()
 {
-    SLIME_LOG_INFO("SendProxy Thread running on NUMA node.");
+    SLIME_LOG_INFO("SendProxy Reactor Thread Started.");
+
+    // Bind to the NUMA node closest to the NIC to minimize PCIe/Memory latency.
     bindToSocket(socketId(ctx_->device_name_));
 
-    void* buf_ptrs[BURST_SIZE];
+    void* new_burst_buf[BURST_SIZE];
 
     while (!stop_send_proxy_signal_.load(std::memory_order_relaxed)) {
 
-        int n = jring_dequeue_burst(send_buffer_ring_, buf_ptrs, BURST_SIZE, nullptr);
+        // ============================================================
+        // Stage 1: Ingest - Dequeue from Ring
+        // ============================================================
+        int n = jring_dequeue_burst(send_buffer_ring_, new_burst_buf, BURST_SIZE, nullptr);
+        for (int i = 0; i < n; ++i) {
+            auto* s_ctx = (SendContext*)new_burst_buf[i];
+            pending_send_queue_.push_back(s_ctx);
+        }
 
-        if (n > 0) {
-            for (int i = 0; i < n; ++i) {
-                auto* s_ctx = (SendContext*)buf_ptrs[i];
-                int   slot  = s_ctx->slot_id;
+        // ============================================================
+        // Stage 2: State Machine Execution
+        // ============================================================
+        auto it = pending_send_queue_.begin();
 
-                while (!s_ctx->signal->is_gpu_ready()) {
-                    cpu_relax();
-                }
+        if (it != pending_send_queue_.end()) {
+            SendContext* s_ctx          = *it;
+            bool         task_completed = false;
 
-                while (!s_ctx->meta_arrived_flag_.val.load(std::memory_order_acquire)) {
-                    cpu_relax();
-                }
+            switch (s_ctx->state_) {
+                case SendContextState::WAIT_GPU_READY:
+                    // Check if GPU has finished producing data.
+                    if (s_ctx->signal->is_gpu_ready()) {
+                        s_ctx->state_ = SendContextState::WAIT_META;
+                        goto CHECK_META_READY;
+                    }
+                    break;
 
-                s_ctx->meta_arrived_flag_.val.store(false, std::memory_order_relaxed);
+                CHECK_META_READY:
+                case SendContextState::WAIT_META:
+                    // Check if the receiver has notified us (via RDMA Write or Recv completion).
+                    if (s_ctx->meta_arrived_flag_.val.load(std::memory_order_acquire)) {
+                        s_ctx->meta_arrived_flag_.val.store(false, std::memory_order_release);
+                        s_ctx->state_ = SendContextState::POST_DATA_SEND;
 
-                auto meta = s_ctx->remote_meta_info_;
+                        // Ensure remote MR info is updated.
+                        ctx_->registerOrAccessRemoteMemoryRegion(s_ctx->remote_meta_info_.view_.data_ptr,
+                                                                 s_ctx->remote_meta_info_.view_.data_ptr,
+                                                                 s_ctx->remote_meta_info_.view_.length,
+                                                                 s_ctx->remote_meta_info_.r_key_);
 
-                ctx_->registerRemoteMemoryRegion(s_ctx->remote_meta_info_.view_.data_ptr,
-                                                 s_ctx->remote_meta_info_.view_.data_ptr,
-                                                 s_ctx->remote_meta_info_.view_.length,
-                                                 s_ctx->remote_meta_info_.r_key_);
+                        // Chunk the data across multiple QPs for parallel transmission.
+                        size_t total_len  = s_ctx->remote_meta_info_.view_.length;
+                        size_t chunk_size = (total_len + num_qp_ - 1) / num_qp_;
 
-                size_t total_len  = s_ctx->remote_meta_info_.view_.length;
-                size_t chunk_size = (total_len + num_qp_ - 1) / num_qp_;
+                        for (size_t qpi = 0; qpi < num_qp_; ++qpi) {
+                            size_t offset = qpi * chunk_size;
+                            if (offset >= total_len)
+                                break;
 
-                for (size_t qpi = 0; qpi < num_qp_; ++qpi) {
-                    size_t offset = qpi * chunk_size;
+                            size_t current_len = std::min(chunk_size, total_len - offset);
 
-                    if (offset >= total_len)
-                        break;
-                    size_t current_len = std::min(chunk_size, total_len - offset);
+                            // Note: Offset applies to both source and destination (assuming 1:1 mapping).
+                            Assignment      assign(s_ctx->local_meta_info_.view_.data_ptr,
+                                              s_ctx->remote_meta_info_.view_.data_ptr,
+                                              offset,
+                                              offset,
+                                              current_len);
+                            AssignmentBatch batch{assign};
 
-                    Assignment assign(s_ctx->local_meta_info_.view_.data_ptr,
-                                      s_ctx->remote_meta_info_.view_.data_ptr,
-                                      offset,  // target offset
-                                      offset,  // source offset
-                                      current_len);
+                            // Use WRITE_WITH_IMM to notify the receiver upon completion.
+                            s_ctx->data_send_assign_.reset(
+                                OpCode::WRITE_WITH_IMM,
+                                qpi,
+                                batch,
+                                [s_ctx, qpi](int32_t stat, int32_t imm_data) { s_ctx->signal->set_comm_done(qpi); },
+                                false);
 
-                    AssignmentBatch batch{assign};
+                            data_channel_->post_rc_oneside_batch(qpi, &(s_ctx->data_send_assign_));
+                        }
 
-                    s_ctx->data_send_assign_.reset(
-                        OpCode::WRITE_WITH_IMM,
-                        qpi,
-                        batch,
-                        [s_ctx, qpi](int32_t stat, int32_t imm_data) { s_ctx->signal->set_comm_done(qpi); },
-                        false);
-                    data_channel_->post_rc_oneside_batch(qpi, &(s_ctx->data_send_assign_));
-                }
+                        // Post a RECV WQE for the next handshake (Meta channel).
+                        std::vector<Assignment> meta_batch{
+                            Assignment(reinterpret_cast<uintptr_t>(dummy_), 0, 0, sizeof(int64_t))};
 
-                std::vector<Assignment> meta_batch{
-                    Assignment(reinterpret_cast<uintptr_t>(dummy_), 0, 0, sizeof(int64_t))};
+                        s_ctx->meta_recv_assign_.reset(
+                            OpCode::RECV, 0, meta_batch, [this, s_ctx](int32_t status, int32_t imm) {
+                                s_ctx->meta_arrived_flag_.val.store(1, std::memory_order_release);
+                            });
+                        meta_channel_->post_recv_batch(0, &(s_ctx->meta_recv_assign_));
 
-                s_ctx->meta_recv_assign_.reset(OpCode::RECV, 0, meta_batch, [this, s_ctx](int32_t status, int32_t imm) {
-                    s_ctx->meta_arrived_flag_.val.store(1, std::memory_order_release);
-                });
-                auto assign = meta_channel_->post_recv_batch(0, &(s_ctx->meta_recv_assign_));
+                        task_completed = true;
+                    }
+                    break;
+
+                default:
+                    break;
+            }
+
+            if (task_completed) {
+                pending_send_queue_.pop_front();
             }
         }
-        else {
+
+        // Backoff to reduce CPU usage when idle.
+        if (n == 0 && pending_send_queue_.empty()) {
             cpu_relax();
         }
     }
@@ -369,51 +416,82 @@ int32_t RDMAEndpointV0::sendProxy()
 int32_t RDMAEndpointV0::recvProxy()
 {
     bindToSocket(socketId(ctx_->device_name_));
-    SLIME_LOG_INFO("RecvProxy Thread running on NUMA node.");
+    SLIME_LOG_INFO("RecvProxy Reactor Thread Started.");
 
-    void* buf_ptrs[BURST_SIZE];
+    void* new_burst_buf[BURST_SIZE];
 
     while (!stop_recv_proxy_signal_.load(std::memory_order_relaxed)) {
 
-        int n = jring_dequeue_burst(recv_buffer_ring_, buf_ptrs, BURST_SIZE, nullptr);
+        int n = jring_dequeue_burst(recv_buffer_ring_, new_burst_buf, BURST_SIZE, nullptr);
+        for (int i = 0; i < n; ++i) {
+            auto* r_ctx = (RecvContext*)new_burst_buf[i];
+            // Initial state: wait for local GPU buffer safety.
+            r_ctx->state_ = RecvContextState::WAIT_GPU_BUF;
+            pending_recv_queue_.push_back(r_ctx);
+        }
 
-        if (n > 0) {
-            for (int i = 0; i < n; ++i) {
-                RecvContext* r_ctx = static_cast<RecvContext*>(buf_ptrs[i]);
-                int          slot  = r_ctx->slot_id;
+        auto it = pending_recv_queue_.begin();
+        if (it != pending_recv_queue_.end()) {
+            RecvContext* r_ctx          = *it;
+            bool         task_completed = false;
 
-                Assignment      assign(reinterpret_cast<uintptr_t>(&(r_ctx->local_meta_info_)),
-                                  r_ctx->remote_meta_key_,
-                                  0,
-                                  0,
-                                  sizeof(meta_info_t));
-                AssignmentBatch assign_batch{assign};
-                r_ctx->meta_send_assign_.reset(OpCode::WRITE_WITH_IMM, 0, assign_batch, nullptr, true);
-                meta_channel_->post_rc_oneside_batch(0, &(r_ctx->meta_send_assign_));
-
-                while (!r_ctx->signal->is_gpu_ready()) {
-                    cpu_relax();
+            switch (r_ctx->state_) {
+                case RecvContextState::WAIT_GPU_BUF: {
+                    // Ensure the buffer is not being used by kernels before RDMA overwrites it.
+                    if (r_ctx->signal->is_gpu_ready()) {
+                        r_ctx->state_ = RecvContextState::INIT_SEND_META;
+                        goto SEND_META;
+                    }
+                    break;
                 }
 
-                const uint32_t TARGET_MASK = r_ctx->expected_mask;
+                SEND_META:
+                case RecvContextState::INIT_SEND_META: {
+                    // Critical Order: Post Recv WQEs BEFORE sending Meta info.
+                    // This prevents RNR (Receiver Not Ready) errors if the sender responds immediately.
+                    for (size_t qpi = 0; qpi < num_qp_; ++qpi) {
+                        std::vector<Assignment> batch{Assignment(reinterpret_cast<uintptr_t>(dummy_), 0, 0, 8)};
 
-                for (size_t qpi = 0; qpi < num_qp_; ++qpi) {
-                    std::vector<Assignment> batch{
-                        Assignment(reinterpret_cast<uintptr_t>(dummy_), 0, 0, sizeof(int64_t))};
+                        r_ctx->data_recv_assign_.reset(
+                            OpCode::RECV, qpi, batch, [r_ctx, qpi](int32_t status, int32_t imm) {
+                                if (status == 0) {
+                                    r_ctx->signal->set_comm_done(qpi);
+                                }
+                                else {
+                                    SLIME_LOG_ERROR("Data Recv Failed during completion");
+                                }
+                            });
+                        data_channel_->post_recv_batch(qpi, &(r_ctx->data_recv_assign_));
+                    }
 
-                    r_ctx->data_recv_assign_.reset(OpCode::RECV, qpi, batch, [r_ctx, qpi](int32_t status, int32_t imm) {
-                        if (status == 0) {
-                            r_ctx->signal->set_comm_done(qpi);
-                        }
-                        else {
-                            SLIME_LOG_ERROR("Data Recv Failed during pre-post");
-                        }
-                    });
-                    data_channel_->post_recv_batch(qpi, &(r_ctx->data_recv_assign_));
+                    // After WQEs are posted, safe to exchange Meta info.
+                    int slot = r_ctx->slot_id;
+                    Assignment      assign(reinterpret_cast<uintptr_t>(&(r_ctx->local_meta_info_)),
+                                      r_ctx->remote_meta_key_,
+                                      0,
+                                      0,
+                                      sizeof(meta_info_t));
+                    AssignmentBatch assign_batch{assign};
+
+                    r_ctx->meta_send_assign_.reset(OpCode::WRITE_WITH_IMM, 0, assign_batch, nullptr, true);
+                    meta_channel_->post_rc_oneside_batch(0, &(r_ctx->meta_send_assign_));
+
+                    // Reset state for next round (though r_ctx is effectively done for this op).
+                    r_ctx->state_ = RecvContextState::WAIT_GPU_BUF;
+                    task_completed = true;
+                    break;
                 }
+
+                default:
+                    break;
+            }
+
+            if (task_completed) {
+                pending_recv_queue_.pop_front();
             }
         }
-        else {
+
+        if (n == 0 && pending_recv_queue_.empty()) {
             cpu_relax();
         }
     }

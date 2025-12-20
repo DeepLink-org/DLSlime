@@ -15,11 +15,6 @@ void RDMAAssign::reset(OpCode opcode, size_t qpi, AssignmentBatch& batch, callba
     }
     else {
         callback_ = [this](int code, int imm_data) {
-            if (code != 0) {
-                for (int i = 0; i < batch_size_; ++i) {
-                    SLIME_LOG_ERROR("ERROR ASSIGNMENT: Batch: ", batch_[i].dump(), ", OpCode: ", uint64_t(opcode_));
-                }
-            }
             finished_.fetch_add(1, std::memory_order_release);
         };
     }

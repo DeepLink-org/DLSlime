@@ -153,10 +153,10 @@ PYBIND11_MODULE(_slime_c, m)
         .def("init_rdma_context", &slime::RDMAContext::init)
         .def("register_memory_region",
              static_cast<int64_t (slime::RDMAContext::*)(const uintptr_t&, uintptr_t, uint64_t)>(
-                 &slime::RDMAContext::registerMemoryRegion))
+                 &slime::RDMAContext::registerOrAccessMemoryRegion))
         .def("register_remote_memory_region",
              static_cast<int64_t (slime::RDMAContext::*)(const uintptr_t&, json)>(
-                 &slime::RDMAContext::registerRemoteMemoryRegion))
+                 &slime::RDMAContext::registerOrAccessRemoteMemoryRegion))
         .def("reload_memory_pool", &slime::RDMAContext::reloadMemoryPool)
         .def("launch_future", &slime::RDMAContext::launch_future)
         .def("stop_future", &slime::RDMAContext::stop_future);

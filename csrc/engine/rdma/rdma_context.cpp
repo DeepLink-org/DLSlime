@@ -202,10 +202,19 @@ int64_t RDMAContext::cq_poll_handle()
                 RDMAAssign::CALLBACK_STATUS status_code = RDMAAssign::SUCCESS;
                 if (wc[i].status != IBV_WC_SUCCESS) {
                     status_code = RDMAAssign::FAILED;
-                    SLIME_LOG_ERROR("WR failed with status: ",
-                                    ibv_wc_status_str(wc[i].status),
-                                    ", vi vendor err: ",
-                                    wc[i].vendor_err);
+                    if (wc[i].status != IBV_WC_WR_FLUSH_ERR) {
+                        if (wc[i].wr_id != 0) {
+                            RDMAAssign* assign = reinterpret_cast<RDMAAssign*>(wc[i].wr_id);
+                            for (int i = 0; i < assign->batch_size_; ++i) {
+                                SLIME_LOG_ERROR("ERROR ASSIGNMENT: Batch: ", assign->batch_[i].dump());
+                            }
+                            SLIME_LOG_ERROR("ERROR OpCode: , ", uint64_t(assign->opcode_));
+                        }
+                        SLIME_LOG_ERROR("WR failed with status: ",
+                                        ibv_wc_status_str(wc[i].status),
+                                        ", vi vendor err: ",
+                                        wc[i].vendor_err);
+                    }
                 }
                 if (wc[i].wr_id != 0) {
                     RDMAAssign* assign = reinterpret_cast<RDMAAssign*>(wc[i].wr_id);

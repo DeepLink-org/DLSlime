@@ -61,19 +61,19 @@ public:
     int64_t init(const std::string& dev_name, uint8_t ib_port, const std::string& link_type);
 
     /* Memory Allocation */
-    inline int64_t registerMemoryRegion(const uintptr_t& mr_key, uintptr_t data_ptr, size_t length)
+    inline int64_t registerOrAccessMemoryRegion(const uintptr_t& mr_key, uintptr_t data_ptr, size_t length)
     {
         memory_pool_->registerMemoryRegion(mr_key, data_ptr, length);
         return 0;
     }
 
-    inline int registerRemoteMemoryRegion(const uintptr_t& mr_key, uintptr_t addr, size_t length, uint32_t rkey)
+    inline int registerOrAccessRemoteMemoryRegion(const uintptr_t& mr_key, uintptr_t addr, size_t length, uint32_t rkey)
     {
         memory_pool_->registerRemoteMemoryRegion(mr_key, addr, length, rkey);
         return 0;
     }
 
-    inline int64_t registerRemoteMemoryRegion(const uintptr_t& mr_key, json mr_info)
+    inline int64_t registerOrAccessRemoteMemoryRegion(const uintptr_t& mr_key, json mr_info)
     {
         memory_pool_->registerRemoteMemoryRegion(mr_key, mr_info);
         return 0;

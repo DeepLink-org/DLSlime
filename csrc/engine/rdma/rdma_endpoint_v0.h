@@ -30,6 +30,20 @@ class RDMABuffer;
 static const size_t MAX_FIFO_DEPTH = 4096;
 static const int    BURST_SIZE     = 128;
 
+enum class SendContextState : uint8_t {
+    WAIT_GPU_READY,
+    WAIT_META,
+    POST_DATA_SEND,
+    DONE
+};
+
+enum class RecvContextState : uint8_t {
+    INIT_SEND_META,
+    WAIT_GPU_BUF,
+    POST_DATA_RECV,
+    DONE
+};
+
 /**
  * @brief Meta information exchanged between nodes.
  * Aligned to 64 bytes to match Cache Line size, preventing False Sharing.
@@ -66,6 +80,8 @@ struct alignas(64) SendContext {
     RDMAAssign meta_recv_assign_;
     RDMAAssign data_send_assign_;
 
+    SendContextState state_;
+
     std::shared_ptr<slime::device::DeviceSignal> signal;
 
     uint64_t expected_mask = 0;
@@ -73,6 +89,7 @@ struct alignas(64) SendContext {
     void reset()
     {
         expected_mask = 0;
+        state_        = SendContextState::WAIT_GPU_READY;
     }
 };
 
@@ -88,6 +105,8 @@ struct alignas(64) RecvContext {
 
     uintptr_t remote_meta_key_;
 
+    RecvContextState state_;
+
     std::shared_ptr<slime::device::DeviceSignal> signal;
 
     uint64_t expected_mask = 0;
@@ -95,6 +114,7 @@ struct alignas(64) RecvContext {
     void reset()
     {
         expected_mask = 0;
+        state_        = RecvContextState::INIT_SEND_META;
     }
 };
 
@@ -137,6 +157,9 @@ private:
     // Context Pools to avoid dynamic allocation
     SendContext* send_ctx_pool_;
     RecvContext* recv_ctx_pool_;
+
+    std::deque<SendContext*> pending_send_queue_;
+    std::deque<RecvContext*> pending_recv_queue_;
 
     std::atomic<uint64_t> send_slot_id_{0};
     std::atomic<uint64_t> recv_slot_id_{0};
