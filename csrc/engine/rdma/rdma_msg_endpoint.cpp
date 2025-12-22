@@ -1,4 +1,4 @@
-#include "rdma_endpoint_v0.h"
+#include "rdma_msg_endpoint.h"
 
 #include "device/device_api.h"
 #include "engine/assignment.h"
@@ -23,9 +23,9 @@
 
 namespace slime {
 
-RDMAEndpointV0::RDMAEndpointV0(std::shared_ptr<RDMAContext> ctx, size_t num_qp): ctx_(ctx), num_qp_(num_qp)
+RDMAMsgEndpoint::RDMAMsgEndpoint(std::shared_ptr<RDMAContext> ctx, size_t num_qp): ctx_(ctx), num_qp_(num_qp)
 {
-    SLIME_LOG_INFO("Init RDMAEndpointV0 Contexts and Devices...");
+    SLIME_LOG_INFO("Init RDMAMsgEndpoint Contexts and Devices...");
     SLIME_LOG_INFO("bypass Signal: ", SLIME_BYPASS_DEVICE_SIGNAL);
     if (SLIME_BYPASS_DEVICE_SIGNAL)
         bypass_signal_ = true;
@@ -89,7 +89,7 @@ RDMAEndpointV0::RDMAEndpointV0(std::shared_ptr<RDMAContext> ctx, size_t num_qp):
     SLIME_LOG_INFO("RDMA Endpoint Initialization Completed.");
 }
 
-RDMAEndpointV0::~RDMAEndpointV0()
+RDMAMsgEndpoint::~RDMAMsgEndpoint()
 {
     try {
 
@@ -106,21 +106,20 @@ RDMAEndpointV0::~RDMAEndpointV0()
     }
 }
 
-json RDMAEndpointV0::endpointInfo() const
+json RDMAMsgEndpoint::endpointInfo() const
 {
     json remote_meta_key = {};
 
     for (int i = 0; i < SLIME_MAX_SLOT_FIFO_DEPTH; ++i) {
         remote_meta_key.push_back((uintptr_t)(&(send_ctx_pool_[i].remote_meta_info_)));
     }
-    json endpoint_info = json{{"mr_info", ctx_->memory_pool_->mr_info()},
-                              {"meta_channel_info", meta_channel_->channelInfo()},
+    json endpoint_info = json{{"meta_channel_info", meta_channel_->channelInfo()},
                               {"data_channel_info", data_channel_->channelInfo()},
                               {"remote_meta_key", remote_meta_key}};
     return endpoint_info;
 }
 
-void RDMAEndpointV0::connect(const json& remote_endpoint_info)
+void RDMAMsgEndpoint::connect(const json& remote_endpoint_info)
 {
     SLIME_LOG_INFO("Establishing RDMA Connection...");
 
@@ -140,7 +139,7 @@ void RDMAEndpointV0::connect(const json& remote_endpoint_info)
     }
 
     // Pre-post RECV requests for Meta Channel to handle incoming handshake signals.
-    for (int i = 0; i < SLIME_MAX_SLOT_FIFO_DEPTH; ++i) {
+    for (int i = 0; i < SLIME_MAX_RECV_WR / 2; ++i) {
         SendContext*            send_ctx = &(send_ctx_pool_[i]);
         std::vector<Assignment> batch{Assignment(reinterpret_cast<uintptr_t>(dummy_), 0, 0, sizeof(int64_t))};
         send_ctx->meta_recv_assign_.reset(OpCode::RECV, 0, batch, [send_ctx](int32_t status, int32_t imm) {
@@ -170,7 +169,7 @@ void RDMAEndpointV0::connect(const json& remote_endpoint_info)
     SLIME_LOG_INFO("RDMA Contexts Launched.");
 }
 
-int32_t RDMAEndpointV0::send(uintptr_t data_ptr, size_t offset, size_t length, void* stream_handle)
+int32_t RDMAMsgEndpoint::send(uintptr_t data_ptr, size_t offset, size_t length, void* stream_handle)
 {
     // Fast path: check MR cache.
     storage_view_t view{data_ptr, offset, length};
@@ -203,7 +202,7 @@ int32_t RDMAEndpointV0::send(uintptr_t data_ptr, size_t offset, size_t length, v
     return slot;
 }
 
-int32_t RDMAEndpointV0::recv(uintptr_t data_ptr, size_t offset, size_t length, void* stream_handle)
+int32_t RDMAMsgEndpoint::recv(uintptr_t data_ptr, size_t offset, size_t length, void* stream_handle)
 {
     auto buffer_mr = ctx_->get_mr(data_ptr);
     if (not(buffer_mr and buffer_mr->length == length)) {
@@ -234,14 +233,14 @@ int32_t RDMAEndpointV0::recv(uintptr_t data_ptr, size_t offset, size_t length, v
     return slot;
 }
 
-int32_t RDMAEndpointV0::waitSend(int32_t slot_id)
+int32_t RDMAMsgEndpoint::waitSend(int32_t slot_id)
 {
     // Blocking wait on CPU until the communication is marked done.
     send_ctx_pool_[slot_id].signal->wait_comm_done_cpu((1 << send_ctx_pool_[slot_id].expected_mask) - 1);
     return 0;
 }
 
-int32_t RDMAEndpointV0::waitRecv(int32_t slot_id)
+int32_t RDMAMsgEndpoint::waitRecv(int32_t slot_id)
 {
     recv_ctx_pool_[slot_id].signal->wait_comm_done_cpu((1 << recv_ctx_pool_[slot_id].expected_mask) - 1);
     return 0;
@@ -249,13 +248,13 @@ int32_t RDMAEndpointV0::waitRecv(int32_t slot_id)
 
 // In rdma_endpoint_v0.cc
 
-int32_t RDMAEndpointV0::process()
+int32_t RDMAMsgEndpoint::process()
 {
     return sendProcess() + recvProcess();
 }
 
 // Returns: Number of tasks processed (0 indicates idle).
-int32_t RDMAEndpointV0::sendProcess()
+int32_t RDMAMsgEndpoint::sendProcess()
 {
     int work_done = 0;
 
@@ -368,7 +367,7 @@ int32_t RDMAEndpointV0::sendProcess()
 }
 
 // Returns: Number of tasks processed (0 indicates idle).
-int32_t RDMAEndpointV0::recvProcess()
+int32_t RDMAMsgEndpoint::recvProcess()
 {
     int work_done = 0;
 

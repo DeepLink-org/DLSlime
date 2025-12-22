@@ -258,7 +258,7 @@ int64_t RDMAChannel::post_recv_batch(int qpi, RDMAAssign* assign)
     }
     ret = ibv_post_recv(qp_[qpi], wr, &bad_wr);
     if (ret) {
-        SLIME_LOG_ERROR("Failed to post RDMA send : " << strerror(ret));
+        SLIME_LOG_ERROR("Failed to post RDMA recv : " << strerror(ret));
         return -1;
     }
 
@@ -304,7 +304,7 @@ int64_t RDMAChannel::post_rc_oneside_batch(int qpi, RDMAAssign* assign)
     }
 
     if (ret) {
-        SLIME_LOG_ERROR("Failed to post RDMA send : " << strerror(ret));
+        SLIME_LOG_ERROR("Failed to post RDMA send : " << strerror(ret), ". Error Assignment: ", assign->dump(), ".");
         return -1;
     }
     return 0;

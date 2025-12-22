@@ -1,281 +1,377 @@
-#include "engine/rdma/rdma_io_endpoint.h"
+#include "rdma_io_endpoint.h"
 
-#include <emmintrin.h> // for _mm_pause
-#include <stdexcept>
 #include <algorithm>
+#include <atomic>
+#include <cstdint>
+#include <cstdlib>
+#include <cstring>
+#include <emmintrin.h>
+#include <new>
+#include <stdexcept>
 
+#include "engine/assignment.h"
+
+#include "engine/rdma/rdma_assignment.h"
+#include "engine/rdma/rdma_env.h"
 #include "logging.h"
-#include "engine/assignment.h" // 确保包含 Assignment 定义
+#include "utils.h"
 
 namespace slime {
 
-jring_t* RDMAIOEndpoint::createRing(const char* name, size_t count) {
-    size_t ring_sz = jring_get_buf_ring_size(sizeof(void*), count);
-    void* mem = nullptr;
-    if (posix_memalign(&mem, 64, ring_sz) != 0) {
-        throw std::runtime_error(std::string("Failed to allocate ring memory: ") + name);
-    }
-    jring_t* r = (jring_t*)mem;
-    if (jring_init(r, count, sizeof(void*), 1, 1) < 0) {
-        free(mem);
-        throw std::runtime_error(std::string("Failed to init ring: ") + name);
-    }
-    return r;
-}
-
-void RDMAIOEndpoint::freeRing(jring_t* ring) {
-    if (ring) free(ring);
-}
-
-RDMAIOEndpoint::RDMAIOEndpoint(std::shared_ptr<RDMAContext> ctx, size_t num_qp)
-    : ctx_(ctx), num_qp_(num_qp) 
+void RDMAIOEndpoint::dummyReset(ImmRecvContext* ctx)
 {
-    SLIME_LOG_INFO("Initializing RDMA IO Endpoint with ", num_qp, " QPs (Striping Enabled)");
+    for (int qpi = 0; qpi < num_qp_; ++qpi) {
+        ctx->assigns_[qpi].opcode_ = OpCode::RECV;
+
+        ctx->assigns_[qpi].batch_size_ = 1;
+
+        ctx->assigns_[qpi].batch_[0].length        = sizeof(*dummy_);
+        ctx->assigns_[qpi].batch_[0].mr_key        = (uintptr_t)dummy_;
+        ctx->assigns_[qpi].batch_[0].remote_mr_key = (uintptr_t)dummy_;
+        ctx->assigns_[qpi].batch_[0].target_offset = 0;
+        ctx->assigns_[qpi].batch_[0].source_offset = 0;
+
+        ctx->assigns_[qpi].callback_ = [ctx, qpi](int32_t status, int32_t imm) { ctx->signal->set_comm_done(qpi); };
+
+        ctx->assigns_[qpi].is_inline_ = false;
+
+        ctx->assigns_[qpi].imm_data_ = 0;
+    }
+}
+
+// ============================================================
+// Helper function (Striping)
+// ============================================================
+
+int32_t RDMAIOEndpoint::dispatchTask(OpCode                  op_code,
+                                     std::vector<uintptr_t>& local_ptr,
+                                     std::vector<uintptr_t>& remote_ptr,
+                                     std::vector<size_t>&    target_offset,
+                                     std::vector<size_t>&    source_offset,
+                                     std::vector<size_t>&    length,
+                                     int32_t                 imm_data,
+                                     void*                   stream)
+{
+    size_t req_idx    = 0;
+    size_t req_offset = 0;
+    size_t total_reqs = local_ptr.size();
+
+    int32_t last_slot = -1;
+
+    while (req_idx < total_reqs) {
+
+        uint64_t          slot = rw_slot_id_.fetch_add(1, std::memory_order_relaxed) % MAX_IO_FIFO_DEPTH;
+        ReadWriteContext* ctx  = &read_write_ctx_pool_[slot];
+        ctx->slot_id           = slot;
+        ctx->expected_mask     = (1 << num_qp_) - 1;
+        ctx->finished_qp_mask.store(0);
+
+        last_slot = (int32_t)slot;
+
+        OpCode slot_op_code = op_code;
+
+        size_t current_batch_size = 0;
+
+        while (req_idx < total_reqs && current_batch_size < SLIME_MAX_SEND_WR) {
+
+            size_t total_len  = length[req_idx];
+            size_t remain_len = total_len - req_offset;
+            size_t chunk_len  = std::min(remain_len, SLIME_MAX_LENGTH_PER_ASSIGNMENT);
+
+            bool is_request_tail = (req_offset + chunk_len >= total_len);
+            bool is_overall_tail = (req_idx == total_reqs - 1) && is_request_tail;
+
+            if (op_code == OpCode::WRITE_WITH_IMM && !is_overall_tail) {
+                slot_op_code = OpCode::WRITE;
+            }
+
+            uintptr_t l_base     = local_ptr[req_idx];
+            uintptr_t r_base     = remote_ptr[req_idx];
+            uintptr_t t_off_base = target_offset[req_idx] + req_offset;
+            uintptr_t s_off_base = source_offset[req_idx] + req_offset;
+
+            size_t qp_chunk_size = (chunk_len + num_qp_ - 1) / num_qp_;
+
+            for (size_t qpi = 0; qpi < num_qp_; ++qpi) {
+                size_t qp_rel_off  = qpi * qp_chunk_size;
+                auto&  assign_elem = ctx->assigns_[qpi].batch_[current_batch_size];
+
+                if (qp_rel_off >= chunk_len) {
+                    assign_elem.length = 0;
+                }
+                else {
+                    assign_elem.length = std::min(qp_chunk_size, chunk_len - qp_rel_off);
+                }
+
+                assign_elem.mr_key        = l_base;
+                assign_elem.remote_mr_key = r_base;
+                assign_elem.target_offset = t_off_base + qp_rel_off;
+                assign_elem.source_offset = s_off_base + qp_rel_off;
+            }
+
+            current_batch_size++;
+            req_offset += chunk_len;
+
+            if (req_offset >= total_len) {
+                req_idx++;
+                req_offset = 0;
+            }
+        }
+        bool is_final_slot = (req_idx >= total_reqs);
+
+        for (size_t qpi = 0; qpi < num_qp_; ++qpi) {
+            auto& assign       = ctx->assigns_[qpi];
+            assign.batch_size_ = current_batch_size;
+            assign.opcode_     = slot_op_code;
+            assign.is_inline_  = false;
+
+            assign.callback_ = [this, ctx, qpi, is_final_slot](int32_t status, int32_t imm) {
+                uint32_t old_mask = ctx->finished_qp_mask.fetch_or(1 << qpi, std::memory_order_acq_rel);
+                uint32_t new_mask = old_mask | (1 << qpi);
+
+                token_bucket_[qpi].fetch_add(ctx->assigns_[qpi].batch_size_);
+
+                if (is_final_slot) {
+                    ctx->signal->set_comm_done(qpi);
+                }
+            };
+
+            if (slot_op_code == OpCode::WRITE_WITH_IMM) {
+                assign.imm_data_ = imm_data;
+            }
+        }
+
+        ctx->signal->reset_all();
+        ctx->signal->bind_stream(stream);
+        ctx->signal->record_gpu_ready();
+
+        while (jring_enqueue_burst(read_write_buffer_ring_, (void**)&ctx, 1, nullptr) == 0) {
+            _mm_pause();
+        }
+    }
+
+    return last_slot;
+}
+
+RDMAIOEndpoint::RDMAIOEndpoint(std::shared_ptr<RDMAContext> ctx, size_t num_qp): ctx_(ctx), num_qp_(num_qp)
+{
+    SLIME_LOG_INFO("Initializing RDMA IO Endpoint. QPs: ", num_qp, ", Token Bucket: ", SLIME_MAX_SEND_WR);
 
     data_channel_ = std::make_shared<RDMAChannel>();
     data_channel_->init(ctx_, num_qp_, 0);
 
-    size_t ring_size = MAX_IO_FIFO_DEPTH * 2;
+    for (int i = 0; i < num_qp_; ++i) {
+        token_bucket_[i].store(SLIME_MAX_SEND_WR);
+    }
+
+    size_t ring_size        = MAX_IO_FIFO_DEPTH;
     read_write_buffer_ring_ = createRing("io_rw_ring", ring_size);
     imm_recv_buffer_ring_   = createRing("io_recv_ring", ring_size);
 
     void* raw_rw_ctx = nullptr;
-    posix_memalign(&raw_rw_ctx, 64, sizeof(ReadWriteContext) * MAX_IO_FIFO_DEPTH);
+    if (posix_memalign(&raw_rw_ctx, 64, sizeof(ReadWriteContext) * MAX_IO_FIFO_DEPTH) != 0) {
+        throw std::runtime_error("Failed to allocate memory for ReadWriteContext pool");
+    }
     read_write_ctx_pool_ = static_cast<ReadWriteContext*>(raw_rw_ctx);
 
     void* raw_recv_ctx = nullptr;
-    posix_memalign(&raw_recv_ctx, 64, sizeof(ImmRecvContext) * MAX_IO_FIFO_DEPTH);
+    if (posix_memalign(&raw_recv_ctx, 64, sizeof(ImmRecvContext) * MAX_IO_FIFO_DEPTH) != 0) {
+        free(raw_rw_ctx);
+        throw std::runtime_error("Failed to allocate memory for ImmRecvContext pool");
+    }
     imm_recv_ctx_pool_ = static_cast<ImmRecvContext*>(raw_recv_ctx);
 
-    // Initialize Context Pools
     for (int i = 0; i < MAX_IO_FIFO_DEPTH; ++i) {
-        // Construct shared_ptr signals. Assuming createSignal returns a shared_ptr.
+        new (&read_write_ctx_pool_[i]) ReadWriteContext();
         read_write_ctx_pool_[i].signal = slime::device::createSignal(false);
-        // Resize vector to hold pre-allocated RDMAAssign objects for each QP
         read_write_ctx_pool_[i].assigns_.resize(num_qp_);
-        
+        read_write_ctx_pool_[i].finished_qp_mask.store(0);
+
+        new (&imm_recv_ctx_pool_[i]) ImmRecvContext();
         imm_recv_ctx_pool_[i].signal = slime::device::createSignal(false);
         imm_recv_ctx_pool_[i].assigns_.resize(num_qp_);
     }
 
     void* dummy_mem = nullptr;
-    posix_memalign(&dummy_mem, 64, sizeof(int64_t));
+    if (posix_memalign(&dummy_mem, 64, sizeof(int64_t)) != 0) {
+        throw std::runtime_error("Failed to allocate dummy memory");
+    }
     dummy_ = (int64_t*)dummy_mem;
-    
-    ctx_->registerOrAccessMemoryRegion(reinterpret_cast<uintptr_t>(dummy_), 
-                                       reinterpret_cast<uintptr_t>(dummy_), 
-                                       sizeof(int64_t));
+
+    ctx_->registerOrAccessMemoryRegion(
+        reinterpret_cast<uintptr_t>(dummy_), reinterpret_cast<uintptr_t>(dummy_), sizeof(int64_t));
+    SLIME_LOG_INFO("IOEndpoint initialized");
 }
 
-RDMAIOEndpoint::~RDMAIOEndpoint() {
+RDMAIOEndpoint::~RDMAIOEndpoint()
+{
     freeRing(read_write_buffer_ring_);
     freeRing(imm_recv_buffer_ring_);
-    
-    // Note: shared_ptr signals will auto-release when context pools are freed, 
-    // but since the pools are raw pointers (posix_memalign), we need to manually
-    // destruct the objects before freeing the memory block to avoid leaks.
+
     for (int i = 0; i < MAX_IO_FIFO_DEPTH; ++i) {
         read_write_ctx_pool_[i].~ReadWriteContext();
         imm_recv_ctx_pool_[i].~ImmRecvContext();
     }
-
     free(read_write_ctx_pool_);
     free(imm_recv_ctx_pool_);
     free(dummy_);
 }
 
-void RDMAIOEndpoint::connect(const json& remote_endpoint_info) {
-    SLIME_LOG_INFO("Establishing One-Sided RDMA Connection...");
+// ============================================================
+// Connection
+// ============================================================
+
+void RDMAIOEndpoint::connect(const json& remote_endpoint_info)
+{
     for (auto& item : remote_endpoint_info["mr_info"].items()) {
-        ctx_->registerOrAccessRemoteMemoryRegion(item.value()["mr_key"].get<uintptr_t>(), item.value());
+        ctx_->registerOrAccessRemoteMemoryRegion(item.value()["mr_key"], item.value());
     }
     data_channel_->connect(remote_endpoint_info["data_channel_info"]);
-    SLIME_LOG_INFO("One-Sided Connection Established.");
 }
 
-json RDMAIOEndpoint::endpointInfo() const {
-    return json{
-        {"mr_info", ctx_->memory_pool_->mr_info()}, 
-        {"data_channel_info", data_channel_->channelInfo()}
-    };
-}
-
-int32_t RDMAIOEndpoint::registerMemoryRegion(uintptr_t ptr, size_t length) {
-    return ctx_->registerOrAccessMemoryRegion(ptr, ptr, length);
+json RDMAIOEndpoint::endpointInfo() const
+{
+    return json{{"data_channel_info", data_channel_->channelInfo()}};
 }
 
 // ============================================================
-// Producer Logic
+// Producer (Enqueue to Ring)
 // ============================================================
 
-int32_t RDMAIOEndpoint::read(uintptr_t local_ptr, uintptr_t remote_ptr, size_t len, uint32_t rkey, void* stream) {
-    uint64_t slot = rw_slot_id_.fetch_add(1, std::memory_order_relaxed) % MAX_IO_FIFO_DEPTH;
-    ReadWriteContext* ctx = &read_write_ctx_pool_[slot];
+int32_t RDMAIOEndpoint::read(std::vector<uintptr_t>& local_ptr,
+                             std::vector<uintptr_t>& remote_ptr,
+                             std::vector<uintptr_t>& target_offset,
+                             std::vector<uintptr_t>& source_offset,
+                             std::vector<size_t>&    length,
+                             void*                   stream)
+{
+    return dispatchTask(OpCode::READ, local_ptr, remote_ptr, target_offset, source_offset, length, 0, stream);
+}
 
-    ctx->slot_id    = slot;
-    ctx->local_ptr  = local_ptr;
-    ctx->remote_ptr = remote_ptr;
-    ctx->length     = len;
-    ctx->rkey       = rkey;
-    ctx->op_code    = OpCode::READ;
+int32_t RDMAIOEndpoint::write(std::vector<uintptr_t>& local_ptr,
+                              std::vector<uintptr_t>& remote_ptr,
+                              std::vector<uintptr_t>& target_offset,
+                              std::vector<uintptr_t>& source_offset,
+                              std::vector<size_t>&    length,
+                              void*                   stream)
+{
+    return dispatchTask(OpCode::WRITE, local_ptr, remote_ptr, target_offset, source_offset, length, 0, stream);
+}
+
+int32_t RDMAIOEndpoint::writeWithImm(std::vector<uintptr_t>& local_ptr,
+                                     std::vector<uintptr_t>& remote_ptr,
+                                     std::vector<uintptr_t>& target_offset,
+                                     std::vector<uintptr_t>& source_offset,
+                                     std::vector<size_t>&    length,
+                                     int32_t                 imm_data,
+                                     void*                   stream)
+{
+    return dispatchTask(
+        OpCode::WRITE_WITH_IMM, local_ptr, remote_ptr, target_offset, source_offset, length, imm_data, stream);
+}
+
+int32_t RDMAIOEndpoint::immRecv(void* stream)
+{
+    uint64_t        slot = recv_slot_id_.fetch_add(1, std::memory_order_relaxed) % MAX_IO_FIFO_DEPTH;
+    ImmRecvContext* ctx  = &imm_recv_ctx_pool_[slot];
+
+    ctx->slot_id       = slot;
     ctx->expected_mask = (1 << num_qp_) - 1;
-
     ctx->signal->reset_all();
     ctx->signal->bind_stream(stream);
-    ctx->signal->record_gpu_ready();
 
-    while (jring_enqueue_burst(read_write_buffer_ring_, (void**)&ctx, 1, nullptr) == 0) {
+    dummyReset(ctx);
+
+    while (jring_enqueue_burst(imm_recv_buffer_ring_, (void**)&ctx, 1, nullptr) == 0)
         _mm_pause();
-    }
-    return slot;
-}
-
-int32_t RDMAIOEndpoint::write(uintptr_t local_ptr, uintptr_t remote_ptr, size_t len, uint32_t rkey, void* stream) {
-    uint64_t slot = rw_slot_id_.fetch_add(1, std::memory_order_relaxed) % MAX_IO_FIFO_DEPTH;
-    ReadWriteContext* ctx = &read_write_ctx_pool_[slot];
-    
-    ctx->slot_id    = slot;
-    ctx->local_ptr  = local_ptr;
-    ctx->remote_ptr = remote_ptr;
-    ctx->length     = len;
-    ctx->rkey       = rkey;
-    ctx->op_code    = OpCode::WRITE;
-    ctx->expected_mask = (1 << num_qp_) - 1;
-
-    ctx->signal->reset_all();
-    ctx->signal->bind_stream(stream);
-    ctx->signal->record_gpu_ready();
-
-    while (jring_enqueue_burst(read_write_buffer_ring_, (void**)&ctx, 1, nullptr) == 0) {
-        _mm_pause();
-    }
-    return slot;
-}
-
-int32_t RDMAIOEndpoint::writeWithImm(uintptr_t local_ptr, uintptr_t remote_ptr, size_t len, uint32_t rkey, int32_t imm_data, void* stream) {
-    uint64_t slot = rw_slot_id_.fetch_add(1, std::memory_order_relaxed) % MAX_IO_FIFO_DEPTH;
-    ReadWriteContext* ctx = &read_write_ctx_pool_[slot];
-
-    ctx->slot_id    = slot;
-    ctx->local_ptr  = local_ptr;
-    ctx->remote_ptr = remote_ptr;
-    ctx->length     = len;
-    ctx->rkey       = rkey;
-    ctx->imm_data   = imm_data;
-    ctx->op_code    = OpCode::WRITE_WITH_IMM;
-    ctx->expected_mask = (1 << num_qp_) - 1;
-
-    ctx->signal->reset_all();
-    ctx->signal->bind_stream(stream);
-    ctx->signal->record_gpu_ready();
-
-    while (jring_enqueue_burst(read_write_buffer_ring_, (void**)&ctx, 1, nullptr) == 0) {
-        _mm_pause();
-    }
-    return slot;
-}
-
-int32_t RDMAIOEndpoint::recvImm(void* stream) {
-    uint64_t slot = recv_slot_id_.fetch_add(1, std::memory_order_relaxed) % MAX_IO_FIFO_DEPTH;
-    ImmRecvContext* ctx = &imm_recv_ctx_pool_[slot];
-
-    ctx->slot_id = slot;
-    ctx->expected_mask = (1 << num_qp_) - 1; 
-
-    ctx->signal->reset_all();
-    ctx->signal->bind_stream(stream);
-    
-    while (jring_enqueue_burst(imm_recv_buffer_ring_, (void**)&ctx, 1, nullptr) == 0) {
-        _mm_pause();
-    }
     return slot;
 }
 
 // ============================================================
-// Consumer Logic
+// Consumer / Progress Engine (CORE LOGIC)
 // ============================================================
 
-int32_t RDMAIOEndpoint::process() {
+int32_t RDMAIOEndpoint::readWriteProcess()
+{
     int32_t work_done = 0;
 
-    // --- Process Read/Write Requests ---
     int n_rw = jring_dequeue_burst(read_write_buffer_ring_, burst_buf_, IO_BURST_SIZE, nullptr);
     if (n_rw > 0) {
-        work_done += n_rw;
         for (int i = 0; i < n_rw; ++i) {
             auto* ctx = (ReadWriteContext*)burst_buf_[i];
-            
-            while (!ctx->signal->is_gpu_ready()) { _mm_pause(); }
-
-            size_t total_len  = ctx->length;
-            size_t chunk_size = (total_len + num_qp_ - 1) / num_qp_;
-
-            for (size_t qpi = 0; qpi < num_qp_; ++qpi) {
-                size_t offset = qpi * chunk_size;
-                if (offset >= total_len) break;
-
-                size_t current_len = std::min(chunk_size, total_len - offset);
-
-                Assignment assign(ctx->local_ptr, ctx->remote_ptr, offset, offset, current_len);
-                AssignmentBatch batch{assign};
-
-                // Use RDMAAssign type here
-                RDMAAssign* assign_ptr = &(ctx->assigns_[qpi]);
-
-                auto cb = [ctx, qpi](int32_t status, int32_t imm) { 
-                    ctx->signal->set_comm_done(qpi); 
-                };
-                
-                if (ctx->op_code == OpCode::WRITE_WITH_IMM) {
-                    assign_ptr->reset(ctx->op_code, qpi, batch, cb, false, ctx->imm_data);
-                } else {
-                    assign_ptr->reset(ctx->op_code, qpi, batch, cb, false);
-                }
-                
-                data_channel_->post_rc_oneside_batch(qpi, assign_ptr);
-            }
-            ctx->state_ = IOContextState::POSTED;
+            pending_rw_queue_.push_back(ctx);
         }
     }
 
-    // --- Process Recv Requests ---
-    int n_recv = jring_dequeue_burst(imm_recv_buffer_ring_, burst_buf_, IO_BURST_SIZE, nullptr);
+    while (!pending_rw_queue_.empty()) {
+        auto* ctx = pending_rw_queue_.front();
+
+        if (!ctx->signal->is_gpu_ready()) {
+            break;
+        }
+
+        bool has_token = true;
+        for (int qpi = 0; qpi < num_qp_; ++qpi) {
+            if (token_bucket_[qpi].load(std::memory_order_acquire) < ctx->assigns_[qpi].batch_size_) {
+                has_token = false;
+                break;
+            }
+        }
+        if (not has_token)
+            break;
+
+        pending_rw_queue_.pop_front();
+
+        work_done++;
+
+        for (size_t qpi = 0; qpi < num_qp_; ++qpi) {
+            token_bucket_[qpi].fetch_sub(ctx->assigns_[qpi].batch_size_, std::memory_order_release);
+            data_channel_->post_rc_oneside_batch(qpi, &(ctx->assigns_[qpi]));
+        }
+
+        ctx->state_ = IOContextState::POSTED;
+    }
+    return work_done;
+}
+
+int32_t RDMAIOEndpoint::immRecvProcess()
+{
+    int32_t work_done = 0;
+    int     n_recv    = jring_dequeue_burst(imm_recv_buffer_ring_, burst_buf_, IO_BURST_SIZE, nullptr);
+
     if (n_recv > 0) {
         work_done += n_recv;
         for (int i = 0; i < n_recv; ++i) {
             auto* ctx = (ImmRecvContext*)burst_buf_[i];
-            
             for (size_t qpi = 0; qpi < num_qp_; ++qpi) {
-                Assignment assign(reinterpret_cast<uintptr_t>(dummy_), 0, 0, 0, sizeof(int64_t));
-                std::vector<Assignment> batch_vec{assign};
-                
-                // Use RDMAAssign type here
-                RDMAAssign* assign_ptr = &(ctx->assigns_[qpi]);
-
-                assign_ptr->reset(OpCode::RECV, qpi, batch_vec, 
-                                  [ctx, qpi](int32_t status, int32_t imm) { 
-                                      ctx->signal->set_comm_done(qpi); 
-                                  });
-
-                data_channel_->post_recv_batch(qpi, assign_ptr);
+                data_channel_->post_recv_batch(qpi, &(ctx->assigns_[qpi]));
             }
             ctx->state_ = IOContextState::POSTED;
         }
     }
-
     return work_done;
 }
 
-int32_t RDMAIOEndpoint::wait(int32_t slot_id) {
+int32_t RDMAIOEndpoint::process()
+{
+    int32_t work_done = 0;
+    work_done += readWriteProcess();
+    work_done += immRecvProcess();
+    return work_done;
+}
+
+int32_t RDMAIOEndpoint::waitReadWrite(int32_t slot_id)
+{
     auto* ctx = &read_write_ctx_pool_[slot_id];
     ctx->signal->wait_comm_done_cpu(ctx->expected_mask);
     return 0;
 }
 
-int32_t RDMAIOEndpoint::waitRecv(int32_t slot_id) {
+int32_t RDMAIOEndpoint::waitImmRecv(int32_t slot_id)
+{
     auto* ctx = &imm_recv_ctx_pool_[slot_id];
     ctx->signal->wait_comm_done_cpu(ctx->expected_mask);
     return 0;
 }
 
-} // namespace slime
+}  // namespace slime

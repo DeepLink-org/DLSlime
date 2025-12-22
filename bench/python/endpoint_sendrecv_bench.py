@@ -2,7 +2,7 @@ import argparse
 import time
 
 import torch
-from dlslime import _slime_c, available_nic
+from dlslime import _slime_c
 
 
 def get_readable_size(size_in_bytes):
@@ -15,7 +15,7 @@ def get_readable_size(size_in_bytes):
 
 def run_benchmark(device_type="cuda", num_qp=1, iterations=200):
     # 检查设备
-    nic_devices = available_nic()
+    nic_devices = _slime_c.available_nic()
     dev = nic_devices[0]
 
     print(f"Initializing Endpoints: Send[{dev}] <-> Recv[{dev}]")
@@ -58,99 +58,98 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=200):
     print("-" * 70)
 
     for size in test_sizes:
-        if 1:
-            # 1. 准备数据
-            # 使用 uint8，这样 numel 就等于 bytes
-            if device_type == "cuda":
-                send_tensor = torch.randint(
-                    0, 255, (size,), dtype=torch.uint8, device="cuda:0"
-                )
-                recv_tensor = torch.zeros((size,), dtype=torch.uint8, device="cuda:1")
-                torch.cuda.synchronize()
-            else:
-                send_tensor = torch.randint(
-                    0, 255, (size,), dtype=torch.uint8, device="cpu"
-                )
-                recv_tensor = torch.zeros((size,), dtype=torch.uint8, device="cpu")
-
-            # 3. 预热 (Warmup)
-            # 让 MR 建立，TLB 预热，消除第一次慢启动的影响
-            warmup_iters = 1
-            for _ in range(warmup_iters):
-                send_slot = send_endpoint.send(
-                    send_tensor.data_ptr(),
-                    send_tensor.storage_offset(),
-                    send_tensor.numel(),
-                    None,
-                )
-
-                recv_slot = recv_endpoint.recv(
-                    recv_tensor.data_ptr(),
-                    recv_tensor.storage_offset(),
-                    recv_tensor.numel(),
-                    None,
-                )
-
-                send_endpoint.wait_send(send_slot)
-                recv_endpoint.wait_recv(recv_slot)
-
-            if device_type == "cuda":
-                torch.cuda.synchronize()
-
-            # 4. 正式评测
-            t_start = time.perf_counter()
-
-            for _ in range(iterations):
-                send_slot = send_endpoint.send(
-                    send_tensor.data_ptr(),
-                    send_tensor.storage_offset(),
-                    send_tensor.numel(),
-                    None,
-                )
-
-                recv_slot = recv_endpoint.recv(
-                    recv_tensor.data_ptr(),
-                    recv_tensor.storage_offset(),
-                    recv_tensor.numel(),
-                    None,
-                )
-
-                send_endpoint.wait_send(send_slot)
-                recv_endpoint.wait_recv(recv_slot)
-
-            if device_type == "cuda":
-                torch.cuda.synchronize()
-
-            t_end = time.perf_counter()
-
-            # 5. 计算指标
-            total_time = t_end - t_start
-            avg_latency_s = total_time / iterations
-            avg_latency_us = avg_latency_s * 1e6
-
-            # Bandwidth in GB/s (1 GB = 10^9 Bytes for network, or 1024^3 for storage.
-            # Usually network throughput uses GB/s = Bytes / 1e9 / s or GiB/s)
-            # 这里我们用 GB/s (10^9)
-            throughput_gbs = (size * iterations) / total_time / 1e9
-
-            # 6. 数据校验 (抽样检查，避免大内存 copy 耗时)
-            check_status = "OK"
-            if device_type == "cuda":
-                # CUDA 校验需要把数据拷回 CPU，为了不影响后续测试，简单检查头尾
-                if not torch.equal(
-                    send_tensor[:100].cpu(), recv_tensor[:100].cpu()
-                ) or not torch.equal(
-                    send_tensor[-100:].cpu(), recv_tensor[-100:].cpu()
-                ):
-                    check_status = "FAIL"
-            else:
-                if not torch.equal(send_tensor, recv_tensor):
-                    check_status = "FAIL"
-
-            print(
-                f"{get_readable_size(size):<15} | {avg_latency_us:<15.2f} |"
-                f"{throughput_gbs:<20.4f} | {check_status:<10}"
+        # 1. 准备数据
+        # 使用 uint8，这样 numel 就等于 bytes
+        if device_type == "cuda":
+            send_tensor = torch.randint(
+                0, 255, (size,), dtype=torch.uint8, device="cuda:0"
             )
+            recv_tensor = torch.zeros((size,), dtype=torch.uint8, device="cuda:1")
+            torch.cuda.synchronize()
+        else:
+            send_tensor = torch.randint(
+                0, 255, (size,), dtype=torch.uint8, device="cpu"
+            )
+            recv_tensor = torch.zeros((size,), dtype=torch.uint8, device="cpu")
+
+        # 3. 预热 (Warmup)
+        # 让 MR 建立，TLB 预热，消除第一次慢启动的影响
+        warmup_iters = 1
+        for _ in range(warmup_iters):
+            send_slot = send_endpoint.send(
+                send_tensor.data_ptr(),
+                send_tensor.storage_offset(),
+                send_tensor.numel(),
+                None,
+            )
+
+            recv_slot = recv_endpoint.recv(
+                recv_tensor.data_ptr(),
+                recv_tensor.storage_offset(),
+                recv_tensor.numel(),
+                None,
+            )
+
+            send_endpoint.wait_send(send_slot)
+            recv_endpoint.wait_recv(recv_slot)
+
+        if device_type == "cuda":
+            torch.cuda.synchronize()
+
+        # 4. 正式评测
+        t_start = time.perf_counter()
+
+        for _ in range(iterations):
+            send_slot = send_endpoint.send(
+                send_tensor.data_ptr(),
+                send_tensor.storage_offset(),
+                send_tensor.numel(),
+                None,
+            )
+
+            recv_slot = recv_endpoint.recv(
+                recv_tensor.data_ptr(),
+                recv_tensor.storage_offset(),
+                recv_tensor.numel(),
+                None,
+            )
+
+            send_endpoint.wait_send(send_slot)
+            recv_endpoint.wait_recv(recv_slot)
+
+        if device_type == "cuda":
+            torch.cuda.synchronize()
+
+        t_end = time.perf_counter()
+
+        # 5. 计算指标
+        total_time = t_end - t_start
+        avg_latency_s = total_time / iterations
+        avg_latency_us = avg_latency_s * 1e6
+
+        # Bandwidth in GB/s (1 GB = 10^9 Bytes for network, or 1024^3 for storage.
+        # Usually network throughput uses GB/s = Bytes / 1e9 / s or GiB/s)
+        # 这里我们用 GB/s (10^9)
+        throughput_gbs = (size * iterations) / total_time / 1e9
+
+        # 6. 数据校验 (抽样检查，避免大内存 copy 耗时)
+        check_status = "OK"
+        if device_type == "cuda":
+            # CUDA 校验需要把数据拷回 CPU，为了不影响后续测试，简单检查头尾
+            if not torch.equal(
+                send_tensor[:100].cpu(), recv_tensor[:100].cpu()
+            ) or not torch.equal(
+                send_tensor[-100:].cpu(), recv_tensor[-100:].cpu()
+            ):
+                check_status = "FAIL"
+        else:
+            if not torch.equal(send_tensor, recv_tensor):
+                check_status = "FAIL"
+
+        print(
+            f"{get_readable_size(size):<15} | {avg_latency_us:<15.2f} |"
+            f"{throughput_gbs:<20.4f} | {check_status:<10}"
+        )
 
 
 if __name__ == "__main__":

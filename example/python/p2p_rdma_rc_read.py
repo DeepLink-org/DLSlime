@@ -1,60 +1,53 @@
-import torch  # For GPU tensor management
-
+import torch
 import xxhash
-from dlslime import Assignment, RDMAEndpoint, available_nic  # RDMA endpoint management
+
+from dlslime import Assignment, available_nic, RDMAEndpoint
 
 devices = available_nic()
-assert devices, 'No RDMA devices.'
+assert devices, "No RDMA devices."
 
 mr_key = xxhash.xxh64_intdigest("buffer")
 
-# Initialize RDMA endpoint on NIC 'mlx5_bond_1' port 1 using RoCE transport
-initiator = RDMAEndpoint(device_name=devices[0], ib_port=1, link_type='RoCE')
-# Create a zero-initialized CUDA tensor on GPU 0 as local buffer
-local_tensor = torch.zeros([16], device='cuda:0', dtype=torch.uint8)
+# Initialize RDMA endpoint
+initiator = RDMAEndpoint(device_name=devices[0], ib_port=1, link_type="RoCE")
+target = RDMAEndpoint(device_name=devices[-1], ib_port=1, link_type="RoCE")
+
 # Register local GPU memory with RDMA subsystem
+local_tensor = torch.zeros([16], device="cuda:0", dtype=torch.uint8)
 initiator.register_memory_region(
-    mr_key=mr_key,
-    addr=local_tensor.data_ptr(),
-    offset=local_tensor.storage_offset(),
-    length=local_tensor.numel() * local_tensor.itemsize,
+    mr_key,
+    local_tensor.data_ptr() + local_tensor.storage_offset(),
+    local_tensor.numel() * local_tensor.itemsize,
 )
-
-# Initialize target endpoint on different NIC
-target = RDMAEndpoint(device_name=devices[-1], ib_port=1, link_type='RoCE')
-
-# Create a one-initialized CUDA tensor on GPU 1 as remote buffer
-remote_tensor = torch.ones([16], device='cuda', dtype=torch.uint8)
-# Register target's GPU memory
+remote_tensor = torch.ones([16], device="cuda", dtype=torch.uint8)
 target.register_memory_region(
-    mr_key=mr_key,
-    addr=remote_tensor.data_ptr(),
-    offset=remote_tensor.storage_offset(),
-    length=remote_tensor.numel() * remote_tensor.itemsize,
+    mr_key,
+    remote_tensor.data_ptr() + remote_tensor.storage_offset(),
+    remote_tensor.numel() * remote_tensor.itemsize,
 )
 
 # Establish bidirectional RDMA connection:
 # 1. Target connects to initiator's endpoint information
 # 2. Initiator connects to target's endpoint information
 # Note: Real-world scenarios typically use out-of-band exchange (e.g., via TCP)
-target.connect(initiator.endpoint_info)
-initiator.connect(target.endpoint_info)
+target.connect(initiator.endpoint_info())
+initiator.connect(target.endpoint_info())
 
-# Execute asynchronous batch read operation:
-# - Read 8 bytes from target's "buffer" at offset 0
-# - Write to initiator's "buffer" at offset 0
-# - asyncio.run() executes the async operation synchronously for demonstration
-
-# run with async
-x = initiator.read_batch(
-    [Assignment(mr_key=mr_key, target_offset=0, source_offset=8, length=8)],
-    async_op=True,
+print("Remote tensor after RDMA write:", remote_tensor)
+x = initiator.read(
+    [mr_key],
+    [mr_key],
+    [0],
+    [8],
+    [8],
+    None
 )
-x.wait()
 
-# Verify data transfer:
-# - Local tensor should now contain data from remote tensor's first 8 elements
-# - Remote tensor remains unchanged (RDMA read is non-destructive)
+initiator.wait(x)
+
 assert torch.all(local_tensor[:8] == 0)
 assert torch.all(local_tensor[8:] == 1)
-print('Local tensor after RDMA read:', local_tensor)
+print("Remote tensor after RDMA write:", local_tensor)
+
+del target, initiator
+print("run rdma rc write example successful")

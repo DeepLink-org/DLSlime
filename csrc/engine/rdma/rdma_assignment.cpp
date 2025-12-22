@@ -1,9 +1,11 @@
 #include "rdma_assignment.h"
+#include "engine/assignment.h"
 
 #include <cstdint>
 #include <stdexcept>
 
 namespace slime {
+
 void RDMAAssign::reset(
     OpCode opcode, size_t qpi, AssignmentBatch& batch, callback_fn_t callback, bool is_inline, int32_t imm_data)
 {
@@ -33,7 +35,8 @@ json RDMAAssign::dump() const
 {
     json j = {{"opcode", opcode_}};
     for (int i = 0; i < batch_size_; ++i)
-        j["rdma_assign"].push_back(batch_[i].dump().dump());
+        j["rdma_assign"].push_back(batch_[i].dump());
+    j["is_inline"] = is_inline_;
     return j;
 }
 

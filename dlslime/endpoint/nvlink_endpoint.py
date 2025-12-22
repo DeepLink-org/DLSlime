@@ -3,10 +3,8 @@ from typing import Any, Dict, List
 from dlslime import _slime_c
 from dlslime.assignment import Assignment
 
-from .base_endpoint import BaseEndpoint
 
-
-class NVLinkEndpoint(BaseEndpoint):
+class NVLinkEndpoint:
 
     def __init__(self):
         self._ctx: _slime_c.nvlink_context = _slime_c.nvlink_context()

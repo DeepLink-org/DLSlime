@@ -15,7 +15,6 @@ enum RDMAChannelState {
 class RDMAChannel {
     inline static constexpr int      UNDEFINED_QPI      = -1;
     inline static constexpr uint32_t UNDEFINED_IMM_DATA = -1;
-    friend class RDMAEndpointV0;
 
 public:
     RDMAChannel() = default;

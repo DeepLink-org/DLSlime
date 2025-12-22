@@ -166,6 +166,7 @@ int64_t RDMAContext::init(const std::string& dev_name, uint8_t ib_port, const st
     SLIME_ASSERT(cq_, "create CQ failed");
 
     launch_future();
+    SLIME_LOG_INFO("RDMA Context Initialized");
     return 0;
 }
 

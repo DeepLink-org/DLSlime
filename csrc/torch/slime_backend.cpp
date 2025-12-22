@@ -1,8 +1,11 @@
 #include "slime_backend.h"
 #include "engine/rdma/rdma_context.h"
-#include "engine/rdma/rdma_endpoint_v0.h"
+#include "engine/rdma/rdma_context_pool.h"
+#include "engine/rdma/rdma_endpoint.h"
 #include "engine/rdma/rdma_env.h"
+#include "engine/rdma/rdma_utils.h"
 #include "engine/rdma/rdma_worker.h"
+#include "engine/rdma/rdma_worker_pool.h"
 #include "logging.h"
 
 #ifdef SLIME_USE_CUDA
@@ -47,10 +50,10 @@ static uint32_t checkTag(int32_t tag)
     return (uint32_t)tag;
 }
 
-SendWork::SendWork(std::vector<at::Tensor>&        tensor,
-                   std::shared_ptr<RDMAEndpointV0> endpoint,
-                   int32_t                         slot_id,
-                   uint64_t                        seq):
+SendWork::SendWork(std::vector<at::Tensor>&      tensor,
+                   std::shared_ptr<RDMAEndpoint> endpoint,
+                   int32_t                       slot_id,
+                   uint64_t                      seq):
     Work(-1, ::c10d::OpType::SEND), tensor_(tensor), endpoint_(endpoint), slot_id_(slot_id), seq_(seq)
 {
 }
@@ -75,10 +78,10 @@ bool SendWork::wait(std::chrono::milliseconds timeout)
     return sendCompleted;
 }
 
-RecvWork::RecvWork(std::vector<at::Tensor>&        tensor,
-                   std::shared_ptr<RDMAEndpointV0> endpoint,
-                   int32_t                         slot_id,
-                   uint64_t                        seq):
+RecvWork::RecvWork(std::vector<at::Tensor>&      tensor,
+                   std::shared_ptr<RDMAEndpoint> endpoint,
+                   int32_t                       slot_id,
+                   uint64_t                      seq):
     Work(-1, ::c10d::OpType::SEND), tensor_(tensor), endpoint_(endpoint), slot_id_(slot_id), seq_(seq)
 {
 }
@@ -188,12 +191,11 @@ slimeBackend::slimeBackend(const c10::intrusive_ptr<::c10d::Store>& store, int r
     uint8_t           ib_port   = 1;
     size_t            qp_num    = SLIME_QP_NUM;
 
-    std::shared_ptr<RDMAContext> context = std::make_shared<RDMAContext>();
-    rdma_worker_ = std::make_shared<RDMAWorker>(dev_name, rank);
-    context->init(dev_name, ib_port, link_type);
+    std::shared_ptr<RDMAContext> context = GlobalContextManager::instance().get_context(dev_name, ib_port, link_type);
+    rdma_worker_                         = GlobalWorkerManager::instance().get_default_worker(socketId(dev_name));
     for (int i = 0; i < size - 1; ++i) {
 
-        auto endpoint = std::make_shared<RDMAEndpointV0>(context, qp_num);
+        auto endpoint = std::make_shared<RDMAEndpoint>(qp_num, context, rdma_worker_);
         // TODO: the different end_point in the rank can use different RDMA dev to transmit the message.
         end_point_set_.push_back(endpoint);
         rdma_worker_->addEndpoint(endpoint);

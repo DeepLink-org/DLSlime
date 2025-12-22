@@ -1,32 +1,33 @@
-#include "engine/rdma/rdma_worker.h"
+#include "rdma_worker.h"
 
-// Include full definitions for method calls (inlining requires definition)
-#include "engine/rdma/rdma_endpoint_v0.h"
-#include "engine/rdma/rdma_io_endpoint.h"
-#include "engine/rdma/rdma_utils.h"
-#include "logging.h"
+// Include full definition of UnifiedRDMAEndpoint
+#include "rdma_endpoint.h"
+#include "rdma_utils.h"   // socketId(), bindToSocket()
+#include "logging.h"      // SLIME_LOG_INFO
 
-#include <emmintrin.h>  // for _mm_pause
+#include <emmintrin.h>    // for _mm_pause
+#include <iterator>       // for std::make_move_iterator
 
 namespace slime {
 
-RDMAWorker::RDMAWorker(std::string dev_name, int id): device_name_(std::move(dev_name)), worker_id_(id) {}
+RDMAWorker::RDMAWorker(std::string dev_name, int id) 
+    : socket_id_(socketId(dev_name)), worker_id_(id) {}
 
-RDMAWorker::~RDMAWorker()
-{
+RDMAWorker::RDMAWorker(int32_t socket_id, int id) 
+    : socket_id_(socket_id), worker_id_(id) {}
+
+RDMAWorker::~RDMAWorker() {
     stop();
 }
 
-void RDMAWorker::start()
-{
+void RDMAWorker::start() {
     bool expected = false;
     if (running_.compare_exchange_strong(expected, true)) {
         worker_thread_ = std::thread([this]() { this->workerLoop(); });
     }
 }
 
-void RDMAWorker::stop()
-{
+void RDMAWorker::stop() {
     bool expected = true;
     if (running_.compare_exchange_strong(expected, false)) {
         if (worker_thread_.joinable()) {
@@ -35,50 +36,50 @@ void RDMAWorker::stop()
     }
 }
 
-void RDMAWorker::addEndpoint(std::shared_ptr<RDMAEndpointV0> endpoint)
-{
-    std::lock_guard<std::mutex> lock(add_endpoint_mutex_);
-    v0_tasks_.push_back(std::move(endpoint));
+void RDMAWorker::addEndpoint(std::shared_ptr<RDMAEndpoint> endpoint) {
+    std::lock_guard<std::mutex> lock(staging_mutex_);
+    staging_endpoints_.push_back(std::move(endpoint));
+
+    has_new_endpoints_.store(true, std::memory_order_release);
 }
 
-void RDMAWorker::addIOEndpoint(std::shared_ptr<RDMAIOEndpoint> endpoint)
-{
-    std::lock_guard<std::mutex> lock(add_endpoint_mutex_);
-    io_tasks_.push_back(std::move(endpoint));
+void RDMAWorker::_merge_new_endpoints() {
+    std::lock_guard<std::mutex> lock(staging_mutex_);
+    
+    if (!staging_endpoints_.empty()) {
+        endpoints_.insert(endpoints_.end(),
+                          std::make_move_iterator(staging_endpoints_.begin()),
+                          std::make_move_iterator(staging_endpoints_.end()));
+        
+        staging_endpoints_.clear(); 
+        
+        SLIME_LOG_INFO("RDMA Worker ", worker_id_, " added new endpoints. Total: ", endpoints_.size());
+    }
+
+    // Reset flag
+    has_new_endpoints_.store(false, std::memory_order_release);
 }
 
-void RDMAWorker::workerLoop()
-{
-    // Bind the worker thread to the NUMA node associated with the RDMA device
-    // to minimize PCIe and memory latency.
-    bindToSocket(socketId(device_name_));
-    SLIME_LOG_INFO("RDMA Worker Thread ", worker_id_, " started on ", device_name_);
+void RDMAWorker::workerLoop() {
+    if (socket_id_ >= 0) {
+        bindToSocket(socket_id_);
+    }
+    SLIME_LOG_INFO("RDMA Worker Thread ", worker_id_, " started on socket ", socket_id_);
 
     while (running_.load(std::memory_order_relaxed)) {
 
-        int total_work_done = 0;
-
-        // ============================================================
-        // 1. Poll RDMAEndpointV0 (Send/Recv Pattern)
-        // ============================================================
-        for (auto& ep : v0_tasks_) {
-            total_work_done += ep->sendProcess();
-            total_work_done += ep->recvProcess();
+        if (has_new_endpoints_.load(std::memory_order_acquire)) {
+            _merge_new_endpoints();
         }
 
-        // ============================================================
-        // 2. Poll RDMAIOEndpoint (Read/Write Pattern)
-        // ============================================================
-        for (auto& ep : io_tasks_) {
+        int total_work_done = 0;
+
+        for (auto& ep : endpoints_) {
             total_work_done += ep->process();
         }
 
-        // ============================================================
-        // 3. Centralized Backoff
-        // ============================================================
-        // Only relax the CPU if ALL endpoints (both V0 and IO) are idle.
         if (total_work_done == 0) {
-            cpu_relax();  // _mm_pause()
+            _mm_pause();
         }
     }
 }

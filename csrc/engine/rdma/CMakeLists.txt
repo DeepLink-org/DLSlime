@@ -29,8 +29,9 @@ add_library(
     rdma_assignment.cpp
     rdma_channel.cpp
     rdma_context.cpp
-    rdma_endpoint_v0.cpp
+    rdma_endpoint.cpp
     rdma_io_endpoint.cpp
+    rdma_msg_endpoint.cpp
     rdma_worker.cpp
 )
 

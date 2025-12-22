@@ -45,6 +45,7 @@ struct alignas(64) RDMAAssign {
     static constexpr size_t MAX_ASSIGN_CAPACITY = 4096;
     friend class RDMAContext;
     friend class RDMAChannel;
+    friend class RDMAIOEndpoint;
     friend std::ostream& operator<<(std::ostream& os, const RDMAAssign& assignment);
 
 public:
@@ -94,7 +95,7 @@ private:
     int32_t imm_data_{0};
     bool    with_imm_data_{false};
 
-    bool is_inline_;
+    bool is_inline_{false};
 };
 
 }  // namespace slime

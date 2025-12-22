@@ -116,13 +116,13 @@ struct alignas(64) RecvContext {
     }
 };
 
-class RDMAEndpointV0: public std::enable_shared_from_this<RDMAEndpointV0> {
+class RDMAMsgEndpoint: public std::enable_shared_from_this<RDMAMsgEndpoint> {
     friend class RDMAWorker;
 
 public:
-    explicit RDMAEndpointV0(std::shared_ptr<RDMAContext> ctx, size_t qp_nums);
+    explicit RDMAMsgEndpoint(std::shared_ptr<RDMAContext> ctx, size_t qp_nums);
 
-    ~RDMAEndpointV0();
+    ~RDMAMsgEndpoint();
 
     void connect(const json& remote_endpoint_info);
 

@@ -1,17 +1,5 @@
 #pragma once
 
-#include "engine/assignment.h"
-#include "engine/rdma/affinity.h"
-#include "engine/rdma/memory_pool.h"
-#include "engine/rdma/rdma_assignment.h"
-#include "engine/rdma/rdma_config.h"
-#include "engine/rdma/rdma_env.h"
-
-#include "jring.h"
-#include "json.hpp"
-#include "logging.h"
-
-#include <condition_variable>
 #include <cstdint>
 #include <functional>
 #include <future>
@@ -26,6 +14,17 @@
 
 #include <infiniband/verbs.h>
 
+#include "engine/assignment.h"
+
+#include "memory_pool.h"
+#include "rdma_assignment.h"
+#include "rdma_config.h"
+#include "rdma_env.h"
+
+#include "jring.h"
+#include "json.hpp"
+#include "logging.h"
+
 namespace slime {
 
 class RDMAChannel;
@@ -34,10 +33,10 @@ using json = nlohmann::json;
 
 class RDMAContext: public std::enable_shared_from_this<RDMAContext> {
 
-    friend class RDMAEndpoint;  // RDMA Endpoint need to use the register memory pool in context
-    friend class RDMAEndpointV0;
-    friend class RDMAIOEndpoint;
     friend class RDMAChannel;
+    friend class RDMAEndpoint;
+    friend class RDMAMsgEndpoint;
+    friend class RDMAIOEndpoint;
 
 public:
     /*

@@ -1,7 +1,6 @@
 #pragma once
 
 #include <atomic>
-#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -10,42 +9,49 @@
 
 namespace slime {
 
-class RDMAEndpointV0; // Send/Recv Endpoint
-class RDMAIOEndpoint; // One-Sided (Read/Write) Endpoint
+class RDMAEndpoint;  // Forward declaration
 
 class RDMAWorker {
 public:
     RDMAWorker(std::string dev_name, int id);
+    RDMAWorker(int socket_id, int id);
     ~RDMAWorker();
 
     void start();
     void stop();
-    
-    // Registers a V0 (Send/Recv) endpoint.
-    // Thread-safe.
-    void addEndpoint(std::shared_ptr<RDMAEndpointV0> endpoint);
 
-    // Registers a IO (Read/Write) endpoint.
-    // Thread-safe.
-    void addIOEndpoint(std::shared_ptr<RDMAIOEndpoint> endpoint);
+    // Registers a Unified Endpoint (supporting both Msg and IO operations).
+    // Thread-safe, non-blocking for the worker loop.
+    void addEndpoint(std::shared_ptr<RDMAEndpoint> endpoint);
+
+    int32_t getSocketId() const { return socket_id_; }
 
 private:
     // Main loop function executed by the worker thread.
     void workerLoop();
 
-    // Protects access to task lists during dynamic additions.
-    std::mutex add_endpoint_mutex_;
-    
-    // Stored separately to allow compiler inlining (Static Polymorphism)
-    // avoiding virtual function overhead in the hot path.
-    std::vector<std::shared_ptr<RDMAEndpointV0>> v0_tasks_;
-    std::vector<std::shared_ptr<RDMAIOEndpoint>> io_tasks_;
+    // Helper to merge staging endpoints into the main list
+    void _merge_new_endpoints();
 
+    // --- Worker Thread Private Data (No Lock Needed) ---
+    // Only accessed by worker_thread_
+    std::vector<std::shared_ptr<RDMAEndpoint>> endpoints_;
+
+    // --- Thread-Safe Staging Area ---
+    // Accessed by control thread (addEndpoint) and worker thread (merge)
+    std::mutex staging_mutex_;
+    std::vector<std::shared_ptr<RDMAEndpoint>> staging_endpoints_;
+
+    // Atomic flag to notify worker of new items
+    // alignas(64) prevents false sharing cache line bouncing
+    alignas(64) std::atomic<bool> has_new_endpoints_{false};
+
+    // --- Thread Control ---
     std::thread       worker_thread_;
     std::atomic<bool> running_{false};
 
-    int         worker_id_;
-    std::string device_name_;
+    int     worker_id_;
+    int32_t socket_id_;
 };
 
-} // namespace slime
+}  // namespace slime
