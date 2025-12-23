@@ -34,8 +34,10 @@ public:
 
     int allocBuffer(std::optional<int64_t> local_buffer_size = std::nullopt);
 
-    torch::Tensor
-    allToAllLL2D(torch::Tensor q, bool is_transpose = false, c10::optional<torch::Tensor> mask = c10::nullopt);
+    torch::Tensor allToAllLL2D(torch::Tensor                q,
+                               bool                         is_transpose = false,
+                               c10::optional<torch::Tensor> mask         = c10::nullopt,
+                               c10::optional<torch::Tensor> offsets      = c10::nullopt);
 
     torch::Tensor getLocalBuffer();
 

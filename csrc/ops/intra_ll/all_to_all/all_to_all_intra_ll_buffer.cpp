@@ -107,7 +107,10 @@ int AllToAllIntraLLBuffer::connectFullMesh(std::vector<json> all_buffer_info)
     return 0;
 }
 
-torch::Tensor AllToAllIntraLLBuffer::allToAllLL2D(torch::Tensor x, bool is_transpose, c10::optional<torch::Tensor> mask)
+torch::Tensor AllToAllIntraLLBuffer::allToAllLL2D(torch::Tensor                x,
+                                                 bool                         is_transpose,
+                                                 c10::optional<torch::Tensor> mask,
+                                                 c10::optional<torch::Tensor> offsets)
 {
 
     auto shape = x.sizes();
@@ -115,11 +118,32 @@ torch::Tensor AllToAllIntraLLBuffer::allToAllLL2D(torch::Tensor x, bool is_trans
     auto msg_size = shape[1];
     SLIME_ASSERT(msg_size * x.itemsize() % 16 == 0, "msg_size must be divided by 16");
 
-    all_to_all_intra_ll(
-        x, buffer_ptrs_, signal_ptrs_, max_dispatch_per_msg_, max_bs_, rank_, world_size_, is_transpose, mask);
+    all_to_all_intra_ll(x,
+                        buffer_ptrs_,
+                        signal_ptrs_,
+                        max_dispatch_per_msg_,
+                        max_bs_,
+                        rank_,
+                        world_size_,
+                        is_transpose,
+                        mask,
+                        offsets);
 
     // assuming device is already set
     auto options = torch::TensorOptions().dtype(x.dtype()).device(torch::kCUDA);
+
+    if (offsets.has_value()) {
+        auto    offsets_tensor = offsets.value();
+        int32_t total_messages = 0;
+        if (offsets_tensor.is_cuda()) {
+            // To avoid sync, we could potentially pass total_messages as an argument.
+            // But for now, let's do a simple copy.
+            total_messages = offsets_tensor.slice(0, world_size_, world_size_ + 1).item<int32_t>();
+        } else {
+            total_messages = offsets_tensor.data_ptr<int32_t>()[world_size_];
+        }
+        return torch::from_blob(reinterpret_cast<void*>(local_buffer_), {total_messages, msg_size}, options);
+    }
 
     SLIME_ASSERT(world_size_ * max_bs_ * shape[1] * x.itemsize() <= local_buffer_size_,
                  "local_buffer_size_ (" << local_buffer_size_ << "), demand components: "
