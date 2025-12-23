@@ -2,17 +2,17 @@
 
 #include <algorithm>
 #include <atomic>
-#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
-#include <emmintrin.h>
-#include <infiniband/verbs.h>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
 #include <unordered_map>
+
+#include <emmintrin.h>
+#include <infiniband/verbs.h>
 
 #include "engine/assignment.h"
 
@@ -43,6 +43,10 @@ static const std::map<OpCode, ibv_wr_opcode> ASSIGN_OP_2_IBV_WR_OP = {
 
 struct alignas(64) RDMAAssign {
     static constexpr size_t MAX_ASSIGN_CAPACITY = 4096;
+    friend class SendFuture;
+    friend class RecvFuture;
+    friend class ReadWriteFuture;
+    friend class ImmRecvFuture;
     friend class RDMAContext;
     friend class RDMAChannel;
     friend class RDMAIOEndpoint;

@@ -2,7 +2,6 @@ import argparse
 import time
 
 import torch
-
 from dlslime import _slime_c
 from dlslime._slime_c import available_nic
 
@@ -27,8 +26,8 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=200):
 
     # 2. 创建 IO Endpoint
     # ep1 作为 Initiator (Client), ep2 作为 Target (Server)
-    ep1 = _slime_c.rdma_endpoint(num_qp)
-    ep2 = _slime_c.rdma_endpoint(num_qp)
+    ep1 = _slime_c.RDMAEndpoint(num_qp=1)
+    ep2 = _slime_c.RDMAEndpoint(num_qp=1)
 
     ep1.connect(ep2.endpoint_info())
     ep2.connect(ep1.endpoint_info())
@@ -72,9 +71,9 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=200):
         remote_ptr = recv_tensor.data_ptr()
 
         # 注册 Initiator 内存 (虽然 Write 主要需要注册 Remote，但本地也需要注册在 PD 中)
-        ep1.register_memory_region(local_ptr, size)
+        ep1.register_memory_region(local_ptr, local_ptr, size)
         # 注册 Target 内存
-        ep2.register_memory_region(remote_ptr, size)
+        ep2.register_memory_region(remote_ptr, remote_ptr, size)
 
         ep1.register_remote_memory_region(
             remote_ptr, ep2.endpoint_info()["mr_info"][str(remote_ptr)]
@@ -86,7 +85,7 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=200):
         warmup_iters = 5
         for _ in range(warmup_iters):
             # Target: 发布 Recv 请求以捕获 WriteWithImm 的立即数
-            recv_slot = ep2.recv_imm()
+            recv_slot = ep2.imm_recv()
 
             # Initiator: 执行 WriteWithImm
             send_slot = ep1.write_with_imm(
@@ -94,8 +93,8 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=200):
             )
 
             # 等待完成
-            ep1.wait(send_slot)
-            ep2.wait_recv(recv_slot)
+            send_slot.wait()
+            recv_slot.wait()
 
         if device_type == "cuda":
             torch.cuda.synchronize()
@@ -108,7 +107,7 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=200):
         for _ in range(iterations):
             # 1. Target Post Recv (必须在数据到达前 Ready，或者在硬件队列中有空位)
             # IO Endpoint 内部有队列，这里调用只是入队
-            recv_slot = ep2.recv_imm()
+            recv_slot = ep2.imm_recv()
 
             # 2. Initiator RDMA Write with Immediate
             send_slot = ep1.write_with_imm(
@@ -117,9 +116,9 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=200):
 
             # 3. Synchronization
             # 等待 Write 完成 (ACK 返回)
-            ep1.wait(send_slot)
+            send_slot.wait()
             # 等待 Recv 完成 (立即数到达，意味着 Write 数据已落地)
-            ep2.wait_recv(recv_slot)
+            recv_slot.wait()
 
         if device_type == "cuda":
             torch.cuda.synchronize()

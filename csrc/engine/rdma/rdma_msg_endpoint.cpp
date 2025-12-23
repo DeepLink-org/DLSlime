@@ -2,12 +2,14 @@
 
 #include "device/device_api.h"
 #include "engine/assignment.h"
-#include "engine/rdma/rdma_assignment.h"
-#include "engine/rdma/rdma_channel.h"
-#include "engine/rdma/rdma_common.h"
-#include "engine/rdma/rdma_context.h"
-#include "engine/rdma/rdma_env.h"
-#include "engine/rdma/rdma_utils.h"
+
+#include "rdma_assignment.h"
+#include "rdma_channel.h"
+#include "rdma_common.h"
+#include "rdma_context.h"
+#include "rdma_env.h"
+#include "rdma_future.h"
+#include "rdma_utils.h"
 
 #include "logging.h"
 #include "utils.h"
@@ -44,18 +46,23 @@ RDMAMsgEndpoint::RDMAMsgEndpoint(std::shared_ptr<RDMAContext> ctx, size_t num_qp
 
     // Allocate context pools aligned to cache lines.
     void* raw_send_ctx = nullptr;
-    if (posix_memalign(&raw_send_ctx, 64, sizeof(SendContext) * SLIME_MAX_SLOT_FIFO_DEPTH) != 0)
+    if (posix_memalign(&raw_send_ctx, 64, sizeof(SendContext) * SLIME_MAX_MSG_FIFO_DEPTH) != 0)
         throw std::runtime_error("remote meta alloc fail");
     send_ctx_pool_ = static_cast<SendContext*>(raw_send_ctx);
 
     void* raw_recv_ctx = nullptr;
-    if (posix_memalign(&raw_recv_ctx, 64, sizeof(RecvContext) * SLIME_MAX_SLOT_FIFO_DEPTH) != 0)
+    if (posix_memalign(&raw_recv_ctx, 64, sizeof(RecvContext) * SLIME_MAX_MSG_FIFO_DEPTH) != 0)
         throw std::runtime_error("remote meta alloc fail");
     recv_ctx_pool_ = static_cast<RecvContext*>(raw_recv_ctx);
 
-    for (int i = 0; i < SLIME_MAX_SLOT_FIFO_DEPTH; ++i) {
+    for (int i = 0; i < SLIME_MAX_MSG_FIFO_DEPTH; ++i) {
         send_ctx_pool_[i].signal = slime::device::createSignal(bypass_signal_);
         recv_ctx_pool_[i].signal = slime::device::createSignal(bypass_signal_);
+    }
+
+    for (size_t i = 0; i < SLIME_MAX_MSG_FIFO_DEPTH; ++i) {
+        send_future_pool_.push_back(std::make_shared<SendFuture>(&(send_ctx_pool_[i])));
+        recv_future_pool_.push_back(std::make_shared<RecvFuture>(&(recv_ctx_pool_[i])));
     }
 
     // Register Memory Regions (MR) upfront.
@@ -63,7 +70,7 @@ RDMAMsgEndpoint::RDMAMsgEndpoint(std::shared_ptr<RDMAContext> ctx, size_t num_qp
     ctx_->registerOrAccessMemoryRegion(
         reinterpret_cast<uintptr_t>(dummy_), reinterpret_cast<uintptr_t>(dummy_), sizeof(int64_t));
 
-    for (int i = 0; i < SLIME_MAX_SLOT_FIFO_DEPTH; ++i) {
+    for (int i = 0; i < SLIME_MAX_MSG_FIFO_DEPTH; ++i) {
         ctx_->registerOrAccessMemoryRegion(reinterpret_cast<uintptr_t>(&(send_ctx_pool_[i].remote_meta_info_)),
                                            reinterpret_cast<uintptr_t>(&(send_ctx_pool_[i].remote_meta_info_)),
                                            sizeof(meta_info_t));
@@ -82,7 +89,7 @@ RDMAMsgEndpoint::RDMAMsgEndpoint(std::shared_ptr<RDMAContext> ctx, size_t num_qp
     data_channel_->init(ctx_, num_qp_, 0);
 
     // Initialize Rings. Size is double the depth to handle potential overflow gracefully.
-    size_t ring_size  = SLIME_MAX_SLOT_FIFO_DEPTH * 2;
+    size_t ring_size  = SLIME_MAX_MSG_FIFO_DEPTH * 2;
     send_buffer_ring_ = createRing("send_buf", ring_size);
     recv_buffer_ring_ = createRing("recv_buf", ring_size);
 
@@ -110,7 +117,7 @@ json RDMAMsgEndpoint::endpointInfo() const
 {
     json remote_meta_key = {};
 
-    for (int i = 0; i < SLIME_MAX_SLOT_FIFO_DEPTH; ++i) {
+    for (int i = 0; i < SLIME_MAX_MSG_FIFO_DEPTH; ++i) {
         remote_meta_key.push_back((uintptr_t)(&(send_ctx_pool_[i].remote_meta_info_)));
     }
     json endpoint_info = json{{"meta_channel_info", meta_channel_->channelInfo()},
@@ -132,14 +139,14 @@ void RDMAMsgEndpoint::connect(const json& remote_endpoint_info)
 
     SLIME_LOG_INFO("Connection Established. Pre-posting RECV requests...");
 
-    SLIME_ASSERT_EQ(remote_endpoint_info["remote_meta_key"].size(), SLIME_MAX_SLOT_FIFO_DEPTH, "FIFO Depth mismatch");
+    SLIME_ASSERT_EQ(remote_endpoint_info["remote_meta_key"].size(), SLIME_MAX_MSG_FIFO_DEPTH, "FIFO Depth mismatch");
 
-    for (int i = 0; i < SLIME_MAX_SLOT_FIFO_DEPTH; ++i) {
+    for (int i = 0; i < SLIME_MAX_MSG_FIFO_DEPTH; ++i) {
         recv_ctx_pool_[i].remote_meta_key_ = remote_endpoint_info["remote_meta_key"][i];
     }
 
     // Pre-post RECV requests for Meta Channel to handle incoming handshake signals.
-    for (int i = 0; i < SLIME_MAX_RECV_WR / 2; ++i) {
+    for (int i = 0; i < SLIME_MAX_MSG_FIFO_DEPTH; ++i) {
         SendContext*            send_ctx = &(send_ctx_pool_[i]);
         std::vector<Assignment> batch{Assignment(reinterpret_cast<uintptr_t>(dummy_), 0, 0, sizeof(int64_t))};
         send_ctx->meta_recv_assign_.reset(OpCode::RECV, 0, batch, [send_ctx](int32_t status, int32_t imm) {
@@ -149,7 +156,7 @@ void RDMAMsgEndpoint::connect(const json& remote_endpoint_info)
     }
 
     // Pre-post RECV requests for Data Channel to handle completion signals (Imm Data).
-    for (int i = 0; i < SLIME_MAX_SLOT_FIFO_DEPTH; ++i) {
+    for (int i = 0; i < SLIME_MAX_MSG_FIFO_DEPTH; ++i) {
         RecvContext* recv_ctx = &(recv_ctx_pool_[i]);
         for (size_t qpi = 0; qpi < num_qp_; ++qpi) {
             std::vector<Assignment> batch{Assignment(reinterpret_cast<uintptr_t>(dummy_), 0, 0, sizeof(int64_t))};
@@ -169,7 +176,7 @@ void RDMAMsgEndpoint::connect(const json& remote_endpoint_info)
     SLIME_LOG_INFO("RDMA Contexts Launched.");
 }
 
-int32_t RDMAMsgEndpoint::send(uintptr_t data_ptr, size_t offset, size_t length, void* stream_handle)
+std::shared_ptr<SendFuture> RDMAMsgEndpoint::send(uintptr_t data_ptr, size_t offset, size_t length, void* stream_handle)
 {
     // Fast path: check MR cache.
     storage_view_t view{data_ptr, offset, length};
@@ -181,16 +188,16 @@ int32_t RDMAMsgEndpoint::send(uintptr_t data_ptr, size_t offset, size_t length, 
 
     // Acquire a slot from the FIFO pool.
     uint32_t target_mask = (1 << num_qp_) - 1;
-    uint64_t slot        = send_slot_id_.fetch_add(1, std::memory_order_release) % SLIME_MAX_SLOT_FIFO_DEPTH;
+    uint64_t slot        = send_slot_id_.fetch_add(1, std::memory_order_release) % SLIME_MAX_MSG_FIFO_DEPTH;
 
     SendContext* s_ctx = &(send_ctx_pool_[slot]);
 
+    s_ctx->reset();
     s_ctx->slot_id                = slot;
     s_ctx->local_meta_info_.view_ = {data_ptr, offset, length};
     s_ctx->expected_mask          = target_mask;
 
     // Reset signal and bind to the compute stream for synchronization.
-    s_ctx->signal->reset_all();
     s_ctx->signal->bind_stream(stream_handle);
     s_ctx->signal->record_gpu_ready();
 
@@ -199,10 +206,10 @@ int32_t RDMAMsgEndpoint::send(uintptr_t data_ptr, size_t offset, size_t length, 
         cpu_relax();
     }
 
-    return slot;
+    return send_future_pool_[slot];
 }
 
-int32_t RDMAMsgEndpoint::recv(uintptr_t data_ptr, size_t offset, size_t length, void* stream_handle)
+std::shared_ptr<RecvFuture> RDMAMsgEndpoint::recv(uintptr_t data_ptr, size_t offset, size_t length, void* stream_handle)
 {
     auto buffer_mr = ctx_->get_mr(data_ptr);
     if (not(buffer_mr and buffer_mr->length == length)) {
@@ -211,15 +218,15 @@ int32_t RDMAMsgEndpoint::recv(uintptr_t data_ptr, size_t offset, size_t length, 
     }
 
     uint32_t target_mask = (1 << num_qp_) - 1;
-    uint64_t slot        = recv_slot_id_.fetch_add(1, std::memory_order_release) % SLIME_MAX_SLOT_FIFO_DEPTH;
+    uint64_t slot        = recv_slot_id_.fetch_add(1, std::memory_order_release) % SLIME_MAX_MSG_FIFO_DEPTH;
 
     RecvContext* r_ctx = &(recv_ctx_pool_[slot]);
 
+    r_ctx->reset();
     r_ctx->slot_id       = slot;
     r_ctx->view_         = {data_ptr, offset, length};
     r_ctx->expected_mask = target_mask;
 
-    r_ctx->signal->reset_all();
     r_ctx->signal->bind_stream(stream_handle);
     r_ctx->signal->record_gpu_ready();
 
@@ -230,20 +237,7 @@ int32_t RDMAMsgEndpoint::recv(uintptr_t data_ptr, size_t offset, size_t length, 
         cpu_relax();
     }
 
-    return slot;
-}
-
-int32_t RDMAMsgEndpoint::waitSend(int32_t slot_id)
-{
-    // Blocking wait on CPU until the communication is marked done.
-    send_ctx_pool_[slot_id].signal->wait_comm_done_cpu((1 << send_ctx_pool_[slot_id].expected_mask) - 1);
-    return 0;
-}
-
-int32_t RDMAMsgEndpoint::waitRecv(int32_t slot_id)
-{
-    recv_ctx_pool_[slot_id].signal->wait_comm_done_cpu((1 << recv_ctx_pool_[slot_id].expected_mask) - 1);
-    return 0;
+    return recv_future_pool_[slot];
 }
 
 // In rdma_endpoint_v0.cc
@@ -281,19 +275,29 @@ int32_t RDMAMsgEndpoint::sendProcess()
         bool         task_completed = false;
 
         switch (s_ctx->state_) {
-            case SendContextState::WAIT_GPU_READY:
-                // Non-blocking check for GPU signal.
+            case SendContextState::WAIT_GPU_READY: {
                 if (s_ctx->signal->is_gpu_ready()) {
                     s_ctx->state_ = SendContextState::WAIT_META;
                     goto CHECK_META_READY;
                 }
                 break;
+            }
 
             CHECK_META_READY:
-            case SendContextState::WAIT_META:
+            case SendContextState::WAIT_META: {
                 // Non-blocking check for remote meta signal (atomic load).
                 if (s_ctx->meta_arrived_flag_.val.load(std::memory_order_acquire)) {
                     s_ctx->meta_arrived_flag_.val.store(false, std::memory_order_release);
+
+                    // Prepare for next handshake (Post Recv).
+                    std::vector<Assignment> meta_batch{
+                        Assignment(reinterpret_cast<uintptr_t>(dummy_), 0, 0, sizeof(int64_t))};
+                    s_ctx->meta_recv_assign_.reset(
+                        OpCode::RECV, 0, meta_batch, [this, s_ctx](int32_t status, int32_t imm) {
+                            s_ctx->meta_arrived_flag_.val.store(1, std::memory_order_release);
+                        });
+                    meta_channel_->post_recv_batch(0, &(s_ctx->meta_recv_assign_));
+
                     s_ctx->state_ = SendContextState::POST_DATA_SEND;
 
                     // Update remote MR info.
@@ -330,19 +334,10 @@ int32_t RDMAMsgEndpoint::sendProcess()
                         data_channel_->post_rc_oneside_batch(qpi, &(s_ctx->data_send_assign_));
                     }
 
-                    // Prepare for next handshake (Post Recv).
-                    std::vector<Assignment> meta_batch{
-                        Assignment(reinterpret_cast<uintptr_t>(dummy_), 0, 0, sizeof(int64_t))};
-
-                    s_ctx->meta_recv_assign_.reset(
-                        OpCode::RECV, 0, meta_batch, [this, s_ctx](int32_t status, int32_t imm) {
-                            s_ctx->meta_arrived_flag_.val.store(1, std::memory_order_release);
-                        });
-                    meta_channel_->post_recv_batch(0, &(s_ctx->meta_recv_assign_));
-
                     task_completed = true;
                 }
                 break;
+            }
 
             default:
                 break;
@@ -352,17 +347,7 @@ int32_t RDMAMsgEndpoint::sendProcess()
             pending_send_queue_.pop_front();
             work_done++;
         }
-        else {
-            // Task is still pending, so we are "busy" waiting.
-            // Marking as work_done=1 prevents the worker from sleeping too aggressively
-            // if we are just waiting for a GPU signal or network packet.
-            // However, to save power, we might strictly return 0 here if no state transition occurred.
-            // For low latency, return 1.
-            // work_done++;
-        }
     }
-
-    // Note: cpu_relax() is removed from here and handled by the Worker.
     return work_done;
 }
 
@@ -397,7 +382,6 @@ int32_t RDMAMsgEndpoint::recvProcess()
 
             SEND_META:
             case RecvContextState::INIT_SEND_META: {
-                // Step 1: Pre-post Recv WQEs (Correct Order).
                 for (size_t qpi = 0; qpi < num_qp_; ++qpi) {
                     std::vector<Assignment> batch{Assignment(reinterpret_cast<uintptr_t>(dummy_), 0, 0, 8)};
                     r_ctx->data_recv_assign_.reset(OpCode::RECV, qpi, batch, [r_ctx, qpi](int32_t status, int32_t imm) {

@@ -2,9 +2,11 @@
 #include <functional>
 #include <memory>
 
+#include <pybind11/attr.h>
 #include <pybind11/cast.h>
 #include <pybind11/chrono.h>
 #include <pybind11/functional.h>
+#include <pybind11/gil.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/pytypes.h>
 #include <pybind11/stl.h>
@@ -14,12 +16,14 @@
 
 #ifdef BUILD_NVLINK
 #include "engine/nvlink/memory_pool.h"
-#include "engine/nvlink/nvlink_transport.h"
+#include "engine/nvlink/nvlink_endpoint.h"
 #endif
 
 #ifdef BUILD_NVSHMEM
 #include "engine/nvshmem/nvshmem_context.h"
 #endif
+
+#include "device/signal.h"
 
 #ifdef BUILD_RDMA
 #include "engine/rdma/rdma_assignment.h"
@@ -29,6 +33,7 @@
 #include "engine/rdma/rdma_endpoint.h"
 // We still need these headers if UnifiedRDMAEndpoint implementation depends on them being complete types,
 // or if we expose them directly (which we are phasing out).
+#include "engine/rdma/rdma_future.h"
 #include "engine/rdma/rdma_io_endpoint.h"
 #include "engine/rdma/rdma_msg_endpoint.h"
 #include "engine/rdma/rdma_utils.h"
@@ -145,6 +150,9 @@ PYBIND11_MODULE(_slime_c, m)
         .def(py::init<const uintptr_t&, uint64_t, uint64_t, uint64_t>())
         .def(py::init<const uintptr_t&, const uintptr_t&, uint64_t, uint64_t, uint64_t>());
 
+    py::class_<slime::device::DeviceSignal, std::shared_ptr<slime::device::DeviceSignal>>(m, "DeviceSignal")
+        .def("wait", &slime::device::DeviceSignal::wait_comm_done_cpu);
+
 #ifdef BUILD_RDMA
     py::class_<slime::RDMAContext, std::shared_ptr<slime::RDMAContext>>(m, "RDMAContext")
         .def(py::init<>())
@@ -157,21 +165,29 @@ PYBIND11_MODULE(_slime_c, m)
     // Unified RDMA Endpoint Binding
     // =========================================================================
     // Replaces both rdma_endpoint (V0) and rdma_io_endpoint bindings
+    py::class_<slime::SendFuture, std::shared_ptr<slime::SendFuture>>(m, "SlimeSendFuture")
+        .def("wait", &slime::SendFuture::wait, py::call_guard<py::gil_scoped_release>());
+    py::class_<slime::RecvFuture, std::shared_ptr<slime::RecvFuture>>(m, "SlimeRecvFuture")
+        .def("wait", &slime::RecvFuture::wait, py::call_guard<py::gil_scoped_release>());
+    py::class_<slime::ReadWriteFuture, std::shared_ptr<slime::ReadWriteFuture>>(m, "SlimeReadWriteFuture")
+        .def("wait", &slime::ReadWriteFuture::wait, py::call_guard<py::gil_scoped_release>());
+    py::class_<slime::ImmRecvFuture, std::shared_ptr<slime::ImmRecvFuture>>(m, "SlimeImmRecvFuture")
+        .def("wait", &slime::ImmRecvFuture::wait, py::call_guard<py::gil_scoped_release>())
+        .def("imm_data", &slime::ImmRecvFuture::immData, py::call_guard<py::gil_scoped_release>());
     py::class_<slime::RDMAEndpoint, std::shared_ptr<slime::RDMAEndpoint>>(m, "RDMAEndpoint")
-        .def(py::init<size_t, std::shared_ptr<slime::RDMAContext>, std::shared_ptr<slime::RDMAWorker>>(),
-             py::arg("num_qp")  = 1,
+        .def(py::init<std::shared_ptr<slime::RDMAContext>, size_t, std::shared_ptr<slime::RDMAWorker>>(),
              py::arg("context") = nullptr,
+             py::arg("num_qp")  = 1,
              py::arg("worker")  = nullptr)
-        .def(py::init<size_t, std::string, int32_t, std::string, std::shared_ptr<slime::RDMAWorker>>(),
-             py::arg("num_qp")    = 1,
-             py::arg("device_name")  = "",
-             py::arg("ib_port")   = 1,
-             py::arg("link_type") = "RoCE",
-             py::arg("worker")    = nullptr)
+        .def(py::init<std::string, int32_t, std::string, size_t, std::shared_ptr<slime::RDMAWorker>>(),
+             py::arg("device_name") = "",
+             py::arg("ib_port")     = 1,
+             py::arg("link_type")   = "RoCE",
+             py::arg("num_qp")      = 1,
+             py::arg("worker")      = nullptr)
         .def("connect", &slime::RDMAEndpoint::connect, py::call_guard<py::gil_scoped_release>())
-        .def("endpoint_info", &slime::RDMAEndpoint::endpointInfo)  // 纯数据获取，很快，不需要 release
+        .def("endpoint_info", &slime::RDMAEndpoint::endpointInfo)
 
-        // Memory Registration - 系统调用，可能耗时，建议释放
         .def("register_memory_region",
              &slime::RDMAEndpoint::registerOrAccessMemoryRegion,
              py::call_guard<py::gil_scoped_release>())
@@ -179,7 +195,7 @@ PYBIND11_MODULE(_slime_c, m)
              &slime::RDMAEndpoint::registerOrAccessRemoteMemoryRegion,
              py::call_guard<py::gil_scoped_release>())
 
-        // --- Two-Sided Operations ---
+        // --- Msg Operations ---
         .def("send",
              &slime::RDMAEndpoint::send,
              py::arg("data_ptr"),
@@ -196,22 +212,38 @@ PYBIND11_MODULE(_slime_c, m)
              py::arg("stream_handler") = nullptr,
              py::call_guard<py::gil_scoped_release>())
 
-        .def("wait_send", &slime::RDMAEndpoint::waitSend, py::arg("slot_id"), py::call_guard<py::gil_scoped_release>())
-        .def("wait_recv", &slime::RDMAEndpoint::waitRecv, py::arg("slot_id"), py::call_guard<py::gil_scoped_release>())
-
-        .def("read", &slime::RDMAEndpoint::read, py::call_guard<py::gil_scoped_release>())
-        .def("write", &slime::RDMAEndpoint::write, py::call_guard<py::gil_scoped_release>())
-        .def("write_with_imm", &slime::RDMAEndpoint::writeWithImm, py::call_guard<py::gil_scoped_release>())
-
-        .def("recv_imm",
-             &slime::RDMAEndpoint::immRecv,
+        // --- IO Operations ---
+        .def("read",
+             &slime::RDMAEndpoint::read,
+             py::arg("mr_key"),
+             py::arg("remote_mr_key"),
+             py::arg("target_offset"),
+             py::arg("source_offset"),
+             py::arg("length"),
              py::arg("stream") = nullptr,
              py::call_guard<py::gil_scoped_release>())
-
-        .def("wait", &slime::RDMAEndpoint::wait, py::arg("slot_id"), py::call_guard<py::gil_scoped_release>())
-        .def("wait_recv_imm",
-             &slime::RDMAEndpoint::waitImmRecv,
-             py::arg("slot_id"),
+        .def("write",
+             &slime::RDMAEndpoint::write,
+             py::arg("mr_key"),
+             py::arg("remote_mr_key"),
+             py::arg("target_offset"),
+             py::arg("source_offset"),
+             py::arg("length"),
+             py::arg("stream") = nullptr,
+             py::call_guard<py::gil_scoped_release>())
+        .def("write_with_imm",
+             &slime::RDMAEndpoint::writeWithImm,
+             py::arg("mr_key"),
+             py::arg("remote_mr_key"),
+             py::arg("target_offset"),
+             py::arg("source_offset"),
+             py::arg("length"),
+             py::arg("imm_data") = 0,
+             py::arg("stream")   = nullptr,
+             py::call_guard<py::gil_scoped_release>())
+        .def("imm_recv",
+             &slime::RDMAEndpoint::immRecv,
+             py::arg("stream") = nullptr,
              py::call_guard<py::gil_scoped_release>())
 
         .def("process", &slime::RDMAEndpoint::process, py::call_guard<py::gil_scoped_release>());
@@ -244,13 +276,13 @@ PYBIND11_MODULE(_slime_c, m)
 #endif
 
 #ifdef BUILD_NVLINK
-    py::class_<slime::NVLinkContext>(m, "nvlink_context")
+    py::class_<slime::NVLinkEndpoint>(m, "NVLinkEndpoint")
         .def(py::init<>())
-        .def("register_memory_region", &slime::NVLinkContext::register_memory_region)
-        .def("register_remote_memory_region", &slime::NVLinkContext::register_remote_memory_region)
-        .def("endpoint_info", &slime::NVLinkContext::endpoint_info)
-        .def("connect", &slime::NVLinkContext::connect)
-        .def("read_batch", &slime::NVLinkContext::read_batch);
+        .def("register_memory_region", &slime::NVLinkEndpoint::register_memory_region)
+        .def("register_remote_memory_region", &slime::NVLinkEndpoint::register_remote_memory_region)
+        .def("endpoint_info", &slime::NVLinkEndpoint::endpoint_info)
+        .def("connect", &slime::NVLinkEndpoint::connect)
+        .def("read", &slime::NVLinkEndpoint::read);
 #endif
 
 #ifdef BUILD_INTRA_OPS

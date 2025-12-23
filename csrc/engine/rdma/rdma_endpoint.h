@@ -12,16 +12,21 @@ namespace slime {
 
 using json = nlohmann::json;
 
+class SendFuture;
+class RecvFuture;
+class ReadWriteFuture;
+class ImmRecvFuture;
+
 class RDMAWorker;
 
 class RDMAEndpoint: public std::enable_shared_from_this<RDMAEndpoint> {
 public:
-    RDMAEndpoint(size_t num_qp, std::shared_ptr<RDMAContext> ctx, std::shared_ptr<RDMAWorker> worker = nullptr);
+    RDMAEndpoint(std::shared_ptr<RDMAContext> ctx, size_t num_qp, std::shared_ptr<RDMAWorker> worker = nullptr);
 
-    RDMAEndpoint(size_t                      num_qp    = 1,
-                 std::string                 dev_name  = "",
+    RDMAEndpoint(std::string                 dev_name  = "",
                  int32_t                     ib_port   = 1,
                  std::string                 link_type = "RoCE",
+                 size_t                      num_qp    = 1,
                  std::shared_ptr<RDMAWorker> worker    = nullptr);
 
     void connect(const json& remote_endpoint_info);
@@ -32,36 +37,31 @@ public:
     int32_t registerOrAccessRemoteMemoryRegion(uintptr_t ptr, json mr_info);
 
     // TwoSide Primitive
-    int32_t send(uintptr_t data_ptr, size_t offset, size_t length, void* stream_handler);
-    int32_t recv(uintptr_t data_ptr, size_t offset, size_t length, void* stream_handler);
-    int32_t waitSend(int32_t slot_id);
-    int32_t waitRecv(int32_t slot_id);
+    std::shared_ptr<SendFuture> send(uintptr_t data_ptr, size_t offset, size_t length, void* stream_handler);
+    std::shared_ptr<RecvFuture> recv(uintptr_t data_ptr, size_t offset, size_t length, void* stream_handler);
 
     // OneSide Primitive
-    int32_t read(std::vector<uintptr_t>& local_ptr,
-                 std::vector<uintptr_t>& remote_ptr,
-                 std::vector<uintptr_t>& target_offset,
-                 std::vector<uintptr_t>& source_offset,
-                 std::vector<size_t>&    length,
-                 void*                   stream);
-    int32_t write(std::vector<uintptr_t>& local_ptr,
-                  std::vector<uintptr_t>& remote_ptr,
-                  std::vector<uintptr_t>& target_offset,
-                  std::vector<uintptr_t>& source_offset,
-                  std::vector<size_t>&    length,
-                  void*                   stream);
-    int32_t writeWithImm(std::vector<uintptr_t>& local_ptr,
-                         std::vector<uintptr_t>& remote_ptr,
-                         std::vector<uintptr_t>& target_offset,
-                         std::vector<uintptr_t>& source_offset,
-                         std::vector<size_t>&    length,
-                         int32_t                 imm_data,
-                         void*                   stream);
+    std::shared_ptr<ReadWriteFuture> read(std::vector<uintptr_t>& local_ptr,
+                                          std::vector<uintptr_t>& remote_ptr,
+                                          std::vector<uintptr_t>& target_offset,
+                                          std::vector<uintptr_t>& source_offset,
+                                          std::vector<size_t>&    length,
+                                          void*                   stream);
+    std::shared_ptr<ReadWriteFuture> write(std::vector<uintptr_t>& local_ptr,
+                                           std::vector<uintptr_t>& remote_ptr,
+                                           std::vector<uintptr_t>& target_offset,
+                                           std::vector<uintptr_t>& source_offset,
+                                           std::vector<size_t>&    length,
+                                           void*                   stream);
+    std::shared_ptr<ReadWriteFuture> writeWithImm(std::vector<uintptr_t>& local_ptr,
+                                                  std::vector<uintptr_t>& remote_ptr,
+                                                  std::vector<uintptr_t>& target_offset,
+                                                  std::vector<uintptr_t>& source_offset,
+                                                  std::vector<size_t>&    length,
+                                                  int32_t                 imm_data,
+                                                  void*                   stream);
 
-    int32_t immRecv(void* stream = nullptr);
-
-    int32_t wait(int32_t slot_id);
-    int32_t waitImmRecv(int32_t slot_id);
+    std::shared_ptr<ImmRecvFuture> immRecv(void* stream = nullptr);
 
     int32_t process();
 

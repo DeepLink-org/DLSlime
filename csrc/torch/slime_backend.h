@@ -11,6 +11,7 @@
 #include <pybind11/chrono.h>
 
 #include "engine/rdma/rdma_endpoint.h"
+#include "engine/rdma/rdma_future.h"
 #include "engine/rdma/rdma_utils.h"
 #include "engine/rdma/rdma_worker.h"
 
@@ -25,7 +26,7 @@ class TORCH_API SendWork: public ::c10d::Work {
 public:
     explicit SendWork(std::vector<at::Tensor>&      tensor,
                       std::shared_ptr<RDMAEndpoint> endpoint,
-                      int32_t                       slot_id,
+                      std::shared_ptr<SendFuture>   slot,
                       uint64_t                      seq);
     bool wait(std::chrono::milliseconds timeout = kNoTimeout) override;
     void abort() override
@@ -36,7 +37,7 @@ public:
 protected:
     std::vector<at::Tensor>       tensor_;
     std::shared_ptr<RDMAEndpoint> endpoint_;
-    int32_t                       slot_id_;
+    std::shared_ptr<SendFuture>   slot_;
     int                           dstRank_;
     const uint64_t                seq_;
 };
@@ -47,7 +48,7 @@ class TORCH_API RecvWork: public ::c10d::Work {
 public:
     explicit RecvWork(std::vector<at::Tensor>&      tensor,
                       std::shared_ptr<RDMAEndpoint> endpoint,
-                      int32_t                       slot_id,
+                      std::shared_ptr<RecvFuture>   slot,
                       uint64_t                      seq);
     bool wait(std::chrono::milliseconds timeout = kNoTimeout) override;
     void abort() override
@@ -58,7 +59,7 @@ public:
 protected:
     std::vector<at::Tensor>       tensor_;
     std::shared_ptr<RDMAEndpoint> endpoint_;
-    int32_t                       slot_id_;
+    std::shared_ptr<RecvFuture>   slot_;
     int                           dstRank_;
     const uint64_t                seq_;
 };

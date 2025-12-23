@@ -4,9 +4,10 @@
 #include "device/signal.h"
 
 #include "engine/assignment.h"
-#include "engine/rdma/rdma_assignment.h"
 
-#include "engine/rdma/rdma_channel.h"
+#include "rdma_assignment.h"
+#include "rdma_channel.h"
+
 #include "jring.h"
 #include "json.hpp"
 #include "rdma_common.h"
@@ -25,8 +26,10 @@ namespace slime {
 
 using json = nlohmann::json;
 
+class SendFuture;
+class RecvFuture;
 
-static const int    BURST_SIZE     = 128;
+static const int BURST_SIZE = 128;
 
 enum class SendContextState : uint8_t {
     WAIT_GPU_READY,
@@ -88,6 +91,7 @@ struct alignas(64) SendContext {
     {
         expected_mask = 0;
         state_        = SendContextState::WAIT_GPU_READY;
+        signal->reset_all();
     }
 };
 
@@ -113,6 +117,7 @@ struct alignas(64) RecvContext {
     {
         expected_mask = 0;
         state_        = RecvContextState::INIT_SEND_META;
+        signal->reset_all();
     }
 };
 
@@ -128,13 +133,9 @@ public:
 
     json endpointInfo() const;
 
-    int32_t send(uintptr_t data_ptr, size_t offset, size_t length, void* stream_handler);
+    std::shared_ptr<SendFuture> send(uintptr_t data_ptr, size_t offset, size_t length, void* stream_handler);
 
-    int32_t recv(uintptr_t data_ptr, size_t offset, size_t length, void* stream_handler);
-
-    int32_t waitSend(int32_t slot_id);
-
-    int32_t waitRecv(int32_t slot_id);
+    std::shared_ptr<RecvFuture> recv(uintptr_t data_ptr, size_t offset, size_t length, void* stream_handler);
 
     int32_t process();
 
@@ -155,6 +156,9 @@ private:
     // Context Pools to avoid dynamic allocation
     SendContext* send_ctx_pool_;
     RecvContext* recv_ctx_pool_;
+
+    std::vector<std::shared_ptr<SendFuture>> send_future_pool_;
+    std::vector<std::shared_ptr<RecvFuture>> recv_future_pool_;
 
     std::deque<SendContext*> pending_send_queue_;
     std::deque<RecvContext*> pending_recv_queue_;

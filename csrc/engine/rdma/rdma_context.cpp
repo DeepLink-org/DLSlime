@@ -190,44 +190,99 @@ void RDMAContext::stop_future()
 
 int64_t RDMAContext::cq_poll_handle()
 {
-    SLIME_LOG_INFO("Polling CQ");
+    SLIME_LOG_INFO("Adaptive Event-Driven CQ Polling Started");
 
-    if (comp_channel_ == NULL)
-        SLIME_LOG_ERROR("comp_channel_ should be constructed");
-    while (!stop_cq_thread_) {
-        struct ibv_cq* ev_cq;
-        void*          cq_context;
-        struct ibv_wc  wc[SLIME_POLL_COUNT];
-        if (size_t nr_poll = ibv_poll_cq(cq_, SLIME_POLL_COUNT, wc)) {
-            for (size_t i = 0; i < nr_poll; ++i) {
-                RDMAAssign::CALLBACK_STATUS status_code = RDMAAssign::SUCCESS;
-                if (wc[i].status != IBV_WC_SUCCESS) {
-                    status_code = RDMAAssign::FAILED;
-                    if (wc[i].status != IBV_WC_WR_FLUSH_ERR) {
-                        if (wc[i].wr_id != 0) {
-                            RDMAAssign* assign = reinterpret_cast<RDMAAssign*>(wc[i].wr_id);
-                            for (int i = 0; i < assign->batch_size_; ++i) {
-                                SLIME_LOG_ERROR("ERROR ASSIGNMENT: Batch: ", assign->batch_[i].dump());
-                            }
-                            SLIME_LOG_ERROR("ERROR OpCode: , ", uint64_t(assign->opcode_));
-                        }
-                        SLIME_LOG_ERROR("WR failed with status: ",
-                                        ibv_wc_status_str(wc[i].status),
-                                        ", vi vendor err: ",
-                                        wc[i].vendor_err);
+    if (comp_channel_ == NULL) {
+        SLIME_LOG_ERROR("comp_channel_ must be constructed for event mode");
+        return -1;
+    }
+
+    if (ibv_req_notify_cq(cq_, 0)) {
+        SLIME_LOG_ERROR("Failed to request CQ notification");
+        return -1;
+    }
+
+    constexpr int MAX_SPIN_COUNT = 10000;
+
+    auto process_wcs = [&](int nr_poll, struct ibv_wc* wc) {
+        for (int i = 0; i < nr_poll; ++i) {
+            RDMAAssign::CALLBACK_STATUS status_code = RDMAAssign::SUCCESS;
+
+            if (wc[i].status != IBV_WC_SUCCESS) {
+                status_code = RDMAAssign::FAILED;
+                if (wc[i].status != IBV_WC_WR_FLUSH_ERR) {
+                    SLIME_LOG_ERROR("WR failed: ", ibv_wc_status_str(wc[i].status),
+                                    ", Vendor Err: ", wc[i].vendor_err);
+
+                    if (wc[i].wr_id != 0) {
+                        RDMAAssign* assign = reinterpret_cast<RDMAAssign*>(wc[i].wr_id);
                     }
                 }
-                if (wc[i].wr_id != 0) {
-                    RDMAAssign* assign = reinterpret_cast<RDMAAssign*>(wc[i].wr_id);
+            }
+
+            if (wc[i].wr_id != 0) {
+                RDMAAssign* assign = reinterpret_cast<RDMAAssign*>(wc[i].wr_id);
+                if (assign->callback_) {
                     assign->callback_(status_code, wc[i].imm_data);
-                    size_t batch_size = assign->batch_size_;
                 }
             }
         }
-        else {
-            _mm_pause();
+    };
+
+    while (!stop_cq_thread_) {
+        int spin_count = 0;
+
+        while (spin_count < MAX_SPIN_COUNT && !stop_cq_thread_) {
+            struct ibv_wc wc[SLIME_POLL_COUNT];
+            int nr_poll = ibv_poll_cq(cq_, SLIME_POLL_COUNT, wc);
+
+            if (nr_poll > 0) {
+                process_wcs(nr_poll, wc);
+                spin_count = 0;
+            }
+            else if (nr_poll == 0) {
+                spin_count++;
+                _mm_pause();
+            }
+            else {
+                SLIME_LOG_ERROR("Poll CQ failed in busy loop");
+                return -1;
+            }
         }
+
+        if (stop_cq_thread_) break;
+
+        if (ibv_req_notify_cq(cq_, 0)) {
+            SLIME_LOG_ERROR("Failed to re-arm CQ");
+            break;
+        }
+
+        struct ibv_wc wc_check[SLIME_POLL_COUNT];
+        int nr_check = ibv_poll_cq(cq_, SLIME_POLL_COUNT, wc_check);
+
+        if (nr_check > 0) {
+            process_wcs(nr_check, wc_check);
+            continue;
+        }
+        else if (nr_check < 0) {
+            SLIME_LOG_ERROR("Poll CQ failed in check phase");
+            break;
+        }
+
+        struct ibv_cq* ev_cq;
+        void* cq_context;
+
+        if (ibv_get_cq_event(comp_channel_, &ev_cq, &cq_context) != 0) {
+            if (!stop_cq_thread_) {
+                SLIME_LOG_ERROR("Failed to get CQ event");
+            }
+            break;
+        }
+
+        ibv_ack_cq_events(ev_cq, 1);
+
     }
+
     return 0;
 }
 

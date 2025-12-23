@@ -1,6 +1,5 @@
 import torch
 import xxhash
-
 from dlslime import Assignment, available_nic, RDMAEndpoint
 
 devices = available_nic()
@@ -34,16 +33,9 @@ target.connect(initiator.endpoint_info())
 initiator.connect(target.endpoint_info())
 
 print("Remote tensor after RDMA write:", remote_tensor)
-x = initiator.write(
-    [mr_key],
-    [mr_key],
-    [0],
-    [8],
-    [8],
-    None
-)
+slot = initiator.write([mr_key], [mr_key], [0], [8], [8], None)
 
-initiator.wait(x)
+slot.wait()
 
 assert torch.all(remote_tensor[:8] == 0)
 assert torch.all(remote_tensor[8:] == 1)

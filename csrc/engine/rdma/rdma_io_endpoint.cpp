@@ -6,13 +6,16 @@
 #include <cstdlib>
 #include <cstring>
 #include <emmintrin.h>
+#include <memory>
 #include <new>
 #include <stdexcept>
 
 #include "engine/assignment.h"
 
-#include "engine/rdma/rdma_assignment.h"
-#include "engine/rdma/rdma_env.h"
+#include "rdma_assignment.h"
+#include "rdma_env.h"
+#include "rdma_future.h"
+
 #include "logging.h"
 #include "utils.h"
 
@@ -31,7 +34,10 @@ void RDMAIOEndpoint::dummyReset(ImmRecvContext* ctx)
         ctx->assigns_[qpi].batch_[0].target_offset = 0;
         ctx->assigns_[qpi].batch_[0].source_offset = 0;
 
-        ctx->assigns_[qpi].callback_ = [ctx, qpi](int32_t status, int32_t imm) { ctx->signal->set_comm_done(qpi); };
+        ctx->assigns_[qpi].callback_ = [ctx, qpi](int32_t status, int32_t imm) {
+            ctx->signal->set_comm_done(qpi);
+            ctx->assigns_[qpi].imm_data_ = imm;
+        };
 
         ctx->assigns_[qpi].is_inline_ = false;
 
@@ -60,7 +66,7 @@ int32_t RDMAIOEndpoint::dispatchTask(OpCode                  op_code,
 
     while (req_idx < total_reqs) {
 
-        uint64_t          slot = rw_slot_id_.fetch_add(1, std::memory_order_relaxed) % MAX_IO_FIFO_DEPTH;
+        uint64_t          slot = rw_slot_id_.fetch_add(1, std::memory_order_relaxed) % SLIME_MAX_IO_FIFO_DEPTH;
         ReadWriteContext* ctx  = &read_write_ctx_pool_[slot];
         ctx->slot_id           = slot;
         ctx->expected_mask     = (1 << num_qp_) - 1;
@@ -164,24 +170,24 @@ RDMAIOEndpoint::RDMAIOEndpoint(std::shared_ptr<RDMAContext> ctx, size_t num_qp):
         token_bucket_[i].store(SLIME_MAX_SEND_WR);
     }
 
-    size_t ring_size        = MAX_IO_FIFO_DEPTH;
+    size_t ring_size        = SLIME_MAX_IO_FIFO_DEPTH;
     read_write_buffer_ring_ = createRing("io_rw_ring", ring_size);
     imm_recv_buffer_ring_   = createRing("io_recv_ring", ring_size);
 
     void* raw_rw_ctx = nullptr;
-    if (posix_memalign(&raw_rw_ctx, 64, sizeof(ReadWriteContext) * MAX_IO_FIFO_DEPTH) != 0) {
+    if (posix_memalign(&raw_rw_ctx, 64, sizeof(ReadWriteContext) * SLIME_MAX_IO_FIFO_DEPTH) != 0) {
         throw std::runtime_error("Failed to allocate memory for ReadWriteContext pool");
     }
     read_write_ctx_pool_ = static_cast<ReadWriteContext*>(raw_rw_ctx);
 
     void* raw_recv_ctx = nullptr;
-    if (posix_memalign(&raw_recv_ctx, 64, sizeof(ImmRecvContext) * MAX_IO_FIFO_DEPTH) != 0) {
+    if (posix_memalign(&raw_recv_ctx, 64, sizeof(ImmRecvContext) * SLIME_MAX_IO_FIFO_DEPTH) != 0) {
         free(raw_rw_ctx);
         throw std::runtime_error("Failed to allocate memory for ImmRecvContext pool");
     }
     imm_recv_ctx_pool_ = static_cast<ImmRecvContext*>(raw_recv_ctx);
 
-    for (int i = 0; i < MAX_IO_FIFO_DEPTH; ++i) {
+    for (int i = 0; i < SLIME_MAX_IO_FIFO_DEPTH; ++i) {
         new (&read_write_ctx_pool_[i]) ReadWriteContext();
         read_write_ctx_pool_[i].signal = slime::device::createSignal(false);
         read_write_ctx_pool_[i].assigns_.resize(num_qp_);
@@ -190,6 +196,11 @@ RDMAIOEndpoint::RDMAIOEndpoint(std::shared_ptr<RDMAContext> ctx, size_t num_qp):
         new (&imm_recv_ctx_pool_[i]) ImmRecvContext();
         imm_recv_ctx_pool_[i].signal = slime::device::createSignal(false);
         imm_recv_ctx_pool_[i].assigns_.resize(num_qp_);
+    }
+
+    for (size_t i = 0; i < SLIME_MAX_IO_FIFO_DEPTH; ++i) {
+        read_write_future_pool_.push_back(std::make_shared<ReadWriteFuture>(&(read_write_ctx_pool_[i])));
+        imm_recv_future_pool_.push_back(std::make_shared<ImmRecvFuture>(&(imm_recv_ctx_pool_[i])));
     }
 
     void* dummy_mem = nullptr;
@@ -208,7 +219,7 @@ RDMAIOEndpoint::~RDMAIOEndpoint()
     freeRing(read_write_buffer_ring_);
     freeRing(imm_recv_buffer_ring_);
 
-    for (int i = 0; i < MAX_IO_FIFO_DEPTH; ++i) {
+    for (int i = 0; i < SLIME_MAX_IO_FIFO_DEPTH; ++i) {
         read_write_ctx_pool_[i].~ReadWriteContext();
         imm_recv_ctx_pool_[i].~ImmRecvContext();
     }
@@ -238,41 +249,46 @@ json RDMAIOEndpoint::endpointInfo() const
 // Producer (Enqueue to Ring)
 // ============================================================
 
-int32_t RDMAIOEndpoint::read(std::vector<uintptr_t>& local_ptr,
-                             std::vector<uintptr_t>& remote_ptr,
-                             std::vector<uintptr_t>& target_offset,
-                             std::vector<uintptr_t>& source_offset,
-                             std::vector<size_t>&    length,
-                             void*                   stream)
+std::shared_ptr<ReadWriteFuture> RDMAIOEndpoint::read(std::vector<uintptr_t>& local_ptr,
+                                                      std::vector<uintptr_t>& remote_ptr,
+                                                      std::vector<uintptr_t>& target_offset,
+                                                      std::vector<uintptr_t>& source_offset,
+                                                      std::vector<size_t>&    length,
+                                                      void*                   stream)
 {
-    return dispatchTask(OpCode::READ, local_ptr, remote_ptr, target_offset, source_offset, length, 0, stream);
+    int32_t slot_id =
+        dispatchTask(OpCode::READ, local_ptr, remote_ptr, target_offset, source_offset, length, 0, stream);
+    return read_write_future_pool_[slot_id];
 }
 
-int32_t RDMAIOEndpoint::write(std::vector<uintptr_t>& local_ptr,
-                              std::vector<uintptr_t>& remote_ptr,
-                              std::vector<uintptr_t>& target_offset,
-                              std::vector<uintptr_t>& source_offset,
-                              std::vector<size_t>&    length,
-                              void*                   stream)
+std::shared_ptr<ReadWriteFuture> RDMAIOEndpoint::write(std::vector<uintptr_t>& local_ptr,
+                                                       std::vector<uintptr_t>& remote_ptr,
+                                                       std::vector<uintptr_t>& target_offset,
+                                                       std::vector<uintptr_t>& source_offset,
+                                                       std::vector<size_t>&    length,
+                                                       void*                   stream)
 {
-    return dispatchTask(OpCode::WRITE, local_ptr, remote_ptr, target_offset, source_offset, length, 0, stream);
+    int32_t slot_id =
+        dispatchTask(OpCode::WRITE, local_ptr, remote_ptr, target_offset, source_offset, length, 0, stream);
+    return read_write_future_pool_[slot_id];
 }
 
-int32_t RDMAIOEndpoint::writeWithImm(std::vector<uintptr_t>& local_ptr,
-                                     std::vector<uintptr_t>& remote_ptr,
-                                     std::vector<uintptr_t>& target_offset,
-                                     std::vector<uintptr_t>& source_offset,
-                                     std::vector<size_t>&    length,
-                                     int32_t                 imm_data,
-                                     void*                   stream)
+std::shared_ptr<ReadWriteFuture> RDMAIOEndpoint::writeWithImm(std::vector<uintptr_t>& local_ptr,
+                                                              std::vector<uintptr_t>& remote_ptr,
+                                                              std::vector<uintptr_t>& target_offset,
+                                                              std::vector<uintptr_t>& source_offset,
+                                                              std::vector<size_t>&    length,
+                                                              int32_t                 imm_data,
+                                                              void*                   stream)
 {
-    return dispatchTask(
+    int32_t slot_id = dispatchTask(
         OpCode::WRITE_WITH_IMM, local_ptr, remote_ptr, target_offset, source_offset, length, imm_data, stream);
+    return read_write_future_pool_[slot_id];
 }
 
-int32_t RDMAIOEndpoint::immRecv(void* stream)
+std::shared_ptr<ImmRecvFuture> RDMAIOEndpoint::immRecv(void* stream)
 {
-    uint64_t        slot = recv_slot_id_.fetch_add(1, std::memory_order_relaxed) % MAX_IO_FIFO_DEPTH;
+    uint64_t        slot = recv_slot_id_.fetch_add(1, std::memory_order_relaxed) % SLIME_MAX_IO_FIFO_DEPTH;
     ImmRecvContext* ctx  = &imm_recv_ctx_pool_[slot];
 
     ctx->slot_id       = slot;
@@ -284,7 +300,7 @@ int32_t RDMAIOEndpoint::immRecv(void* stream)
 
     while (jring_enqueue_burst(imm_recv_buffer_ring_, (void**)&ctx, 1, nullptr) == 0)
         _mm_pause();
-    return slot;
+    return imm_recv_future_pool_[slot];
 }
 
 // ============================================================
@@ -358,20 +374,6 @@ int32_t RDMAIOEndpoint::process()
     work_done += readWriteProcess();
     work_done += immRecvProcess();
     return work_done;
-}
-
-int32_t RDMAIOEndpoint::waitReadWrite(int32_t slot_id)
-{
-    auto* ctx = &read_write_ctx_pool_[slot_id];
-    ctx->signal->wait_comm_done_cpu(ctx->expected_mask);
-    return 0;
-}
-
-int32_t RDMAIOEndpoint::waitImmRecv(int32_t slot_id)
-{
-    auto* ctx = &imm_recv_ctx_pool_[slot_id];
-    ctx->signal->wait_comm_done_cpu(ctx->expected_mask);
-    return 0;
 }
 
 }  // namespace slime

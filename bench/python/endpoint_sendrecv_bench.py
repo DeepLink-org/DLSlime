@@ -22,23 +22,12 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=200):
     print(f"Tensor Device: {device_type.upper()}")
 
     # 初始化 Endpoint
-
-    ctx = _slime_c.rdma_context()
-    ctx.init_rdma_context(dev, 1, "RoCE")
-
-    worker= _slime_c.rdma_worker(dev, 0)
-
-    send_endpoint = _slime_c.rdma_endpoint(ctx, num_qp)
-    recv_endpoint = _slime_c.rdma_endpoint(ctx, num_qp)
-
-    worker.add_endpoint(send_endpoint)
-    worker.add_endpoint(recv_endpoint)
+    send_endpoint = _slime_c.RDMAEndpoint(dev, 1, "RoCE", num_qp)
+    recv_endpoint = _slime_c.RDMAEndpoint(dev, 1, "RoCE", num_qp)
 
     # 建立连接
     send_endpoint.connect(recv_endpoint.endpoint_info())
     recv_endpoint.connect(send_endpoint.endpoint_info())
-
-    worker.start()
 
     # 定义测试大小：2KB 到 128MB
     # 2KB = 2 * 1024
@@ -73,8 +62,7 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=200):
             recv_tensor = torch.zeros((size,), dtype=torch.uint8, device="cpu")
 
         # 3. 预热 (Warmup)
-        # 让 MR 建立，TLB 预热，消除第一次慢启动的影响
-        warmup_iters = 1
+        warmup_iters = 5
         for _ in range(warmup_iters):
             send_slot = send_endpoint.send(
                 send_tensor.data_ptr(),
@@ -90,8 +78,8 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=200):
                 None,
             )
 
-            send_endpoint.wait_send(send_slot)
-            recv_endpoint.wait_recv(recv_slot)
+            send_slot.wait()
+            recv_slot.wait()
 
         if device_type == "cuda":
             torch.cuda.synchronize()
@@ -114,8 +102,8 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=200):
                 None,
             )
 
-            send_endpoint.wait_send(send_slot)
-            recv_endpoint.wait_recv(recv_slot)
+            recv_slot.wait()
+            send_slot.wait()
 
         if device_type == "cuda":
             torch.cuda.synchronize()
@@ -138,9 +126,7 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=200):
             # CUDA 校验需要把数据拷回 CPU，为了不影响后续测试，简单检查头尾
             if not torch.equal(
                 send_tensor[:100].cpu(), recv_tensor[:100].cpu()
-            ) or not torch.equal(
-                send_tensor[-100:].cpu(), recv_tensor[-100:].cpu()
-            ):
+            ) or not torch.equal(send_tensor[-100:].cpu(), recv_tensor[-100:].cpu()):
                 check_status = "FAIL"
         else:
             if not torch.equal(send_tensor, recv_tensor):
@@ -163,7 +149,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--qp", type=int, default=1, help="Number of Queue Pairs")
     parser.add_argument(
-        "--iters", type=int, default=100, help="Number of iterations for averaging"
+        "--iters", type=int, default=128, help="Number of iterations for averaging"
     )
 
     args = parser.parse_args()

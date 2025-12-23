@@ -8,7 +8,7 @@ add_library(
     _slime_nvlink
     SHARED
     memory_pool.cpp
-    nvlink_transport.cpp
+    nvlink_endpoint.cpp
 )
 
 target_link_libraries(_slime_nvlink PUBLIC CUDA::cudart)

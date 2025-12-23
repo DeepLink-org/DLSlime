@@ -269,8 +269,8 @@ int64_t RDMAChannel::post_rc_oneside_batch(int qpi, RDMAAssign* assign)
 {
     size_t              batch_size = assign->batch_size();
     struct ibv_send_wr* bad_wr     = NULL;
-    struct ibv_send_wr* wr         = send_wr_pool_[qpi].data();
-    struct ibv_sge*     sge        = send_sge_pool_[qpi].data();
+    std::vector<struct ibv_send_wr> wr(batch_size);
+    std::vector<struct ibv_sge>     sge(batch_size);
 
     for (size_t i = 0; i < batch_size; ++i) {
         Assignment     subassign   = assign->batch_[i];
@@ -291,7 +291,7 @@ int64_t RDMAChannel::post_rc_oneside_batch(int qpi, RDMAAssign* assign)
         wr[i].sg_list    = &sge[i];
         wr[i].num_sge    = 1;
         wr[i].imm_data   = (i == batch_size - 1) ? assign->imm_data_ : UNDEFINED_IMM_DATA;
-        wr[i].send_flags = (i == batch_size - 1) ? IBV_SEND_SIGNALED : 0;
+        wr[i].send_flags = (i % 32 == 0 || i == batch_size - 1) ? IBV_SEND_SIGNALED : 0;
         if (assign->is_inline_)
             wr[i].send_flags |= IBV_SEND_INLINE;
         wr[i].wr.rdma.remote_addr = remote_addr + assign->batch_[i].target_offset;
@@ -300,7 +300,7 @@ int64_t RDMAChannel::post_rc_oneside_batch(int qpi, RDMAAssign* assign)
     }
     int ret = 0;
     {
-        ret = ibv_post_send(qp_[qpi], wr, &bad_wr);
+        ret = ibv_post_send(qp_[qpi], &wr[0], &bad_wr);
     }
 
     if (ret) {

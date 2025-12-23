@@ -17,7 +17,7 @@ namespace slime {
 // Constructor & Setup
 // ============================================================
 
-RDMAEndpoint::RDMAEndpoint(size_t num_qp, std::shared_ptr<RDMAContext> ctx, std::shared_ptr<RDMAWorker> worker)
+RDMAEndpoint::RDMAEndpoint(std::shared_ptr<RDMAContext> ctx, size_t num_qp, std::shared_ptr<RDMAWorker> worker)
 {
     ctx_    = ctx ? ctx : GlobalContextManager::instance().get_context();
     worker_ = worker ? worker : GlobalWorkerManager::instance().get_default_worker(socketId(ctx_->device_name_));
@@ -27,7 +27,7 @@ RDMAEndpoint::RDMAEndpoint(size_t num_qp, std::shared_ptr<RDMAContext> ctx, std:
 }
 
 RDMAEndpoint::RDMAEndpoint(
-    size_t num_qp, std::string dev_name, int32_t ib_port, std::string link_type, std::shared_ptr<RDMAWorker> worker)
+    std::string dev_name, int32_t ib_port, std::string link_type, size_t num_qp, std::shared_ptr<RDMAWorker> worker)
 {
     ctx_    = GlobalContextManager::instance().get_context(dev_name, ib_port, link_type);
     worker_ = worker ? worker : GlobalWorkerManager::instance().get_default_worker(socketId(ctx_->device_name_));
@@ -88,75 +88,55 @@ int32_t RDMAEndpoint::registerOrAccessRemoteMemoryRegion(uintptr_t ptr, json mr_
 // Two-Sided Primitives (Message Passing) -> MsgEndpoint
 // ============================================================
 
-int32_t RDMAEndpoint::send(uintptr_t data_ptr, size_t offset, size_t length, void* stream_handler)
+std::shared_ptr<SendFuture> RDMAEndpoint::send(uintptr_t data_ptr, size_t offset, size_t length, void* stream_handler)
 {
     return msg_endpoint_->send(data_ptr, offset, length, stream_handler);
 }
 
-int32_t RDMAEndpoint::recv(uintptr_t data_ptr, size_t offset, size_t length, void* stream_handler)
+std::shared_ptr<RecvFuture> RDMAEndpoint::recv(uintptr_t data_ptr, size_t offset, size_t length, void* stream_handler)
 {
     return msg_endpoint_->recv(data_ptr, offset, length, stream_handler);
-}
-
-int32_t RDMAEndpoint::waitSend(int32_t slot_id)
-{
-    return msg_endpoint_->waitSend(slot_id);
-}
-
-int32_t RDMAEndpoint::waitRecv(int32_t slot_id)
-{
-    return msg_endpoint_->waitRecv(slot_id);
 }
 
 // ============================================================
 // One-Sided Primitives (RDMA IO) -> IOEndpoint
 // ============================================================
 
-int32_t RDMAEndpoint::read(std::vector<uintptr_t>& local_ptr,
-                           std::vector<uintptr_t>& remote_ptr,
-                           std::vector<uintptr_t>& target_offset,
-                           std::vector<uintptr_t>& source_offset,
-                           std::vector<size_t>&    length,
-                           void*                   stream)
+std::shared_ptr<ReadWriteFuture> RDMAEndpoint::read(std::vector<uintptr_t>& local_ptr,
+                                                    std::vector<uintptr_t>& remote_ptr,
+                                                    std::vector<uintptr_t>& target_offset,
+                                                    std::vector<uintptr_t>& source_offset,
+                                                    std::vector<size_t>&    length,
+                                                    void*                   stream)
 
 {
     return io_endpoint_->read(local_ptr, remote_ptr, target_offset, source_offset, length, stream);
 };
 
-int32_t RDMAEndpoint::write(std::vector<uintptr_t>& local_ptr,
-                            std::vector<uintptr_t>& remote_ptr,
-                            std::vector<uintptr_t>& target_offset,
-                            std::vector<uintptr_t>& source_offset,
-                            std::vector<size_t>&    length,
-                            void*                   stream)
+std::shared_ptr<ReadWriteFuture> RDMAEndpoint::write(std::vector<uintptr_t>& local_ptr,
+                                                     std::vector<uintptr_t>& remote_ptr,
+                                                     std::vector<uintptr_t>& target_offset,
+                                                     std::vector<uintptr_t>& source_offset,
+                                                     std::vector<size_t>&    length,
+                                                     void*                   stream)
 {
     return io_endpoint_->write(local_ptr, remote_ptr, target_offset, source_offset, length, stream);
 }
 
-int32_t RDMAEndpoint::writeWithImm(std::vector<uintptr_t>& local_ptr,
-                                   std::vector<uintptr_t>& remote_ptr,
-                                   std::vector<uintptr_t>& target_offset,
-                                   std::vector<uintptr_t>& source_offset,
-                                   std::vector<size_t>&    length,
-                                   int32_t                 imm_data,
-                                   void*                   stream)
+std::shared_ptr<ReadWriteFuture> RDMAEndpoint::writeWithImm(std::vector<uintptr_t>& local_ptr,
+                                                            std::vector<uintptr_t>& remote_ptr,
+                                                            std::vector<uintptr_t>& target_offset,
+                                                            std::vector<uintptr_t>& source_offset,
+                                                            std::vector<size_t>&    length,
+                                                            int32_t                 imm_data,
+                                                            void*                   stream)
 {
     return io_endpoint_->writeWithImm(local_ptr, remote_ptr, target_offset, source_offset, length, imm_data, stream);
 }
 
-int32_t RDMAEndpoint::immRecv(void* stream)
+std::shared_ptr<ImmRecvFuture> RDMAEndpoint::immRecv(void* stream)
 {
     return io_endpoint_->immRecv(stream);
-}
-
-int32_t RDMAEndpoint::wait(int32_t slot_id)
-{
-    return io_endpoint_->waitReadWrite(slot_id);
-}
-
-int32_t RDMAEndpoint::waitImmRecv(int32_t slot_id)
-{
-    return io_endpoint_->waitImmRecv(slot_id);
 }
 
 int32_t RDMAEndpoint::process()
