@@ -32,7 +32,8 @@ __global__ __launch_bounds__(1024, 1) void all_to_all_intra_ll_kernel(int8_t*  x
                                                                       int32_t  rank,
                                                                       int32_t  world_size,
                                                                       bool     is_transpose = false,
-                                                                      int32_t* mask         = nullptr)
+                                                                      int32_t* mask         = nullptr,
+                                                                      int32_t* offsets      = nullptr)
 {
     const int num_sms   = world_size;
     const int num_warps = MAX_NUM_WARPS < bs ? MAX_NUM_WARPS : bs;
@@ -53,8 +54,15 @@ __global__ __launch_bounds__(1024, 1) void all_to_all_intra_ll_kernel(int8_t*  x
     const int num_vec_msg_per_warp = num_msg_per_warp / VEC_SIZE;
 
     if (is_transpose) {
-        x_ptr = x_ptr + dst_rank * total_q_size;
-        bs    = max_bs;
+        if (offsets) {
+            x_ptr = x_ptr + offsets[dst_rank] * num_msg_per_warp;
+            // For variable AllToAll, we'd need to know the count for each dst_rank.
+            // If offsets[i] is the start of rank i's data, then count is offsets[i+1] - offsets[i].
+            bs = offsets[dst_rank + 1] - offsets[dst_rank];
+        } else {
+            x_ptr = x_ptr + dst_rank * total_q_size;
+            bs    = max_bs;
+        }
     }
 
     for (int msg_idx = warp_id; msg_idx < bs; msg_idx += num_warps) {
@@ -62,7 +70,11 @@ __global__ __launch_bounds__(1024, 1) void all_to_all_intra_ll_kernel(int8_t*  x
         vec_t*  vec_q_ptr_for_write = reinterpret_cast<vec_t*>(q_ptr_for_write);
 
         int buffer_idx;
-        buffer_idx = rank * total_q_size + msg_idx * num_msg_per_warp;
+        if (offsets) {
+            buffer_idx = (offsets[rank] + msg_idx) * num_msg_per_warp;
+        } else {
+            buffer_idx = rank * total_q_size + msg_idx * num_msg_per_warp;
+        }
 
         int8_t* buffer_ptr_for_write     = ipc_buffer_ptr[sm_id] + buffer_idx;
         vec_t*  vec_buffer_ptr_for_write = reinterpret_cast<vec_t*>(buffer_ptr_for_write);
@@ -100,7 +112,8 @@ void all_to_all_intra_ll(torch::Tensor                x,
                          int32_t                      rank,
                          int32_t                      world_size,
                          bool                         is_transpose,
-                         c10::optional<torch::Tensor> mask)
+                         c10::optional<torch::Tensor> mask,
+                         c10::optional<torch::Tensor> offsets)
 {
     int8_t* x_ptr = reinterpret_cast<int8_t*>(x.data_ptr());
 
@@ -111,7 +124,8 @@ void all_to_all_intra_ll(torch::Tensor                x,
     int32_t msg_size = x.size(1);
     auto    itemsize = x.itemsize();
 
-    int32_t* mask_ptr = mask.has_value() ? (*mask).data_ptr<int32_t>() : nullptr;
+    int32_t* mask_ptr    = mask.has_value() ? (*mask).data_ptr<int32_t>() : nullptr;
+    int32_t* offsets_ptr = offsets.has_value() ? (*offsets).data_ptr<int32_t>() : nullptr;
 
     int num_sms   = world_size;
     int num_warps = MAX_NUM_WARPS < bs ? MAX_NUM_WARPS : bs;
@@ -136,7 +150,8 @@ void all_to_all_intra_ll(torch::Tensor                x,
                   rank,
                   world_size,
                   is_transpose,
-                  mask_ptr);
+                  mask_ptr,
+                  offsets_ptr);
 
     cudaError_t err = cudaGetLastError();
     if (err != cudaSuccess) {
