@@ -55,10 +55,10 @@ __global__ __launch_bounds__(1024, 1) void all_to_all_intra_ll_kernel(int8_t*  x
 
     if (is_transpose) {
         if (offsets) {
-            x_ptr = x_ptr + offsets[dst_rank] * num_msg_per_warp;
-            // For variable AllToAll, we'd need to know the count for each dst_rank.
-            // If offsets[i] is the start of rank i's data, then count is offsets[i+1] - offsets[i].
-            bs = offsets[dst_rank + 1] - offsets[dst_rank];
+            // Source-dependent count: each rank sends its own 'counts[rank]' to everyone
+            int my_count = offsets[rank + 1] - offsets[rank];
+            x_ptr = x_ptr + dst_rank * my_count * num_msg_per_warp;
+            bs = my_count;
         } else {
             x_ptr = x_ptr + dst_rank * total_q_size;
             bs    = max_bs;
@@ -119,7 +119,7 @@ void all_to_all_intra_ll(torch::Tensor                x,
 
     auto shape = x.sizes();
 
-    int32_t bs = is_transpose ? max_bs : x.size(0);
+    int32_t bs = is_transpose ? (x.size(0) / world_size) : x.size(0);
 
     int32_t msg_size = x.size(1);
     auto    itemsize = x.itemsize();

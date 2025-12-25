@@ -52,6 +52,8 @@ def test_all_to_all_offsets():
     )
 
     # Test without offsets
+    if rank == 0:
+        print("==== Start: No Offsets ====")
     res_no_offsets = buffer.all_to_all_ll(x, is_transpose=False)
 
     if rank == 0:
@@ -66,31 +68,40 @@ def test_all_to_all_offsets():
             # The rest [counts[i]:max_bs] might be garbage or zero depending on implementation
             # but the point is it's padded.
 
+        print("=== No Offsets Passed ===")
+
     dist.barrier(device_ids=[local_rank])
 
     # --- 1. Test WITH offsets (Packed AllGather) ---
+    if rank == 0:
+        print("==== Start: Offsets (Packed AllGather) ====")
     res_with_offsets = buffer.all_to_all_ll(x, is_transpose=False, offsets=offsets)
 
     if rank == 0:
         print(f"Testing offsets (MAX_BS={MAX_BS})...")
         print(f"Result with offsets shape: {res_with_offsets.shape}")
-        assert res_with_offsets.shape == (total_messages, MSG_SIZE)
+        assert res_with_offsets.shape == (world_size, MAX_BS, MSG_SIZE)
 
-        # Verify contiguous data
+        res_with_offsets_flat = res_with_offsets.view(-1, MSG_SIZE)
+
+        # Verify contiguous data layout using offsets
         for i in range(world_size):
             start = offsets[i].item()
             end = offsets[i + 1].item()
             expected_val = i + 1
-            actual_slice = res_with_offsets[start:end]
+            actual_slice = res_with_offsets_flat[start:end]
             assert torch.all(
                 actual_slice == expected_val
             ), f"Rank {i} data mismatch with offsets"
 
         print("Offset verification successful!")
+        print("=== Offsets Passed ===")
 
     dist.barrier(device_ids=[local_rank])
 
     # --- 2. Test WITH offsets AND mask (Detect unnecessary transfers) ---
+    if rank == 0:
+        print("==== Start: Offsets + Mask ====")
     # Pre-fill buffer with a "dirty" value (all ones in int8, which is not rank+1 in float16)
     buffer.local_buffer.fill_(0x7F)
 
@@ -107,6 +118,7 @@ def test_all_to_all_offsets():
 
     if rank == 0:
         print("Testing mask efficiency...")
+        res_masked_flat = res_masked.view(-1, MSG_SIZE)
         for i in range(world_size):
             start = offsets[i].item()
             end = offsets[i + 1].item()
@@ -117,16 +129,62 @@ def test_all_to_all_offsets():
                 if msg_idx % 2 == 0:
                     # Should be transferred
                     assert torch.all(
-                        res_masked[actual_idx] == expected_val
+                        res_masked_flat[actual_idx] == expected_val
                     ), f"Rank {i} msg {msg_idx} should have been transferred"
                 else:
                     # Should NOT be transferred, should still be the dirty value
                     # We check it's NOT the expected_val
                     assert torch.any(
-                        res_masked[actual_idx] != expected_val
+                        res_masked_flat[actual_idx] != expected_val
                     ), f"Rank {i} msg {msg_idx} should NOT have been transferred (Masked Out)"
 
         print("Mask verification successful! No unnecessary transfers detected.")
+        print("=== Mask Passed ===")
+
+    dist.barrier(device_ids=[local_rank])
+
+    # --- 3. Test WITH offsets (Transpose / AllToAll) ---
+    if rank == 0:
+        print("==== Start: Transpose with Offsets ====")
+    # In our source-dependent model for Transpose:
+    # Each rank 'rank' sends 'counts[rank]' messages to EVERY destination.
+    # Input x shape: (world_size * counts[rank], MSG_SIZE)
+    # Rank i's data for rank j is at x[j * counts[rank] : (j+1) * counts[rank]]
+
+    my_count = counts[rank].item()
+    x_alltoall = torch.zeros(
+        (world_size * my_count, MSG_SIZE), dtype=DTYPE, device="cuda"
+    )
+    for dst in range(world_size):
+        start = dst * my_count
+        end = (dst + 1) * my_count
+        # Data sent from 'rank' to 'dst' will be (rank + 1) * 100 + (dst + 1)
+        val = (rank + 1) * 100 + (dst + 1)
+        x_alltoall[start:end] = val
+
+    res_transpose = buffer.all_to_all_ll(x_alltoall, is_transpose=True, offsets=offsets)
+
+    if rank == 0:
+        print(f"Testing transpose with offsets...")
+        print(f"Result transpose shape: {res_transpose.shape}")
+        # Total messages received by any rank is sum(counts)
+        assert res_transpose.shape == (world_size, MAX_BS, MSG_SIZE)
+
+        res_transpose_flat = res_transpose.view(-1, MSG_SIZE)
+
+        # Verify data: res_transpose[offsets[src] : offsets[src+1]] should be from src
+        # In our test, data from src to us (rank 0) is (src + 1) * 100 + (0 + 1)
+        for src in range(world_size):
+            start = offsets[src].item()
+            end = offsets[src + 1].item()
+            expected_val = (src + 1) * 100 + (0 + 1)
+            actual_slice = res_transpose_flat[start:end]
+            assert torch.all(
+                actual_slice == expected_val
+            ), f"Transpose data mismatch from rank {src}"
+
+        print("Transpose offset verification successful!")
+        print("=== Transpose Passed ===")
 
     dist.destroy_process_group()
 

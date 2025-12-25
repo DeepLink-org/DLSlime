@@ -135,14 +135,13 @@ torch::Tensor AllToAllIntraLLBuffer::allToAllLL2D(torch::Tensor                x
     if (offsets.has_value()) {
         auto    offsets_tensor = offsets.value();
         int32_t total_messages = 0;
-        if (offsets_tensor.is_cuda()) {
-            // To avoid sync, we could potentially pass total_messages as an argument.
-            // But for now, let's do a simple copy.
-            total_messages = offsets_tensor.slice(0, world_size_, world_size_ + 1).item<int32_t>();
-        } else {
-            total_messages = offsets_tensor.data_ptr<int32_t>()[world_size_];
+        if (!offsets_tensor.is_cuda()) {
+             int32_t total_messages = offsets_tensor.data_ptr<int32_t>()[world_size_];
+             SLIME_ASSERT(total_messages <= world_size_ * max_bs_,
+                  "offsets total_messages (" << total_messages
+                  << ") exceeds buffer capacity (" << (world_size_ * max_bs_) << ").");
         }
-        return torch::from_blob(reinterpret_cast<void*>(local_buffer_), {total_messages, msg_size}, options);
+        return torch::from_blob(reinterpret_cast<void*>(local_buffer_), {world_size_, max_bs_, msg_size}, options);
     }
 
     SLIME_ASSERT(world_size_ * max_bs_ * shape[1] * x.itemsize() <= local_buffer_size_,
