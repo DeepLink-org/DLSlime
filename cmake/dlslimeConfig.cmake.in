@@ -7,10 +7,6 @@ if(@USE_CUDA@)
     find_package(CUDAToolkit REQUIRED)
 endif()
 
-# We might need to find numa/ibverbs if they are public dependencies
-# However, for simplicity, we assume they are available in system or provided by user if needed.
-# Better practice is to find them here if the targets define them as INTERFACE link libraries.
-
 # Expose include directories for legacy/manual usage
 set_and_check(dlslime_INCLUDE_DIR "@PACKAGE_INSTALL_INCLUDE_DIR@")
 set(dlslime_INCLUDE_DIRS ${dlslime_INCLUDE_DIR})
