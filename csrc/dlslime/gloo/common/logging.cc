@@ -6,7 +6,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "gloo/common/dlslime/logging.h"
+#include "gloo/common/logging.h"
 
 #include <algorithm>
 #include <numeric>

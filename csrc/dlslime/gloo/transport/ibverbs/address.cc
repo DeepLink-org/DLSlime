@@ -12,39 +12,37 @@
 
 #include <array>
 
-#include "gloo/common/dlslime/logging.h"
+#include "gloo/common/logging.h"
 
 namespace gloo {
 namespace transport {
 namespace ibverbs {
 
-Address::Address() {
-  memset(&addr_, 0, sizeof(addr_));
+Address::Address()
+{
+    memset(&addr_, 0, sizeof(addr_));
 }
 
-Address::Address(const std::vector<char>& bytes) {
-  GLOO_ENFORCE_EQ(sizeof(addr_), bytes.size());
-  memcpy(&addr_, bytes.data(), sizeof(addr_));
+Address::Address(const std::vector<char>& bytes)
+{
+    GLOO_ENFORCE_EQ(sizeof(addr_), bytes.size());
+    memcpy(&addr_, bytes.data(), sizeof(addr_));
 }
 
-std::vector<char> Address::bytes() const {
-  std::vector<char> bytes(sizeof(addr_));
-  memcpy(bytes.data(), &addr_, sizeof(addr_));
-  return bytes;
+std::vector<char> Address::bytes() const
+{
+    std::vector<char> bytes(sizeof(addr_));
+    memcpy(bytes.data(), &addr_, sizeof(addr_));
+    return bytes;
 }
 
-std::string Address::str() const {
-  std::array<char, 128> buf;
-  snprintf(
-      buf.data(),
-      buf.size(),
-      "LID: %d QPN: %d PSN: %d",
-      addr_.lid,
-      addr_.qpn,
-      addr_.psn);
-  return std::string(buf.data());
+std::string Address::str() const
+{
+    std::array<char, 128> buf;
+    snprintf(buf.data(), buf.size(), "LID: %d QPN: %d PSN: %d", addr_.lid, addr_.qpn, addr_.psn);
+    return std::string(buf.data());
 }
 
-} // namespace ibverbs
-} // namespace transport
-} // namespace gloo
+}  // namespace ibverbs
+}  // namespace transport
+}  // namespace gloo
