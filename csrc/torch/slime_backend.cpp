@@ -1,13 +1,13 @@
 #include "slime_backend.h"
-#include "engine/rdma/rdma_context.h"
-#include "engine/rdma/rdma_context_pool.h"
-#include "engine/rdma/rdma_endpoint.h"
-#include "engine/rdma/rdma_env.h"
-#include "engine/rdma/rdma_future.h"
-#include "engine/rdma/rdma_utils.h"
-#include "engine/rdma/rdma_worker.h"
-#include "engine/rdma/rdma_worker_pool.h"
-#include "logging.h"
+#include "dlslime/engine/rdma/rdma_context.h"
+#include "dlslime/engine/rdma/rdma_context_pool.h"
+#include "dlslime/engine/rdma/rdma_endpoint.h"
+#include "dlslime/engine/rdma/rdma_env.h"
+#include "dlslime/engine/rdma/rdma_future.h"
+#include "dlslime/engine/rdma/rdma_utils.h"
+#include "dlslime/engine/rdma/rdma_worker.h"
+#include "dlslime/engine/rdma/rdma_worker_pool.h"
+#include "dlslime/logging.h"
 
 #ifdef SLIME_USE_CUDA
 #include <ATen/cuda/CUDAContext.h>
@@ -16,7 +16,7 @@
 
 #include <memory>
 
-namespace slime {
+namespace dlslime {
 namespace c10d {
 
 int mod_positive(int a, int b)
@@ -257,4 +257,4 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
 }
 
 }  // namespace c10d
-}  // namespace slime
+}  // namespace dlslime

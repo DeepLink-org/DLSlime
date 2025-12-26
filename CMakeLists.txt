@@ -65,3 +65,42 @@ endif (BUILD_BENCH)
 if (BUILD_TEST)
     add_subdirectory(tests/cpp)
 endif (BUILD_TEST)
+
+# --- Installation & Export ---
+
+# 1. Install Headers
+install(
+    DIRECTORY csrc/
+    DESTINATION include/dlslime
+    FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp"
+    PATTERN "python" EXCLUDE  # Exclude python bindings source if present
+)
+
+# 2. Install Targets Export
+install(EXPORT dlslimeTargets
+    NAMESPACE dlslime::
+    DESTINATION ${DLSLIME_INSTALL_PATH}/share/cmake/dlslime
+)
+
+# 3. Generate Config File
+include(CMakePackageConfigHelpers)
+set(INSTALL_INCLUDE_DIR "include/dlslime")
+configure_package_config_file(
+    cmake/dlslimeConfig.cmake.in
+    "${CMAKE_CURRENT_BINARY_DIR}/dlslimeConfig.cmake"
+    INSTALL_DESTINATION ${DLSLIME_INSTALL_PATH}/share/cmake/dlslime
+    PATH_VARS INSTALL_INCLUDE_DIR
+)
+
+write_basic_package_version_file(
+    "${CMAKE_CURRENT_BINARY_DIR}/dlslimeConfigVersion.cmake"
+    VERSION 0.1.0
+    COMPATIBILITY AnyNewerVersion
+)
+
+install(
+    FILES
+        "${CMAKE_CURRENT_BINARY_DIR}/dlslimeConfig.cmake"
+        "${CMAKE_CURRENT_BINARY_DIR}/dlslimeConfigVersion.cmake"
+    DESTINATION ${DLSLIME_INSTALL_PATH}/share/cmake/dlslime
+)

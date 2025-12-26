@@ -11,33 +11,33 @@
 #include <pybind11/pytypes.h>
 #include <pybind11/stl.h>
 
-#include "engine/assignment.h"
-#include "engine/dlpack.h"
+#include "dlslime/engine/assignment.h"
+#include "dlslime/engine/dlpack.h"
 
 #ifdef BUILD_NVLINK
-#include "engine/nvlink/memory_pool.h"
-#include "engine/nvlink/nvlink_endpoint.h"
+#include "dlslime/engine/nvlink/memory_pool.h"
+#include "dlslime/engine/nvlink/nvlink_endpoint.h"
 #endif
 
 #ifdef BUILD_NVSHMEM
-#include "engine/nvshmem/nvshmem_context.h"
+#include "dlslime/engine/nvshmem/nvshmem_context.h"
 #endif
 
-#include "device/signal.h"
+#include "dlslime/device/signal.h"
 
 #ifdef BUILD_RDMA
-#include "engine/rdma/rdma_assignment.h"
-#include "engine/rdma/rdma_config.h"
-#include "engine/rdma/rdma_context.h"
+#include "dlslime/engine/rdma/rdma_assignment.h"
+#include "dlslime/engine/rdma/rdma_config.h"
+#include "dlslime/engine/rdma/rdma_context.h"
 // Include the new Unified Endpoint
-#include "engine/rdma/rdma_endpoint.h"
+#include "dlslime/engine/rdma/rdma_endpoint.h"
 // We still need these headers if UnifiedRDMAEndpoint implementation depends on them being complete types,
 // or if we expose them directly (which we are phasing out).
-#include "engine/rdma/rdma_future.h"
-#include "engine/rdma/rdma_io_endpoint.h"
-#include "engine/rdma/rdma_msg_endpoint.h"
-#include "engine/rdma/rdma_utils.h"
-#include "engine/rdma/rdma_worker.h"
+#include "dlslime/engine/rdma/rdma_future.h"
+#include "dlslime/engine/rdma/rdma_io_endpoint.h"
+#include "dlslime/engine/rdma/rdma_msg_endpoint.h"
+#include "dlslime/engine/rdma/rdma_utils.h"
+#include "dlslime/engine/rdma/rdma_worker.h"
 #endif
 
 #if defined(BUILD_INTRA_OPS) || defined(BUILD_INTER_OPS)
@@ -53,8 +53,8 @@
 
 #endif
 
-#include "json.hpp"
-#include "logging.h"
+#include "dlslime/json.hpp"
+#include "dlslime/logging.h"
 #include "pybind_json/pybind_json.hpp"
 
 using json = nlohmann::json;
@@ -63,7 +63,7 @@ namespace py = pybind11;
 
 #ifdef BUILD_NVSHMEM
 
-namespace slime {
+namespace dlslime {
 
 py::object alloc_dlpack_tensor(slime::NVShmemContext& self, size_t size, size_t alignment)
 {
@@ -95,7 +95,7 @@ py::object alloc_dlpack_tensor(slime::NVShmemContext& self, size_t size, size_t 
     return capsule;
 }
 
-}  // namespace slime
+}  // namespace dlslime
 
 #endif
 
