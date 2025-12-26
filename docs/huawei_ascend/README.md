@@ -9,7 +9,7 @@ DLSlime uses ADXL APIs to register memory region, connect to other devices, read
 
 ## Source code
 
-Under folder `/csrc/engine/ascend_direct`
+Under folder `/csrc/dlslime/engine/ascend_direct`
 
 ## Dependencies
 
@@ -21,6 +21,7 @@ Under folder `/csrc/engine/ascend_direct`
 ### Build the test case
 
 Go to the repo root and compile DLSlime with Asecond Direct
+
 ```
 mkdir build
 cd build
@@ -33,21 +34,23 @@ make -j
 Run "initiator" and "target" two instances. For example:
 
 On initiator device:
+
 ```
 ./bin/ascend_direct_perf --mode=target --localhost="10.201.20.25" --local_port=16789 --remote_host="10.201.20.25" --remote_port=16777 --device_id=0
 ```
 
 On target device:
+
 ```
 ./bin/ascend_direct_perf --mode=initiator --localhost="10.201.20.25" --local_port=16777 --remote_host="10.201.20.25" --remote_port=16789 --device_id=2
 ```
 
- - The test makes initiator read data from target.
- - `localhost` and `remote_host` specify the IP address of the two communication devices.
- - `device_id` set the local NPU used to do the test.
- - Then our test binds `local_port` and `remote_port` to zmq sockets to exchange meta data.
- - Once the meta is ready, `local_port` + 1 and `remote_port` + 1 are used to do ADXL rdma connection and transport.
- - Finally you could see perf result like these from the initiator output:
+- The test makes initiator read data from target.
+- `localhost` and `remote_host` specify the IP address of the two communication devices.
+- `device_id` set the local NPU used to do the test.
+- Then our test binds `local_port` and `remote_port` to zmq sockets to exchange meta data.
+- Once the meta is ready, `local_port` + 1 and `remote_port` + 1 are used to do ADXL rdma connection and transport.
+- Finally you could see perf result like these from the initiator output:
 
 ```
 Block iteration 0 test completed: duration 98188us, block size 32KB, total size 1024KB, throughput 0.01 GB/s
@@ -61,9 +64,3 @@ Block iteration 7 test completed: duration 6488us, block size 4096KB, total size
 Block iteration 8 test completed: duration 12898us, block size 8192KB, total size 262144KB, throughput 20.81 GB/s
 Block iteration 9 test completed: duration 25714us, block size 16384KB, total size 524288KB, throughput 20.88 GB/s
 ```
-
-
-
-
-
-

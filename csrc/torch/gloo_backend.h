@@ -23,9 +23,9 @@
 #include "gloo/rendezvous/store.h"
 #include "gloo/transport/device.h"
 #include "gloo/transport/unbound_buffer.h"
-#include "logging.h"
+#include "dlslime/logging.h"
 
-namespace slime {
+namespace dlslime {
 namespace c10d {
 
 constexpr const char* SLIME_BACKEND_NAME = "dlslime";
@@ -407,4 +407,4 @@ private:
 };
 
 }  // namespace c10d
-}  // namespace slime
+}  // namespace dlslime

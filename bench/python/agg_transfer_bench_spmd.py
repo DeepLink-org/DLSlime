@@ -289,11 +289,10 @@ def transfer_batch_concurrency_dlslime(
         for concurrent_id in range(num_concurrency):
             assign = [
                 fn(
-                    [mr_key for _ in range(batch_size)],
-                    [mr_key for _ in range(batch_size)],
-                    [0 for _ in range(batch_size)],
-                    [0 for _ in range(batch_size)],
-                    [tensor.numel() * tensor.itemsize for _ in range(batch_size)],
+                    [
+                        (mr_key, mr_key, 0, 0, tensor.numel() * tensor.itemsize)
+                        for _ in range(batch_size)
+                    ],
                     None,
                 )
             ]

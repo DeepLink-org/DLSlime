@@ -14,12 +14,12 @@
 #include "gloo/rendezvous/prefix_store.h"
 #include "gloo/transport/ibverbs/device.h"
 
-#include "engine/rdma/rdma_env.h"
-#include "engine/rdma/utils.h"
-#include "logging.h"
+#include "dlslime/engine/rdma/rdma_env.h"
+#include "dlslime/engine/rdma/utils.h"
+#include "dlslime/logging.h"
 
 
-namespace slime {
+namespace dlslime {
 namespace c10d {
 
 // static
@@ -383,4 +383,4 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
     m.def("createDLSlimeBackend", &slimeBackend::createDLSlimeBackend);
 }
 }  // namespace c10d
-}  // namespace slime
+}  // namespace dlslime
