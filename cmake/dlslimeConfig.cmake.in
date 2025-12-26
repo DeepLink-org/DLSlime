@@ -1,0 +1,20 @@
+@PACKAGE_INIT@
+
+include("${CMAKE_CURRENT_LIST_DIR}/dlslimeTargets.cmake")
+
+if(@USE_CUDA@)
+    enable_language(CUDA)
+    find_package(CUDAToolkit REQUIRED)
+endif()
+
+# Expose include directories for legacy/manual usage
+set_and_check(dlslime_INCLUDE_DIR "@PACKAGE_INSTALL_INCLUDE_DIR@")
+set(dlslime_INCLUDE_DIRS ${dlslime_INCLUDE_DIR})
+
+# Expose library targets
+set(dlslime_LIBRARIES dlslime::_slime_engine dlslime::_slime_device)
+if(TARGET dlslime::_slime_rdma)
+    list(APPEND dlslime_LIBRARIES dlslime::_slime_rdma)
+endif()
+
+check_required_components(dlslime)

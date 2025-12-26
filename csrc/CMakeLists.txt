@@ -1,19 +1,9 @@
-add_subdirectory(device)
+add_subdirectory(dlslime)
 
-add_subdirectory(engine)
-
-if (BUILD_INTRA_OPS OR BUILD_INTER_OPS)
-    add_subdirectory(ops)
-endif()
-
-if (BUILD_PYTHON)
+if(BUILD_PYTHON)
     add_subdirectory(python)
 endif()
 
-if (USE_GLOO_BACKEND)
-    add_subdirectory(gloo)
-endif()
-
-if (BUILD_TORCH_PLUGIN)
+if(BUILD_TORCH_PLUGIN)
     add_subdirectory(torch)
 endif()

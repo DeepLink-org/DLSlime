@@ -3,7 +3,7 @@
 #include <cstring> // for memset, strncpy, strcmp
 #include <cstdlib> // for posix_memalign, free
 #include <cstdio>  // for snprintf
-#include "jring.h"
+#include "dlslime/jring.h"
 
 // --------------------------------------------------------------------------
 // Definition of a dummy communication packet.
@@ -23,7 +23,7 @@ int main() {
     // ----------------------------------------------------------------------
     // 1. Configuration and Memory Allocation
     // ----------------------------------------------------------------------
-    
+
     // Ring depth must be a power of 2
     const uint32_t RING_COUNT = 1024;
     // Element size of our packet structure
@@ -51,7 +51,7 @@ int main() {
         return -1;
     }
 
-    std::cout << "[Setup] Ring initialized. Capacity: " << r->capacity 
+    std::cout << "[Setup] Ring initialized. Capacity: " << r->capacity
               << ", Element Size: " << ELEM_SIZE << " bytes." << std::endl;
 
     // ----------------------------------------------------------------------
@@ -63,7 +63,7 @@ int main() {
     for (int i = 0; i < BATCH_SIZE; ++i) {
         tx_buffer[i].seq_num = 1000 + i;
         tx_buffer[i].msg_type = (i % 2 == 0) ? 0xA0 : 0xB0;
-        
+
         // Clear payload and write a dummy string
         memset(tx_buffer[i].payload, 0, sizeof(tx_buffer[i].payload));
         snprintf(tx_buffer[i].payload, sizeof(tx_buffer[i].payload), "PACKET_ID_%d", i);
@@ -72,11 +72,11 @@ int main() {
     // ----------------------------------------------------------------------
     // 3. Enqueue Operation (Single Producer)
     // ----------------------------------------------------------------------
-    
+
     // jring copies data from tx_buffer into the internal ring memory.
     // 'bulk' means it writes all items or returns 0 if space is insufficient.
     unsigned int enq_count = jring_sp_enqueue_bulk(r, tx_buffer, BATCH_SIZE, nullptr);
-    
+
     if (enq_count != BATCH_SIZE) {
         std::cerr << "[Error] Failed to enqueue packets." << std::endl;
         free(mem_ptr);
@@ -95,7 +95,7 @@ int main() {
 
     // Dequeue data from ring into rx_buffer
     unsigned int deq_count = jring_sc_dequeue_bulk(r, rx_buffer, BATCH_SIZE, nullptr);
-    
+
     assert(deq_count == BATCH_SIZE);
     std::cout << "[Consumer] Successfully dequeued " << deq_count << " packets." << std::endl;
 

@@ -65,16 +65,20 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=200):
         warmup_iters = 5
         for _ in range(warmup_iters):
             send_slot = send_endpoint.send(
-                send_tensor.data_ptr(),
-                send_tensor.storage_offset(),
-                send_tensor.numel(),
+                (
+                    send_tensor.data_ptr(),
+                    send_tensor.storage_offset(),
+                    send_tensor.numel(),
+                ),
                 None,
             )
 
             recv_slot = recv_endpoint.recv(
-                recv_tensor.data_ptr(),
-                recv_tensor.storage_offset(),
-                recv_tensor.numel(),
+                (
+                    recv_tensor.data_ptr(),
+                    recv_tensor.storage_offset(),
+                    recv_tensor.numel(),
+                ),
                 None,
             )
 
@@ -89,16 +93,20 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=200):
 
         for _ in range(iterations):
             send_slot = send_endpoint.send(
-                send_tensor.data_ptr(),
-                send_tensor.storage_offset(),
-                send_tensor.numel(),
+                (
+                    send_tensor.data_ptr(),
+                    send_tensor.storage_offset(),
+                    send_tensor.numel(),
+                ),
                 None,
             )
 
             recv_slot = recv_endpoint.recv(
-                recv_tensor.data_ptr(),
-                recv_tensor.storage_offset(),
-                recv_tensor.numel(),
+                (
+                    recv_tensor.data_ptr(),
+                    recv_tensor.storage_offset(),
+                    recv_tensor.numel(),
+                ),
                 None,
             )
 

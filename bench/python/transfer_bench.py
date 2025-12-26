@@ -138,21 +138,13 @@ for idx, (rawsize, ttensor) in enumerate(zip(args.size, ttensors)):
             if rank == 0:
                 if args.with_imm_data:
                     assign = rdma_endpoint.write_with_imm(
-                        [idx],
-                        [idx],
-                        [0],
-                        [0],
-                        [ttensor.numel() * ttensor.itemsize],
+                        [(idx, idx, 0, 0, ttensor.numel() * ttensor.itemsize)],
                         0,
                         None,
                     )
                 else:
                     assign = fn(
-                        [idx],
-                        [idx],
-                        [0],
-                        [0],
-                        [ttensor.numel() * ttensor.itemsize],
+                        [(idx, idx, 0, 0, ttensor.numel() * ttensor.itemsize)],
                         None,
                     )
                 slots.append(assign)

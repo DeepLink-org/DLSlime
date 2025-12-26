@@ -5,8 +5,8 @@
 #include <zmq.hpp>
 
 #include "acl/acl.h"
-#include "engine/ascend_direct/ascend_direct_transport.h"
-#include "logging.h"
+#include "dlslime/engine/ascend_direct/ascend_direct_transport.h"
+#include "dlslime/logging.h"
 
 DEFINE_string(localhost, "100.97.164.197", "local IP");
 DEFINE_int32(local_port, 16777, "Port number");
@@ -29,7 +29,7 @@ DEFINE_uint64(block_iteration, 10, "number of iterations of the block");
 DEFINE_string(report_unit, "GB", "Report unit: GB|GiB|Gb|MB|MiB|Mb|KB|KiB|Kb");
 DEFINE_uint32(report_precision, 2, "Report precision");
 
-using namespace slime;
+using namespace dlslime;
 
 const static std::unordered_map<std::string, uint64_t> RATE_UNIT_MP = {{"GB", 1000ull * 1000ull * 1000ull},
                                                                        {"GiB", 1ull << 30},

@@ -10,12 +10,12 @@
 
 #include <pybind11/chrono.h>
 
-#include "engine/rdma/rdma_endpoint.h"
-#include "engine/rdma/rdma_future.h"
-#include "engine/rdma/rdma_utils.h"
-#include "engine/rdma/rdma_worker.h"
+#include "dlslime/engine/rdma/rdma_endpoint.h"
+#include "dlslime/engine/rdma/rdma_future.h"
+#include "dlslime/engine/rdma/rdma_utils.h"
+#include "dlslime/engine/rdma/rdma_worker.h"
 
-namespace slime {
+namespace dlslime {
 namespace c10d {
 
 constexpr const char* SLIME_BACKEND_NAME = "dlslime";
@@ -223,4 +223,4 @@ private:
 };
 
 }  // namespace c10d
-}  // namespace slime
+}  // namespace dlslime
