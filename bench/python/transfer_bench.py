@@ -26,8 +26,7 @@ import os
 import numpy as np
 import torch
 import zmq
-
-from dlslime import Assignment, available_nic, RDMAEndpoint
+from dlslime import available_nic, RDMAEndpoint
 from tabulate import tabulate
 
 parser = argparse.ArgumentParser()
@@ -71,7 +70,7 @@ args = parser.parse_args()
 if args.with_imm_data and args.opcode != "write":
     raise ValueError("Immediate data can only be used with write operations.")
 
-qp_num = args.qp_num if args.qp_num is not None else int(os.getenv("SLIME_QP_NUM", 1))
+qp_num = args.qp_num if args.qp_num is not None else int(os.getenv("SLIME_QP_NUM", 2))
 
 print(f"mode: RDMA RC {args.opcode}")
 print(f"num concurrency: {args.num_concurrency}")
@@ -82,9 +81,7 @@ world_size = args.world_size
 assert world_size == 2
 
 rdma_devices = available_nic()
-rdma_endpoint = RDMAEndpoint(
-    rdma_devices[rank % len(rdma_devices)], ib_port=1, link_type="RoCE", qp_num=qp_num
-)
+rdma_endpoint = RDMAEndpoint(rdma_devices[rank % len(rdma_devices)], 1, "RoCE", qp_num)
 zmq_ctx = zmq.Context(2)
 
 zmq_recv = zmq_ctx.socket(zmq.PULL)
@@ -111,12 +108,11 @@ torch.cuda.synchronize()
 for idx, ttensor in enumerate(ttensors):
     rdma_endpoint.register_memory_region(
         idx,
-        ttensor.data_ptr(),
-        ttensor.storage_offset(),
+        ttensor.data_ptr() + ttensor.storage_offset(),
         ttensor.numel() * ttensor.itemsize,
     )
 
-zmq_send.send_pyobj(rdma_endpoint.endpoint_info)
+zmq_send.send_pyobj(rdma_endpoint.endpoint_info())
 remote_info = zmq_recv.recv_pyobj()
 rdma_endpoint.connect(remote_info)
 
@@ -126,11 +122,9 @@ end_event = torch.cuda.Event(enable_timing=True)
 n_runs = args.num_concurrency
 
 if args.opcode == "read":
-    fn = rdma_endpoint.read_batch
-elif args.opcode == "write" and args.with_imm_data:
-    fn = rdma_endpoint.write_batch_with_imm_data
+    fn = rdma_endpoint.read
 elif args.opcode == "write":
-    fn = rdma_endpoint.write_batch
+    fn = rdma_endpoint.write
 else:
     raise ValueError
 
@@ -139,52 +133,34 @@ for idx, (rawsize, ttensor) in enumerate(zip(args.size, ttensors)):
     total_time = 0.0
     start_event.record()
     for _ in range(100):
-        assigns = []
+        slots = []
         for assign_id in range(n_runs):
             if rank == 0:
                 if args.with_imm_data:
-                    assign = fn(
-                        batch=[
-                            Assignment(
-                                mr_key=idx,
-                                target_offset=0,
-                                source_offset=0,
-                                length=ttensor.numel() * ttensor.itemsize,
-                            )
-                        ],
-                        qpi=assign_id % qp_num,
-                        imm_data=1,
-                        async_op=True,
+                    assign = rdma_endpoint.write_with_imm(
+                        [idx],
+                        [idx],
+                        [0],
+                        [0],
+                        [ttensor.numel() * ttensor.itemsize],
+                        0,
+                        None,
                     )
                 else:
                     assign = fn(
-                        batch=[
-                            Assignment(
-                                mr_key=idx,
-                                target_offset=0,
-                                source_offset=0,
-                                length=ttensor.numel() * ttensor.itemsize,
-                            )
-                        ],
-                        async_op=True,
+                        [idx],
+                        [idx],
+                        [0],
+                        [0],
+                        [ttensor.numel() * ttensor.itemsize],
+                        None,
                     )
-                assigns.append(assign)
+                slots.append(assign)
             else:
                 if args.with_imm_data:
-                    assign = rdma_endpoint.recv_batch(
-                        batch=[
-                            Assignment(
-                                mr_key=idx,
-                                target_offset=0,
-                                source_offset=0,
-                                length=ttensor.numel() * ttensor.itemsize,
-                            )
-                        ],
-                        qpi=assign_id % qp_num,
-                        async_op=True,
-                    )
-                    assigns.append(assign)
-        [assign.wait() for assign in assigns]
+                    assign = rdma_endpoint.imm_recv()
+                    slots.append(assign)
+        future = [slot.wait() for slot in slots]
     end_event.record()
     torch.cuda.synchronize()
     elapsed_time = start_event.elapsed_time(end_event)
@@ -193,7 +169,7 @@ for idx, (rawsize, ttensor) in enumerate(zip(args.size, ttensors)):
     if rank == 0:
         size_bytes = ttensor.numel() * ttensor.itemsize
         total_transport = n_runs * size * ttensor.itemsize
-        avg_latency = np.mean([assign.latency() for assign in assigns])
+        avg_latency = total_time / n_runs
         bandwidth = n_runs * size * ttensor.itemsize * 100 / total_time / 1e3
 
         benchmark_data.append(
@@ -202,7 +178,7 @@ for idx, (rawsize, ttensor) in enumerate(zip(args.size, ttensors)):
                 f"{total_transport:,}",  # noqa: E231
                 str(args.target_affi),
                 str(args.initiator_affi),
-                f"{avg_latency.total_seconds() * 1000:.2f}",  # noqa: E231
+                f"{avg_latency * 1000:.2f}",  # noqa: E231
                 f"{bandwidth:.2f}",  # noqa: E231
             ]
         )

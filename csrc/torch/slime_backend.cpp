@@ -1,7 +1,12 @@
 #include "slime_backend.h"
-#include "engine/rdma/rdma_buffer.h"
-#include "engine/rdma/rdma_endpoint_v0.h"
+#include "engine/rdma/rdma_context.h"
+#include "engine/rdma/rdma_context_pool.h"
+#include "engine/rdma/rdma_endpoint.h"
 #include "engine/rdma/rdma_env.h"
+#include "engine/rdma/rdma_future.h"
+#include "engine/rdma/rdma_utils.h"
+#include "engine/rdma/rdma_worker.h"
+#include "engine/rdma/rdma_worker_pool.h"
 #include "logging.h"
 
 #ifdef SLIME_USE_CUDA
@@ -46,8 +51,11 @@ static uint32_t checkTag(int32_t tag)
     return (uint32_t)tag;
 }
 
-SendWork::SendWork(std::vector<at::Tensor>& tensor, std::shared_ptr<::slime::RDMABuffer> buffer, uint64_t seq):
-    Work(-1, ::c10d::OpType::SEND), tensor_(tensor), buffer_(std::move(buffer)), seq_(seq)
+SendWork::SendWork(std::vector<at::Tensor>&      tensor,
+                   std::shared_ptr<RDMAEndpoint> endpoint,
+                   std::shared_ptr<SendFuture>   slot,
+                   uint64_t                      seq):
+    Work(-1, ::c10d::OpType::SEND), tensor_(tensor), endpoint_(endpoint), slot_(slot), seq_(seq)
 {
 }
 
@@ -57,10 +65,10 @@ bool SendWork::wait(std::chrono::milliseconds timeout)
     std::exception_ptr exception{nullptr};
     try {
         if (timeout == kNoTimeout) {
-            sendCompleted = buffer_->waitSend();
+            sendCompleted = slot_->wait();
         }
         else {
-            sendCompleted = buffer_->waitSend();
+            sendCompleted = slot_->wait();
         }
     }
     catch (...) {
@@ -71,8 +79,11 @@ bool SendWork::wait(std::chrono::milliseconds timeout)
     return sendCompleted;
 }
 
-RecvWork::RecvWork(std::vector<at::Tensor>& tensor, std::shared_ptr<::slime::RDMABuffer> buffer, uint64_t seq):
-    Work(-1, ::c10d::OpType::RECV), tensor_(tensor), buffer_(std::move(buffer)), srcRank_(-1), seq_(seq)
+RecvWork::RecvWork(std::vector<at::Tensor>&      tensor,
+                   std::shared_ptr<RDMAEndpoint> endpoint,
+                   std::shared_ptr<RecvFuture>   slot,
+                   uint64_t                      seq):
+    Work(-1, ::c10d::OpType::SEND), tensor_(tensor), endpoint_(endpoint), slot_(slot), seq_(seq)
 {
 }
 
@@ -82,10 +93,10 @@ bool RecvWork::wait(std::chrono::milliseconds timeout)
     std::exception_ptr exception{nullptr};
     try {
         if (timeout == kNoTimeout) {
-            recvCompleted = buffer_->waitRecv();
+            recvCompleted = slot_->wait();
         }
         else {
-            recvCompleted = buffer_->waitRecv();
+            recvCompleted = slot_->wait();
         }
     }
     catch (...) {
@@ -119,14 +130,13 @@ c10::intrusive_ptr<::c10d::Work> slimeBackend::send(std::vector<at::Tensor>& ten
         stream_handle = nullptr;
     }
 
-    auto buf = std::make_shared<RDMABuffer>(
-        end_point_set_[mod_positive(dstRank - rank_, size_ - 1)], ptrs[0], offset[0], data_size[0]);
-    buf->send(stream_handle);
+    auto endpoint = end_point_set_[mod_positive(dstRank - rank_, size_ - 1)];
+    auto slot     = endpoint->send(ptrs[0], offset[0], data_size[0], stream_handle);
 
     ++seq_;
     // The work captures the tensor to prevent it being deallocated and
     // the unbound buffer to synchronize on completion of the recv.
-    auto send_work = c10::make_intrusive<SendWork>(tensors, std::move(buf), seq_);
+    auto send_work = c10::make_intrusive<SendWork>(tensors, endpoint, slot, seq_);
     if (group_active_) {
         grouped_works_.emplace_back(send_work);
     }
@@ -156,14 +166,13 @@ c10::intrusive_ptr<::c10d::Work> slimeBackend::recv(std::vector<at::Tensor>& ten
         stream_handle = nullptr;
     }
 
-    auto buf = std::make_shared<RDMABuffer>(
-        end_point_set_[mod_positive(srcRank - rank_, size_ - 1)], ptrs[0], offset[0], data_size[0]);
-    buf->recv(stream_handle);
+    auto endpoint = end_point_set_[mod_positive(srcRank - rank_, size_ - 1)];
+    auto slot     = endpoint->recv(ptrs[0], offset[0], data_size[0], stream_handle);
     ++seq_;
 
     // The work captures the tensor to prevent it being deallocated and
     // the unbound buffer to synchronize on completion of the send.
-    auto recv_work = c10::make_intrusive<RecvWork>(tensors, std::move(buf), seq_);
+    auto recv_work = c10::make_intrusive<RecvWork>(tensors, endpoint, slot, seq_);
     if (group_active_) {
         grouped_works_.emplace_back(recv_work);
     }
@@ -183,23 +192,27 @@ slimeBackend::slimeBackend(const c10::intrusive_ptr<::c10d::Store>& store, int r
     uint8_t           ib_port   = 1;
     size_t            qp_num    = SLIME_QP_NUM;
 
+    std::shared_ptr<RDMAContext> context = GlobalContextManager::instance().get_context(dev_name, ib_port, link_type);
+    rdma_worker_                         = GlobalWorkerManager::instance().get_default_worker(socketId(dev_name));
     for (int i = 0; i < size - 1; ++i) {
 
+        auto endpoint = std::make_shared<RDMAEndpoint>(context, qp_num, rdma_worker_);
         // TODO: the different end_point in the rank can use different RDMA dev to transmit the message.
-        end_point_set_.push_back(std::make_shared<RDMAEndpointV0>(dev_name, ib_port, link_type, qp_num));
+        end_point_set_.push_back(endpoint);
+        rdma_worker_->addEndpoint(endpoint);
 
         json channel_info;
-        channel_info["data_channel"] = end_point_set_[i]->dataCtxInfo();
-        channel_info["meta_channel"] = end_point_set_[i]->metaCtxInfo();
+        channel_info = end_point_set_[i]->endpointInfo();
         local_channel_info_.push_back(channel_info);
     }
+    rdma_worker_->start();
 
     exchangeChannelInfo();
 
     try {
         for (int i = 0; i < size_ - 1; ++i) {
             json cur_channel_info = global_channel_info_[mod_positive(rank_ + i + 1, size_)][size_ - 2 - i];
-            end_point_set_[i]->connect(cur_channel_info["data_channel"], cur_channel_info["meta_channel"]);
+            end_point_set_[i]->connect(cur_channel_info);
         }
     }
     catch (const std::runtime_error& e) {

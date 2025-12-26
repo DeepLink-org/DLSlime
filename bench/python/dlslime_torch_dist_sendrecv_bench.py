@@ -132,7 +132,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--master-addr",
         type=str,
-        default="10.102.207.84",
+        default="127.0.0.1",
         help="Master address for distributed training",
     )
     parser.add_argument(
@@ -166,4 +166,5 @@ if __name__ == "__main__":
     os.environ["NCCL_P2P_DISABLE"] = "1"
     os.environ["NCCL_SHM_DISABLE"] = "1"
     import time
+
     benchmark_send_recv(args)

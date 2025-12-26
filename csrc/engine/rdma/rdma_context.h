@@ -1,17 +1,5 @@
 #pragma once
 
-#include "engine/assignment.h"
-#include "engine/rdma/affinity.h"
-#include "engine/rdma/memory_pool.h"
-#include "engine/rdma/rdma_assignment.h"
-#include "engine/rdma/rdma_config.h"
-#include "engine/rdma/rdma_env.h"
-
-#include "jring.h"
-#include "json.hpp"
-#include "logging.h"
-
-#include <condition_variable>
 #include <cstdint>
 #include <functional>
 #include <future>
@@ -26,70 +14,38 @@
 
 #include <infiniband/verbs.h>
 
+#include "engine/assignment.h"
+
+#include "memory_pool.h"
+#include "rdma_assignment.h"
+#include "rdma_config.h"
+#include "rdma_env.h"
+
+#include "jring.h"
+#include "json.hpp"
+#include "logging.h"
+
 namespace slime {
+
+class RDMAChannel;
 
 using json = nlohmann::json;
 
-class RDMAContext {
+class RDMAContext: public std::enable_shared_from_this<RDMAContext> {
 
-    friend class RDMAEndpoint;  // RDMA Endpoint need to use the register memory pool in context
-    friend class RDMAEndpointV0;
+    friend class RDMAChannel;
+    friend class RDMAEndpoint;
+    friend class RDMAMsgEndpoint;
+    friend class RDMAIOEndpoint;
 
 public:
     /*
       A context of rdma QP.
     */
-    RDMAContext()
-    {
-        SLIME_LOG_DEBUG("Initializing qp management, num qp: " << SLIME_QP_NUM);
 
-        qp_list_len_   = SLIME_QP_NUM;
-        qp_management_ = new qp_management_t*[qp_list_len_];
-        for (int qpi = 0; qpi < qp_list_len_; qpi++) {
-            qp_management_[qpi] = new qp_management_t();
-        }
+    RDMAContext() = default;
 
-        /* random initialization for psn configuration */
-        srand48(time(NULL));
-    }
-
-    RDMAContext(size_t qp_num, size_t max_num_inline_data = 0, bool with_backpressure = true)
-    {
-        SLIME_LOG_DEBUG("Initializing qp management, num qp: " << qp_num);
-
-        qp_list_len_         = qp_num;
-        max_num_inline_data_ = max_num_inline_data;
-
-        with_backpressure_ = with_backpressure;
-
-        qp_management_ = new qp_management_t*[qp_list_len_];
-        for (int qpi = 0; qpi < qp_list_len_; qpi++) {
-            qp_management_[qpi] = new qp_management_t();
-        }
-
-        /* random initialization for psn configuration */
-        srand48(time(NULL));
-    }
-
-    ~RDMAContext()
-    {
-        stop_future();
-        for (int qpi = 0; qpi < qp_list_len_; qpi++) {
-            delete qp_management_[qpi];
-        }
-        delete[] qp_management_;
-
-        if (cq_)
-            ibv_destroy_cq(cq_);
-
-        if (pd_)
-            ibv_dealloc_pd(pd_);
-
-        if (ib_ctx_)
-            ibv_close_device(ib_ctx_);
-
-        SLIME_LOG_DEBUG("RDMAContext deconstructed")
-    }
+    ~RDMAContext();
 
     struct ibv_mr* get_mr(const uintptr_t& mr_key)
     {
@@ -105,19 +61,19 @@ public:
     int64_t init(const std::string& dev_name, uint8_t ib_port, const std::string& link_type);
 
     /* Memory Allocation */
-    inline int64_t registerMemoryRegion(const uintptr_t& mr_key, uintptr_t data_ptr, size_t length)
+    inline int64_t registerOrAccessMemoryRegion(const uintptr_t& mr_key, uintptr_t data_ptr, size_t length)
     {
         memory_pool_->registerMemoryRegion(mr_key, data_ptr, length);
         return 0;
     }
 
-    inline int registerRemoteMemoryRegion(const uintptr_t& mr_key, uintptr_t addr, size_t length, uint32_t rkey)
+    inline int registerOrAccessRemoteMemoryRegion(const uintptr_t& mr_key, uintptr_t addr, size_t length, uint32_t rkey)
     {
         memory_pool_->registerRemoteMemoryRegion(mr_key, addr, length, rkey);
         return 0;
     }
 
-    inline int64_t registerRemoteMemoryRegion(const uintptr_t& mr_key, json mr_info)
+    inline int64_t registerOrAccessRemoteMemoryRegion(const uintptr_t& mr_key, json mr_info)
     {
         memory_pool_->registerRemoteMemoryRegion(mr_key, mr_info);
         return 0;
@@ -135,40 +91,8 @@ public:
         return 0;
     }
 
-    /* RDMA Link Construction */
-    int64_t connect(const json& endpoint_info_json);
-    /* Submit an assignment */
-    std::shared_ptr<RDMAAssignHandler> submit(OpCode           opcode,
-                                              AssignmentBatch& assignment,
-                                              callback_fn_t    callback  = nullptr,
-                                              int              qpi       = UNDEFINED_QPI,
-                                              int32_t          imm_data  = UNDEFINED_IMM_DATA,
-                                              bool             is_inline = false);
-
     void launch_future();
     void stop_future();
-
-    json local_rdma_info() const
-    {
-        json local_info{};
-        for (int qpi = 0; qpi < qp_list_len_; qpi++)
-            local_info[qpi] = qp_management_[qpi]->local_rdma_info_.to_json();
-        return local_info;
-    }
-
-    json remote_rdma_info() const
-    {
-        json remote_info{};
-        for (int qpi = 0; qpi < qp_list_len_; qpi++)
-            remote_info[qpi] = qp_management_[qpi]->remote_rdma_info_.to_json();
-        return remote_info;
-    }
-
-    json endpoint_info() const
-    {
-        json endpoint_info = json{{"rdma_info", local_rdma_info()}, {"mr_info", memory_pool_->mr_info()}};
-        return endpoint_info;
-    }
 
     std::string get_dev_ib() const
     {
@@ -182,8 +106,8 @@ public:
     }
 
 private:
-    inline static constexpr int      UNDEFINED_QPI      = -1;
-    inline static constexpr uint32_t UNDEFINED_IMM_DATA = -1;
+    inline static constexpr int      UNDEFINED_QPI            = -1;
+    inline static constexpr uint32_t UNDEFINED_IMM_DATA       = -1;
     inline static constexpr uint32_t BACKPRESSURE_BUFFER_SIZE = 8192;
 
     std::string device_name_ = "";
@@ -195,55 +119,23 @@ private:
     struct ibv_cq*           cq_           = nullptr;
     uint8_t                  ib_port_      = -1;
     size_t                   max_num_inline_data_{0};
+    uint16_t                 lid_;
+    enum ibv_mtu             active_mtu_;
+    union ibv_gid            gid_;
+    int64_t                  gidx_;
 
     std::unique_ptr<RDMAMemoryPool> memory_pool_;
 
-    typedef struct qp_management {
-        /* queue peer list */
-        struct ibv_qp* qp_{nullptr};
+    int32_t num_qp_;
+    int32_t last_qp_selection_{-1};
 
-        /* RDMA Exchange Information */
-        rdma_info_t remote_rdma_info_;
-        rdma_info_t local_rdma_info_;
-
-        /* Send Mutex */
-        std::mutex rdma_post_send_mutex_;
-
-        /* Assignment Queue */
-        struct jring* overflow_ring_;
-        void*         ring_memory_;
-
-        std::atomic<uint32_t>   assign_slot_id_{0};
-        RDMAAssign*             assign_pool_;
-        std::atomic<int>        qp_outstanding_{0};
-        /* polling pool */
-        std::vector<ibv_send_wr> send_wr_pool_;
-        std::vector<ibv_recv_wr> recv_wr_pool_;
-        std::vector<ibv_sge>     send_sge_pool_;
-        std::vector<ibv_sge>     recv_sge_pool_;
-
-        ~qp_management()
-        {
-            if (qp_)
-                ibv_destroy_qp(qp_);
-            free(assign_pool_);
-        }
-        inline size_t poolSize() {
-            return BACKPRESSURE_BUFFER_SIZE + SLIME_MAX_CQ_DEPTH * 2;
-        }
-    } qp_management_t;
-
-    size_t            qp_list_len_{1};
-    qp_management_t** qp_management_;
-
-    int              last_qp_selection_{-1};
     std::vector<int> select_qpi(int num)
     {
         std::vector<int> agg_qpi;
         // Simplest round robin, we could enrich it in the future
 
         for (int i = 0; i < num; ++i) {
-            last_qp_selection_ = (last_qp_selection_ + 1) % qp_list_len_;
+            last_qp_selection_ = (last_qp_selection_ + 1) % num_qp_;
             agg_qpi.push_back(last_qp_selection_);
         }
 
@@ -254,10 +146,6 @@ private:
         // TODO: multi cq handlers.
     } cq_management_t;
 
-    /* State Management */
-    bool initialized_ = false;
-    bool connected_   = false;
-
     /* async cq handler */
     std::thread       cq_thread_;
     std::atomic<bool> stop_cq_thread_{false};
@@ -265,17 +153,7 @@ private:
     /* Completion Queue Polling */
     int64_t cq_poll_handle();
 
-    /* Async RDMA SendRecv */
-    int64_t post_send_batch(int qpi, RDMAAssign* assign);
-    int64_t post_recv_batch(int qpi, RDMAAssign* assign);
-
-    /* Async RDMA Read */
-    int64_t post_rc_oneside_batch(int qpi, RDMAAssign* assign);
-
     int64_t service_level_{0};
-
-    bool with_backpressure_;
-    void drain_submission_queue(int qpi);
 };
 
 }  // namespace slime

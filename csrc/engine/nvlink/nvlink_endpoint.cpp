@@ -1,4 +1,4 @@
-#include "nvlink_transport.h"
+#include "nvlink_endpoint.h"
 
 namespace slime {
 }  // namespace slime

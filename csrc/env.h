@@ -4,6 +4,7 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include <numa.h>
@@ -22,10 +23,7 @@ T get_env(const char* name, T default_value)
     if (!val)
         return default_value;
 
-    if constexpr (std::is_same_v<T, int>) {
-        return std::stoi(val);
-    }
-    else if constexpr (std::is_same_v<T, std::vector<std::string>>) {
+    if constexpr (std::is_same_v<T, std::vector<std::string>>) {
         std::vector<std::string> result;
         std::stringstream        ss(val);
         std::string              item;
@@ -35,7 +33,7 @@ T get_env(const char* name, T default_value)
         return result;
     }
     else {
-        static_assert(sizeof(T) == 0, "Unsupported type for get_env");
+        return std::stoi(val);
     }
 }
 
