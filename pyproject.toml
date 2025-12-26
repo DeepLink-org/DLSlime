@@ -1,11 +1,14 @@
 [build-system]
 build-backend = "scikit_build_core.build"
-requires = ["scikit-build-core>=0.10", "pybind11>=2.12", "ninja"]
+requires = [
+  "scikit-build-core>=0.10",
+  "pybind11>=2.12",
+  "ninja",
+  "pybind11-stubgen",
+]
 
 [project]
-authors = [
-  {name = "JimyMa", email = "hit16s105116@gmail.com"},
-]
+authors = [{ name = "JimyMa", email = "hit16s105116@gmail.com" }]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Developers",
@@ -29,7 +32,7 @@ dependencies = [
   "pydantic>=2.0",
   # for --build-no-isolation
   "scikit-build-core>=0.10",
-  "pybind11>=2.12"
+  "pybind11>=2.12",
 ]
 
 [project.urls]
@@ -41,11 +44,7 @@ Repository = "https://github.com/DeepLink-org/DLSlime.git"
 # BUILD_TORCH_PLUGIN: OFF
 # BUILD_NVLINK: OFF
 # USE_MACA: OFF
-cmake.args = [
-  "-G Ninja",
-  "-DDLSLIME_INSTALL_PATH=dlslime",
-  "-DBUILD_PYTHON=ON"
-]
+cmake.args = ["-G Ninja", "-DDLSLIME_INSTALL_PATH=dlslime", "-DBUILD_PYTHON=ON"]
 cmake.build-type = "Release"
 
 build-dir = "build"

@@ -1,22 +1,24 @@
 #pragma once
 
-#include "engine/assignment.h"
-
 #include <algorithm>
 #include <atomic>
-#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
-#include <emmintrin.h>
-#include <infiniband/verbs.h>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
 #include <unordered_map>
 
-#include "engine/rdma/rdma_env.h"
+#include <emmintrin.h>
+#include <infiniband/verbs.h>
+
+#include "engine/assignment.h"
+
+#include "rdma_context.h"
+#include "rdma_env.h"
+
 #include "json.hpp"
 #include "logging.h"
 
@@ -25,7 +27,6 @@ namespace slime {
 using json = nlohmann::json;
 
 class RDMAAssign;
-class RDMAAssignHandler;
 
 using callback_fn_t = std::function<void(int, int)>;
 
@@ -42,7 +43,13 @@ static const std::map<OpCode, ibv_wr_opcode> ASSIGN_OP_2_IBV_WR_OP = {
 
 struct alignas(64) RDMAAssign {
     static constexpr size_t MAX_ASSIGN_CAPACITY = 4096;
+    friend class SendFuture;
+    friend class RecvFuture;
+    friend class ReadWriteFuture;
+    friend class ImmRecvFuture;
     friend class RDMAContext;
+    friend class RDMAChannel;
+    friend class RDMAIOEndpoint;
     friend std::ostream& operator<<(std::ostream& os, const RDMAAssign& assignment);
 
 public:
@@ -55,9 +62,12 @@ public:
     } CALLBACK_STATUS;
 
     RDMAAssign() = default;
-    RDMAAssign(OpCode opcode, AssignmentBatch& batch, callback_fn_t callback = nullptr, bool is_inline = false);
-    void
-    reset(OpCode opcode, size_t qpi, AssignmentBatch& batch, callback_fn_t callback = nullptr, bool is_inline = false);
+    void reset(OpCode           opcode,
+               size_t           qpi,
+               AssignmentBatch& batch,
+               callback_fn_t    callback  = nullptr,
+               bool             is_inline = false,
+               int32_t          imm_data  = 0);
 
     ~RDMAAssign() {}
 
@@ -89,41 +99,7 @@ private:
     int32_t imm_data_{0};
     bool    with_imm_data_{false};
 
-    bool is_inline_;
-
-    std::atomic<bool> in_use_{false};
-    std::atomic<int>  finished_{0};
-};
-
-class RDMAAssignHandler {
-    friend std::ostream& operator<<(std::ostream& os, const RDMAAssignHandler& assignment);
-
-public:
-    RDMAAssignHandler(std::vector<RDMAAssign*>& rdma_assignment_batch):
-        rdma_assignment_batch_(std::move(rdma_assignment_batch))
-    {
-    }
-    ~RDMAAssignHandler();
-
-    bool query();
-    void wait();
-
-    std::chrono::duration<double> latency()
-    {
-        std::vector<std::chrono::duration<double>> durations;
-        for (int i = 0; i < rdma_assignment_batch_.size(); ++i) {
-            durations.push_back(rdma_assignment_batch_[i]->latency());
-        }
-        if (durations.empty()) {
-            return std::chrono::duration<double>::zero();
-        }
-        return *std::max_element(durations.begin(), durations.end());
-    }
-
-    json dump() const;
-
-private:
-    std::vector<RDMAAssign*> rdma_assignment_batch_{};
+    bool is_inline_{false};
 };
 
 }  // namespace slime

@@ -27,7 +27,7 @@ enum class OpCode : uint8_t {
     WRITE_WITH_IMM
 };
 
-struct Assignment {
+struct alignas(64) Assignment {
     friend std::ostream& operator<<(std::ostream& os, const Assignment& assignment);
     Assignment() = default;
 

@@ -10,8 +10,10 @@
 
 #include <pybind11/chrono.h>
 
-#include "engine/rdma/rdma_endpoint_v0.h"
-#include "engine/rdma/utils.h"
+#include "engine/rdma/rdma_endpoint.h"
+#include "engine/rdma/rdma_future.h"
+#include "engine/rdma/rdma_utils.h"
+#include "engine/rdma/rdma_worker.h"
 
 namespace slime {
 namespace c10d {
@@ -22,7 +24,10 @@ class TORCH_API SendWork: public ::c10d::Work {
     friend class slimeBackend;
 
 public:
-    explicit SendWork(std::vector<at::Tensor>& tensor, std::shared_ptr<::slime::RDMABuffer> buffer, uint64_t seq);
+    explicit SendWork(std::vector<at::Tensor>&      tensor,
+                      std::shared_ptr<RDMAEndpoint> endpoint,
+                      std::shared_ptr<SendFuture>   slot,
+                      uint64_t                      seq);
     bool wait(std::chrono::milliseconds timeout = kNoTimeout) override;
     void abort() override
     {
@@ -30,17 +35,21 @@ public:
     }
 
 protected:
-    std::vector<at::Tensor>              tensor_;
-    std::shared_ptr<::slime::RDMABuffer> buffer_;
-    int                                  dstRank_;
-    const uint64_t                       seq_;
+    std::vector<at::Tensor>       tensor_;
+    std::shared_ptr<RDMAEndpoint> endpoint_;
+    std::shared_ptr<SendFuture>   slot_;
+    int                           dstRank_;
+    const uint64_t                seq_;
 };
 
 class TORCH_API RecvWork: public ::c10d::Work {
     friend class slimeBackend;
 
 public:
-    explicit RecvWork(std::vector<at::Tensor>& tensor, std::shared_ptr<::slime::RDMABuffer> buffer, uint64_t seq);
+    explicit RecvWork(std::vector<at::Tensor>&      tensor,
+                      std::shared_ptr<RDMAEndpoint> endpoint,
+                      std::shared_ptr<RecvFuture>   slot,
+                      uint64_t                      seq);
     bool wait(std::chrono::milliseconds timeout = kNoTimeout) override;
     void abort() override
     {
@@ -48,10 +57,11 @@ public:
     }
 
 protected:
-    std::vector<at::Tensor>              tensor_;
-    std::shared_ptr<::slime::RDMABuffer> buffer_;
-    int                                  srcRank_;
-    const uint64_t                       seq_;
+    std::vector<at::Tensor>       tensor_;
+    std::shared_ptr<RDMAEndpoint> endpoint_;
+    std::shared_ptr<RecvFuture>   slot_;
+    int                           dstRank_;
+    const uint64_t                seq_;
 };
 
 class GroupWork: public ::c10d::Work {
@@ -201,7 +211,8 @@ public:
 private:
     void                                       exchangeChannelInfo();
     c10::intrusive_ptr<::c10d::Store>          store_;
-    std::vector<std::shared_ptr<RDMAEndpointV0>> end_point_set_;
+    std::shared_ptr<RDMAWorker>                rdma_worker_;
+    std::vector<std::shared_ptr<RDMAEndpoint>> end_point_set_;
     std::vector<json>                          local_channel_info_;
     std::vector<json>                          global_channel_info_;
     uint64_t                                   seq_{0};
