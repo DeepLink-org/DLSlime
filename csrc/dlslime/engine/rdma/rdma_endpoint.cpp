@@ -88,50 +88,35 @@ int32_t RDMAEndpoint::registerOrAccessRemoteMemoryRegion(uintptr_t ptr, json mr_
 // Two-Sided Primitives (Message Passing) -> MsgEndpoint
 // ============================================================
 
-std::shared_ptr<SendFuture> RDMAEndpoint::send(uintptr_t data_ptr, size_t offset, size_t length, void* stream_handler)
+std::shared_ptr<SendFuture> RDMAEndpoint::send(const chunk_tuple_t& chunk, void* stream_handler)
 {
-    return msg_endpoint_->send(data_ptr, offset, length, stream_handler);
+    return msg_endpoint_->send(chunk, stream_handler);
 }
 
-std::shared_ptr<RecvFuture> RDMAEndpoint::recv(uintptr_t data_ptr, size_t offset, size_t length, void* stream_handler)
+std::shared_ptr<RecvFuture> RDMAEndpoint::recv(const chunk_tuple_t& chunk, void* stream_handler)
 {
-    return msg_endpoint_->recv(data_ptr, offset, length, stream_handler);
+    return msg_endpoint_->recv(chunk, stream_handler);
 }
 
 // ============================================================
 // One-Sided Primitives (RDMA IO) -> IOEndpoint
 // ============================================================
 
-std::shared_ptr<ReadWriteFuture> RDMAEndpoint::read(std::vector<uintptr_t>& local_ptr,
-                                                    std::vector<uintptr_t>& remote_ptr,
-                                                    std::vector<uintptr_t>& target_offset,
-                                                    std::vector<uintptr_t>& source_offset,
-                                                    std::vector<size_t>&    length,
-                                                    void*                   stream)
+std::shared_ptr<ReadWriteFuture> RDMAEndpoint::read(const std::vector<assign_tuple_t>& assign, void* stream)
 
 {
-    return io_endpoint_->read(local_ptr, remote_ptr, target_offset, source_offset, length, stream);
+    return io_endpoint_->read(assign, stream);
 };
 
-std::shared_ptr<ReadWriteFuture> RDMAEndpoint::write(std::vector<uintptr_t>& local_ptr,
-                                                     std::vector<uintptr_t>& remote_ptr,
-                                                     std::vector<uintptr_t>& target_offset,
-                                                     std::vector<uintptr_t>& source_offset,
-                                                     std::vector<size_t>&    length,
-                                                     void*                   stream)
+std::shared_ptr<ReadWriteFuture> RDMAEndpoint::write(const std::vector<assign_tuple_t>& assign, void* stream)
 {
-    return io_endpoint_->write(local_ptr, remote_ptr, target_offset, source_offset, length, stream);
+    return io_endpoint_->write(assign, stream);
 }
 
-std::shared_ptr<ReadWriteFuture> RDMAEndpoint::writeWithImm(std::vector<uintptr_t>& local_ptr,
-                                                            std::vector<uintptr_t>& remote_ptr,
-                                                            std::vector<uintptr_t>& target_offset,
-                                                            std::vector<uintptr_t>& source_offset,
-                                                            std::vector<size_t>&    length,
-                                                            int32_t                 imm_data,
-                                                            void*                   stream)
+std::shared_ptr<ReadWriteFuture>
+RDMAEndpoint::writeWithImm(const std::vector<assign_tuple_t>& assign, int32_t imm_data, void* stream)
 {
-    return io_endpoint_->writeWithImm(local_ptr, remote_ptr, target_offset, source_offset, length, imm_data, stream);
+    return io_endpoint_->writeWithImm(assign, imm_data, stream);
 }
 
 std::shared_ptr<ImmRecvFuture> RDMAEndpoint::immRecv(void* stream)

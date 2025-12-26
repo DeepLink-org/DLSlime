@@ -1,5 +1,6 @@
 #pragma once
 
+#include "engine/assignment.h"
 #include "rdma_context.h"
 #include "rdma_io_endpoint.h"
 #include "rdma_msg_endpoint.h"
@@ -37,36 +38,27 @@ public:
     int32_t registerOrAccessRemoteMemoryRegion(uintptr_t ptr, json mr_info);
 
     // TwoSide Primitive
-    std::shared_ptr<SendFuture> send(uintptr_t data_ptr, size_t offset, size_t length, void* stream_handler);
-    std::shared_ptr<RecvFuture> recv(uintptr_t data_ptr, size_t offset, size_t length, void* stream_handler);
+    std::shared_ptr<SendFuture> send(const chunk_tuple_t& chunk, void* stream_handler);
+    std::shared_ptr<RecvFuture> recv(const chunk_tuple_t& chunk, void* stream_handler);
 
     // OneSide Primitive
-    std::shared_ptr<ReadWriteFuture> read(std::vector<uintptr_t>& local_ptr,
-                                          std::vector<uintptr_t>& remote_ptr,
-                                          std::vector<uintptr_t>& target_offset,
-                                          std::vector<uintptr_t>& source_offset,
-                                          std::vector<size_t>&    length,
-                                          void*                   stream);
-    std::shared_ptr<ReadWriteFuture> write(std::vector<uintptr_t>& local_ptr,
-                                           std::vector<uintptr_t>& remote_ptr,
-                                           std::vector<uintptr_t>& target_offset,
-                                           std::vector<uintptr_t>& source_offset,
-                                           std::vector<size_t>&    length,
-                                           void*                   stream);
-    std::shared_ptr<ReadWriteFuture> writeWithImm(std::vector<uintptr_t>& local_ptr,
-                                                  std::vector<uintptr_t>& remote_ptr,
-                                                  std::vector<uintptr_t>& target_offset,
-                                                  std::vector<uintptr_t>& source_offset,
-                                                  std::vector<size_t>&    length,
-                                                  int32_t                 imm_data,
-                                                  void*                   stream);
+    std::shared_ptr<ReadWriteFuture> read(const std::vector<assign_tuple_t>& assign, void* stream);
+    std::shared_ptr<ReadWriteFuture> write(const std::vector<assign_tuple_t>& assign, void* stream);
+    std::shared_ptr<ReadWriteFuture>
+    writeWithImm(const std::vector<assign_tuple_t>& assign, int32_t imm_data, void* stream);
 
     std::shared_ptr<ImmRecvFuture> immRecv(void* stream = nullptr);
 
     int32_t process();
 
-    void setId(int64_t id) { id_.store(id, std::memory_order_relaxed); }
-    int64_t getId() const { return id_.load(std::memory_order_relaxed); }
+    void setId(int64_t id)
+    {
+        id_.store(id, std::memory_order_relaxed);
+    }
+    int64_t getId() const
+    {
+        return id_.load(std::memory_order_relaxed);
+    }
 
 private:
     std::atomic<int64_t>             id_{-1};

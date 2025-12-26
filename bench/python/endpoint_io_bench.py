@@ -89,7 +89,7 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=200):
 
             # Initiator: 执行 WriteWithImm
             send_slot = ep1.write_with_imm(
-                [local_ptr], [remote_ptr], [0], [0], [size], 888, None
+                [(local_ptr, remote_ptr, 0, 0, size)], 888, None
             )
 
             # 等待完成
@@ -111,7 +111,7 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=200):
 
             # 2. Initiator RDMA Write with Immediate
             send_slot = ep1.write_with_imm(
-                [local_ptr], [remote_ptr], [0], [0], [size], 888, None
+                [(local_ptr, remote_ptr, 0, 0, size)], 888, None
             )
 
             # 3. Synchronization

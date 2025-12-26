@@ -51,8 +51,8 @@ public:
         flags_->comm_done.fetch_or(bit, std::memory_order_release);
     }
 
-    void bind_stream(void* stream_handle) override{};
-    void wait_comm_done_on_stream(uint32_t target_mask) override
+    void bind_stream(void*) override{};
+    void wait_comm_done_on_stream(uint32_t) override
     {
     }
 

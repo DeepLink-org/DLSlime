@@ -56,8 +56,8 @@ RDMAMsgEndpoint::RDMAMsgEndpoint(std::shared_ptr<RDMAContext> ctx, size_t num_qp
     recv_ctx_pool_ = static_cast<RecvContext*>(raw_recv_ctx);
 
     for (int i = 0; i < SLIME_MAX_MSG_FIFO_DEPTH; ++i) {
-        send_ctx_pool_[i].signal = slime::device::createSignal(bypass_signal_);
-        recv_ctx_pool_[i].signal = slime::device::createSignal(bypass_signal_);
+        send_ctx_pool_[i].signal = dlslime::device::createSignal(bypass_signal_);
+        recv_ctx_pool_[i].signal = dlslime::device::createSignal(bypass_signal_);
     }
 
     for (size_t i = 0; i < SLIME_MAX_MSG_FIFO_DEPTH; ++i) {
@@ -176,8 +176,11 @@ void RDMAMsgEndpoint::connect(const json& remote_endpoint_info)
     SLIME_LOG_INFO("RDMA Contexts Launched.");
 }
 
-std::shared_ptr<SendFuture> RDMAMsgEndpoint::send(uintptr_t data_ptr, size_t offset, size_t length, void* stream_handle)
+std::shared_ptr<SendFuture> RDMAMsgEndpoint::send(const chunk_tuple_t& chunk, void* stream_handle)
 {
+    auto data_ptr = std::get<0>(chunk);
+    auto offset   = std::get<1>(chunk);
+    auto length   = std::get<2>(chunk);
     // Fast path: check MR cache.
     storage_view_t view{data_ptr, offset, length};
     auto           buffer_mr = ctx_->get_mr(data_ptr);
@@ -209,8 +212,11 @@ std::shared_ptr<SendFuture> RDMAMsgEndpoint::send(uintptr_t data_ptr, size_t off
     return send_future_pool_[slot];
 }
 
-std::shared_ptr<RecvFuture> RDMAMsgEndpoint::recv(uintptr_t data_ptr, size_t offset, size_t length, void* stream_handle)
+std::shared_ptr<RecvFuture> RDMAMsgEndpoint::recv(const chunk_tuple_t& chunk, void* stream_handle)
 {
+    auto data_ptr  = std::get<0>(chunk);
+    auto offset    = std::get<1>(chunk);
+    auto length    = std::get<2>(chunk);
     auto buffer_mr = ctx_->get_mr(data_ptr);
     if (not(buffer_mr and buffer_mr->length == length)) {
         SLIME_LOG_DEBUG("Registering new MR for buffer: ", data_ptr);

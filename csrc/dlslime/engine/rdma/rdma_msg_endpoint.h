@@ -83,7 +83,7 @@ struct alignas(64) SendContext {
 
     SendContextState state_;
 
-    std::shared_ptr<slime::device::DeviceSignal> signal;
+    std::shared_ptr<dlslime::device::DeviceSignal> signal;
 
     uint64_t expected_mask = 0;
 
@@ -109,7 +109,7 @@ struct alignas(64) RecvContext {
 
     RecvContextState state_;
 
-    std::shared_ptr<slime::device::DeviceSignal> signal;
+    std::shared_ptr<dlslime::device::DeviceSignal> signal;
 
     uint64_t expected_mask = 0;
 
@@ -133,9 +133,9 @@ public:
 
     json endpointInfo() const;
 
-    std::shared_ptr<SendFuture> send(uintptr_t data_ptr, size_t offset, size_t length, void* stream_handler);
+    std::shared_ptr<SendFuture> send(const chunk_tuple_t& chunk, void* stream_handler);
 
-    std::shared_ptr<RecvFuture> recv(uintptr_t data_ptr, size_t offset, size_t length, void* stream_handler);
+    std::shared_ptr<RecvFuture> recv(const chunk_tuple_t& chunk, void* stream_handler);
 
     int32_t process();
 

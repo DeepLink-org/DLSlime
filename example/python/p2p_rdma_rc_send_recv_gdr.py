@@ -18,10 +18,10 @@ if __name__ == "__main__":
     print(f"before recv, {recv_tensor=}")
 
     send_slot = send_endpoint.send(
-        send_tensor.data_ptr(), 0, send_tensor.numel() * send_tensor.itemsize
+        (send_tensor.data_ptr(), 0, send_tensor.numel() * send_tensor.itemsize)
     )
     recv_slot = recv_endpoint.recv(
-        recv_tensor.data_ptr(), 0, recv_tensor.numel() * recv_tensor.itemsize
+        (recv_tensor.data_ptr(), 0, recv_tensor.numel() * recv_tensor.itemsize)
     )
 
     send_slot.wait()

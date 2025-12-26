@@ -112,18 +112,20 @@ class RDMAEndpoint:
     def process(self) -> int: ...
     def read(
         self,
-        mr_key: collections.abc.Sequence[typing.SupportsInt],
-        remote_mr_key: collections.abc.Sequence[typing.SupportsInt],
-        target_offset: collections.abc.Sequence[typing.SupportsInt],
-        source_offset: collections.abc.Sequence[typing.SupportsInt],
-        length: collections.abc.Sequence[typing.SupportsInt],
+        assign: collections.abc.Sequence[
+            tuple[
+                typing.SupportsInt,
+                typing.SupportsInt,
+                typing.SupportsInt,
+                typing.SupportsInt,
+                typing.SupportsInt,
+            ]
+        ],
         stream: typing.Any = None,
     ) -> SlimeReadWriteFuture: ...
     def recv(
         self,
-        data_ptr: typing.SupportsInt,
-        offset: typing.SupportsInt,
-        length: typing.SupportsInt,
+        chunk: tuple[typing.SupportsInt, typing.SupportsInt, typing.SupportsInt],
         stream_handler: typing.Any = None,
     ) -> SlimeRecvFuture: ...
     def register_memory_region(
@@ -137,27 +139,33 @@ class RDMAEndpoint:
     ) -> int: ...
     def send(
         self,
-        data_ptr: typing.SupportsInt,
-        offset: typing.SupportsInt,
-        length: typing.SupportsInt,
+        chunk: tuple[typing.SupportsInt, typing.SupportsInt, typing.SupportsInt],
         stream_handler: typing.Any = None,
     ) -> SlimeSendFuture: ...
     def write(
         self,
-        mr_key: collections.abc.Sequence[typing.SupportsInt],
-        remote_mr_key: collections.abc.Sequence[typing.SupportsInt],
-        target_offset: collections.abc.Sequence[typing.SupportsInt],
-        source_offset: collections.abc.Sequence[typing.SupportsInt],
-        length: collections.abc.Sequence[typing.SupportsInt],
+        assign: collections.abc.Sequence[
+            tuple[
+                typing.SupportsInt,
+                typing.SupportsInt,
+                typing.SupportsInt,
+                typing.SupportsInt,
+                typing.SupportsInt,
+            ]
+        ],
         stream: typing.Any = None,
     ) -> SlimeReadWriteFuture: ...
     def write_with_imm(
         self,
-        mr_key: collections.abc.Sequence[typing.SupportsInt],
-        remote_mr_key: collections.abc.Sequence[typing.SupportsInt],
-        target_offset: collections.abc.Sequence[typing.SupportsInt],
-        source_offset: collections.abc.Sequence[typing.SupportsInt],
-        length: collections.abc.Sequence[typing.SupportsInt],
+        assign: collections.abc.Sequence[
+            tuple[
+                typing.SupportsInt,
+                typing.SupportsInt,
+                typing.SupportsInt,
+                typing.SupportsInt,
+                typing.SupportsInt,
+            ]
+        ],
         imm_data: typing.SupportsInt = 0,
         stream: typing.Any = None,
     ) -> SlimeReadWriteFuture: ...
@@ -169,7 +177,7 @@ class RDMAWorker:
     def __init__(
         self, socket_id: typing.SupportsInt, id: typing.SupportsInt
     ) -> None: ...
-    def add_endpoint(self, endpoint: RDMAEndpoint) -> None: ...
+    def add_endpoint(self, endpoint: RDMAEndpoint) -> int: ...
     def start(self) -> None: ...
     def stop(self) -> None: ...
 

@@ -131,7 +131,7 @@ c10::intrusive_ptr<::c10d::Work> slimeBackend::send(std::vector<at::Tensor>& ten
     }
 
     auto endpoint = end_point_set_[mod_positive(dstRank - rank_, size_ - 1)];
-    auto slot     = endpoint->send(ptrs[0], offset[0], data_size[0], stream_handle);
+    auto slot     = endpoint->send(chunk_tuple_t(ptrs[0], offset[0], data_size[0]), stream_handle);
 
     ++seq_;
     // The work captures the tensor to prevent it being deallocated and
@@ -167,7 +167,7 @@ c10::intrusive_ptr<::c10d::Work> slimeBackend::recv(std::vector<at::Tensor>& ten
     }
 
     auto endpoint = end_point_set_[mod_positive(srcRank - rank_, size_ - 1)];
-    auto slot     = endpoint->recv(ptrs[0], offset[0], data_size[0], stream_handle);
+    auto slot     = endpoint->recv(chunk_tuple_t(ptrs[0], offset[0], data_size[0]), stream_handle);
     ++seq_;
 
     // The work captures the tensor to prevent it being deallocated and
