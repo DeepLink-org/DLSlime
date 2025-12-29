@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -24,15 +25,23 @@ public:
     {
         std::lock_guard<std::mutex> lock(mutex_);
 
-        std::string key = dev_name;
+        std::string key  = dev_name;
+        auto        nics = available_nic();
+        if (nics.empty()) {
+            SLIME_LOG_ERROR("No Available nics");
+            return nullptr;
+        }
+        if (std::find(nics.begin(), nics.end(), key) == nics.end() or dev_name.empty()) {
+            key = nics[0];
+        }
 
         if (contexts_.find(key) == contexts_.end()) {
-            SLIME_LOG_INFO("Initializing new RDMAContext for device: ", dev_name);
+            SLIME_LOG_INFO("Initializing new RDMAContext for device: ", key);
 
             auto context = std::make_shared<RDMAContext>();
 
-            if (context->init(dev_name, ib_port, link_type) != 0) {
-                SLIME_LOG_ERROR("Failed to init RDMAContext for {}", dev_name);
+            if (context->init(key, ib_port, link_type) != 0) {
+                SLIME_LOG_ERROR("Failed to init RDMAContext for {}", key);
                 return nullptr;
             }
 

@@ -188,7 +188,8 @@ if args.transfer_engine == "dlslime":
     for idx, ttensor in enumerate(ttensors):
         rdma_endpoint.register_memory_region(
             idx,
-            ttensor.data_ptr() + ttensor.storage_offset(),
+            ttensor.data_ptr(),
+            int(ttensor.storage_offset()),
             ttensor.numel() * ttensor.itemsize,
         )
 elif args.transfer_engine == "mooncake":

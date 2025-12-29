@@ -19,40 +19,36 @@ namespace dlslime {
 
 RDMAEndpoint::RDMAEndpoint(std::shared_ptr<RDMAContext> ctx, size_t num_qp, std::shared_ptr<RDMAWorker> worker)
 {
-    ctx_    = ctx ? ctx : GlobalContextManager::instance().get_context();
-    worker_ = worker ? worker : GlobalWorkerManager::instance().get_default_worker(socketId(ctx_->device_name_));
+    ctx_         = ctx;
+    memory_pool_ = std::make_shared<RDMAMemoryPool>(ctx);
+    worker_      = worker ? worker : GlobalWorkerManager::instance().get_default_worker(socketId(ctx_->device_name_));
 
-    io_endpoint_  = std::make_shared<RDMAIOEndpoint>(ctx_, num_qp);
-    msg_endpoint_ = std::make_shared<RDMAMsgEndpoint>(ctx_, num_qp);
+    io_endpoint_  = std::make_shared<RDMAIOEndpoint>(ctx_, memory_pool_, num_qp);
+    msg_endpoint_ = std::make_shared<RDMAMsgEndpoint>(ctx_, memory_pool_, num_qp);
 }
 
 RDMAEndpoint::RDMAEndpoint(
-    std::string dev_name, int32_t ib_port, std::string link_type, size_t num_qp, std::shared_ptr<RDMAWorker> worker)
+    std::string dev_name, int32_t ib_port, std::string link_type, size_t num_qp, std::shared_ptr<RDMAWorker> worker):
+    RDMAEndpoint(GlobalContextManager::instance().get_context(dev_name, ib_port, link_type), num_qp, worker)
 {
-    ctx_    = GlobalContextManager::instance().get_context(dev_name, ib_port, link_type);
-    worker_ = worker ? worker : GlobalWorkerManager::instance().get_default_worker(socketId(ctx_->device_name_));
-
-    io_endpoint_  = std::make_shared<RDMAIOEndpoint>(ctx_, num_qp);
-    msg_endpoint_ = std::make_shared<RDMAMsgEndpoint>(ctx_, num_qp);
 }
 
 void RDMAEndpoint::connect(const json& remote_endpoint_info)
 {
+    for (auto& item : remote_endpoint_info["mr_info"].items()) {
+        memory_pool_->registerRemoteMemoryRegion(item.value()["mr_key"].get<uintptr_t>(), item.value());
+    }
+
     if (remote_endpoint_info.contains("io_info")) {
         json info{};
-        info["mr_info"] = remote_endpoint_info["mr_info"];
-        info.update(remote_endpoint_info["io_info"]);
-        io_endpoint_->connect(info);
+        io_endpoint_->connect(remote_endpoint_info["io_info"]);
     }
     else {
         SLIME_LOG_WARN("UnifiedConnect: Missing 'io_info' in remote info");
     }
 
     if (remote_endpoint_info.contains("msg_info")) {
-        json info{};
-        info["mr_info"] = remote_endpoint_info["mr_info"];
-        info.update(remote_endpoint_info["msg_info"]);
-        msg_endpoint_->connect(info);
+        msg_endpoint_->connect(remote_endpoint_info["msg_info"]);
     }
     else {
         SLIME_LOG_WARN("UnifiedConnect: Missing 'msg_info' in remote info");
@@ -65,7 +61,7 @@ void RDMAEndpoint::connect(const json& remote_endpoint_info)
 json RDMAEndpoint::endpointInfo() const
 {
     // 2. 聚合连接信息：将两个子 Endpoint 的信息打包
-    return json{{"mr_info", ctx_->memory_pool_->mr_info()},
+    return json{{"mr_info", memory_pool_->mr_info()},
                 {"io_info", io_endpoint_->endpointInfo()},
                 {"msg_info", msg_endpoint_->endpointInfo()}};
 }
@@ -74,14 +70,14 @@ json RDMAEndpoint::endpointInfo() const
 // Memory Management
 // ============================================================
 
-int32_t RDMAEndpoint::registerOrAccessMemoryRegion(uintptr_t mr_key, uintptr_t ptr, size_t length)
+int32_t RDMAEndpoint::registerOrAccessMemoryRegion(uintptr_t mr_key, uintptr_t ptr, uintptr_t offset, size_t length)
 {
-    return ctx_->registerOrAccessMemoryRegion(mr_key, ptr, length);
+    return memory_pool_->registerMemoryRegion(mr_key, ptr + offset, length);
 }
 
 int32_t RDMAEndpoint::registerOrAccessRemoteMemoryRegion(uintptr_t ptr, json mr_info)
 {
-    return ctx_->registerOrAccessRemoteMemoryRegion(ptr, mr_info);
+    return memory_pool_->registerRemoteMemoryRegion(ptr, mr_info);
 }
 
 // ============================================================

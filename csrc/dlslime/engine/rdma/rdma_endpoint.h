@@ -1,6 +1,8 @@
 #pragma once
 
-#include "engine/assignment.h"
+#include "dlslime/engine/assignment.h"
+
+#include "memory_pool.h"
 #include "rdma_context.h"
 #include "rdma_io_endpoint.h"
 #include "rdma_msg_endpoint.h"
@@ -32,9 +34,9 @@ public:
 
     void connect(const json& remote_endpoint_info);
 
-    json endpointInfo() const;
+    json    endpointInfo() const;
 
-    int32_t registerOrAccessMemoryRegion(uintptr_t mr_key, uintptr_t ptr, size_t length);
+    int32_t registerOrAccessMemoryRegion(uintptr_t mr_key, uintptr_t ptr, uintptr_t, size_t length);
     int32_t registerOrAccessRemoteMemoryRegion(uintptr_t ptr, json mr_info);
 
     // TwoSide Primitive
@@ -61,10 +63,14 @@ public:
     }
 
 private:
-    std::atomic<int64_t>             id_{-1};
-    std::atomic<bool>                connected_{false};
-    std::shared_ptr<RDMAContext>     ctx_;
+    std::atomic<int64_t> id_{-1};
+    std::atomic<bool>    connected_{false};
+
+    std::shared_ptr<RDMAContext>    ctx_;
+    std::shared_ptr<RDMAMemoryPool> memory_pool_;
+
     std::shared_ptr<RDMAWorker>      worker_;
+
     std::shared_ptr<RDMAIOEndpoint>  io_endpoint_;
     std::shared_ptr<RDMAMsgEndpoint> msg_endpoint_;
 };

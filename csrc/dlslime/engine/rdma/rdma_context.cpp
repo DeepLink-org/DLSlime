@@ -40,9 +40,6 @@ RDMAContext::~RDMAContext()
     if (cq_)
         ibv_destroy_cq(cq_);
 
-    if (pd_)
-        ibv_dealloc_pd(pd_);
-
     if (ib_ctx_)
         ibv_close_device(ib_ctx_);
 
@@ -150,14 +147,6 @@ int64_t RDMAContext::init(const std::string& dev_name, uint8_t ib_port, const st
 
     lid_        = port_attr.lid;
     active_mtu_ = port_attr.active_mtu;
-
-    /* Alloc Protected Domain (PD) */
-    pd_ = ibv_alloc_pd(ib_ctx_);
-    if (!pd_) {
-        SLIME_LOG_ERROR("Failed to allocate PD");
-        return -1;
-    }
-    memory_pool_ = std::make_unique<RDMAMemoryPool>(pd_);
 
     /* Alloc Complete Queue (CQ) */
     SLIME_ASSERT(ib_ctx_, "init rdma context first");

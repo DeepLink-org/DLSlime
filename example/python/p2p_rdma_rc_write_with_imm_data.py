@@ -15,13 +15,15 @@ target = RDMAEndpoint(num_qp=1, device_name=devices[-1], ib_port=1, link_type="R
 local_tensor = torch.zeros([16], device="cuda:0", dtype=torch.uint8)
 initiator.register_memory_region(
     local_tensor.data_ptr(),
-    local_tensor.data_ptr() + local_tensor.storage_offset(),
+    local_tensor.data_ptr(),
+    int(local_tensor.storage_offset()),
     local_tensor.numel() * local_tensor.itemsize,
 )
 remote_tensor = torch.ones([16], device="cuda", dtype=torch.uint8)
 target.register_memory_region(
     remote_tensor.data_ptr(),
-    remote_tensor.data_ptr() + remote_tensor.storage_offset(),
+    remote_tensor.data_ptr(),
+    int(remote_tensor.storage_offset()),
     remote_tensor.numel() * remote_tensor.itemsize,
 )
 

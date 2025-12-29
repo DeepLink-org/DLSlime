@@ -12,6 +12,7 @@
 
 #include "dlslime/engine/assignment.h"
 
+#include "engine/rdma/memory_pool.h"
 #include "rdma_assignment.h"
 #include "rdma_env.h"
 #include "rdma_future.h"
@@ -153,11 +154,14 @@ RDMAIOEndpoint::dispatchTask(OpCode op_code, const std::vector<assign_tuple_t>& 
     return last_slot;
 }
 
-RDMAIOEndpoint::RDMAIOEndpoint(std::shared_ptr<RDMAContext> ctx, size_t num_qp): ctx_(ctx), num_qp_(num_qp)
+RDMAIOEndpoint::RDMAIOEndpoint(std::shared_ptr<RDMAContext>    ctx,
+                               std::shared_ptr<RDMAMemoryPool> memory_pool,
+                               size_t                          num_qp):
+    ctx_(ctx), memory_pool_(memory_pool), num_qp_(num_qp)
 {
     SLIME_LOG_INFO("Initializing RDMA IO Endpoint. QPs: ", num_qp, ", Token Bucket: ", SLIME_MAX_SEND_WR);
 
-    data_channel_ = std::make_shared<RDMAChannel>();
+    data_channel_ = std::make_shared<RDMAChannel>(memory_pool);
     data_channel_->init(ctx_, num_qp_, 0);
 
     for (int i = 0; i < num_qp_; ++i) {
@@ -203,7 +207,7 @@ RDMAIOEndpoint::RDMAIOEndpoint(std::shared_ptr<RDMAContext> ctx, size_t num_qp):
     }
     dummy_ = (int64_t*)dummy_mem;
 
-    ctx_->registerOrAccessMemoryRegion(
+    memory_pool->registerMemoryRegion(
         reinterpret_cast<uintptr_t>(dummy_), reinterpret_cast<uintptr_t>(dummy_), sizeof(int64_t));
     SLIME_LOG_INFO("IOEndpoint initialized");
 }
@@ -228,9 +232,6 @@ RDMAIOEndpoint::~RDMAIOEndpoint()
 
 void RDMAIOEndpoint::connect(const json& remote_endpoint_info)
 {
-    for (auto& item : remote_endpoint_info["mr_info"].items()) {
-        ctx_->registerOrAccessRemoteMemoryRegion(item.value()["mr_key"], item.value());
-    }
     data_channel_->connect(remote_endpoint_info["data_channel_info"]);
 }
 

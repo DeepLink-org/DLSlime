@@ -17,6 +17,8 @@
 #ifdef BUILD_NVLINK
 #include "dlslime/engine/nvlink/memory_pool.h"
 #include "dlslime/engine/nvlink/nvlink_endpoint.h"
+#include "dlslime/engine/nvlink/nvlink_future.h"
+
 #endif
 
 #ifdef BUILD_NVSHMEM
@@ -157,7 +159,6 @@ PYBIND11_MODULE(_slime_c, m)
     py::class_<dlslime::RDMAContext, std::shared_ptr<dlslime::RDMAContext>>(m, "RDMAContext")
         .def(py::init<>())
         .def("init", &dlslime::RDMAContext::init)
-        .def("reload_memory_pool", &dlslime::RDMAContext::reloadMemoryPool)
         .def("launch_future", &dlslime::RDMAContext::launch_future)
         .def("stop_future", &dlslime::RDMAContext::stop_future);
 
@@ -176,9 +177,9 @@ PYBIND11_MODULE(_slime_c, m)
         .def("imm_data", &dlslime::ImmRecvFuture::immData, py::call_guard<py::gil_scoped_release>());
     py::class_<dlslime::RDMAEndpoint, std::shared_ptr<dlslime::RDMAEndpoint>>(m, "RDMAEndpoint")
         .def(py::init<std::shared_ptr<dlslime::RDMAContext>, size_t, std::shared_ptr<dlslime::RDMAWorker>>(),
-             py::arg("context") = nullptr,
-             py::arg("num_qp")  = 1,
-             py::arg("worker")  = nullptr)
+             py::arg("context"),
+             py::arg("num_qp") = 1,
+             py::arg("worker") = nullptr)
         .def(py::init<std::string, int32_t, std::string, size_t, std::shared_ptr<dlslime::RDMAWorker>>(),
              py::arg("device_name") = "",
              py::arg("ib_port")     = 1,
@@ -190,6 +191,10 @@ PYBIND11_MODULE(_slime_c, m)
 
         .def("register_memory_region",
              &dlslime::RDMAEndpoint::registerOrAccessMemoryRegion,
+             py::arg("mr_key"),
+             py::arg("data_ptr"),
+             py::arg("offset"),
+             py::arg("length"),
              py::call_guard<py::gil_scoped_release>())
         .def("register_remote_memory_region",
              &dlslime::RDMAEndpoint::registerOrAccessRemoteMemoryRegion,
@@ -260,13 +265,26 @@ PYBIND11_MODULE(_slime_c, m)
 #endif
 
 #ifdef BUILD_NVLINK
+    py::class_<dlslime::NVLinkFuture, std::shared_ptr<dlslime::NVLinkFuture>>(m, "SlimeNVLinkFuture")
+        .def("wait", &dlslime::NVLinkFuture::wait, py::call_guard<py::gil_scoped_release>());
     py::class_<dlslime::NVLinkEndpoint>(m, "NVLinkEndpoint")
         .def(py::init<>())
-        .def("register_memory_region", &dlslime::NVLinkEndpoint::register_memory_region)
-        .def("register_remote_memory_region", &dlslime::NVLinkEndpoint::register_remote_memory_region)
+        .def("register_memory_region",
+             &dlslime::NVLinkEndpoint::register_memory_region,
+             py::arg("mr_key"),
+             py::arg("data_ptr"),
+             py::arg("offset"),
+             py::arg("length"))
+        .def("register_remote_memory_region",
+             &dlslime::NVLinkEndpoint::register_remote_memory_region,
+             py::call_guard<py::gil_scoped_release>())
         .def("endpoint_info", &dlslime::NVLinkEndpoint::endpoint_info)
         .def("connect", &dlslime::NVLinkEndpoint::connect)
-        .def("read", &dlslime::NVLinkEndpoint::read);
+        .def("read",
+             &dlslime::NVLinkEndpoint::read,
+             py::arg("assign"),
+             py::arg("stream") = nullptr,
+             py::call_guard<py::gil_scoped_release>());
 #endif
 
 #ifdef BUILD_INTRA_OPS

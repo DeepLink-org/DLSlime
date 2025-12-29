@@ -3,6 +3,7 @@
 #include "dlslime/device/device_api.h"
 #include "dlslime/engine/assignment.h"
 
+#include "engine/rdma/memory_pool.h"
 #include "rdma_assignment.h"
 #include "rdma_channel.h"
 #include "rdma_common.h"
@@ -25,7 +26,10 @@
 
 namespace dlslime {
 
-RDMAMsgEndpoint::RDMAMsgEndpoint(std::shared_ptr<RDMAContext> ctx, size_t num_qp): ctx_(ctx), num_qp_(num_qp)
+RDMAMsgEndpoint::RDMAMsgEndpoint(std::shared_ptr<RDMAContext>    ctx,
+                                 std::shared_ptr<RDMAMemoryPool> memory_pool,
+                                 size_t                          num_qp):
+    ctx_(ctx), memory_pool_(memory_pool), num_qp_(num_qp)
 {
     SLIME_LOG_INFO("Init RDMAMsgEndpoint Contexts and Devices...");
     SLIME_LOG_INFO("bypass Signal: ", SLIME_BYPASS_DEVICE_SIGNAL);
@@ -67,22 +71,22 @@ RDMAMsgEndpoint::RDMAMsgEndpoint(std::shared_ptr<RDMAContext> ctx, size_t num_qp
 
     // Register Memory Regions (MR) upfront.
     // Dynamic registration during the datapath is expensive and should be avoided.
-    ctx_->registerOrAccessMemoryRegion(
+    memory_pool->registerMemoryRegion(
         reinterpret_cast<uintptr_t>(dummy_), reinterpret_cast<uintptr_t>(dummy_), sizeof(int64_t));
 
     for (int i = 0; i < SLIME_MAX_MSG_FIFO_DEPTH; ++i) {
-        ctx_->registerOrAccessMemoryRegion(reinterpret_cast<uintptr_t>(&(send_ctx_pool_[i].remote_meta_info_)),
-                                           reinterpret_cast<uintptr_t>(&(send_ctx_pool_[i].remote_meta_info_)),
-                                           sizeof(meta_info_t));
-        ctx_->registerOrAccessMemoryRegion(reinterpret_cast<uintptr_t>(&(recv_ctx_pool_[i].local_meta_info_)),
-                                           reinterpret_cast<uintptr_t>(&(recv_ctx_pool_[i].local_meta_info_)),
-                                           sizeof(meta_info_t));
+        memory_pool->registerMemoryRegion(reinterpret_cast<uintptr_t>(&(send_ctx_pool_[i].remote_meta_info_)),
+                                          reinterpret_cast<uintptr_t>(&(send_ctx_pool_[i].remote_meta_info_)),
+                                          sizeof(meta_info_t));
+        memory_pool->registerMemoryRegion(reinterpret_cast<uintptr_t>(&(recv_ctx_pool_[i].local_meta_info_)),
+                                          reinterpret_cast<uintptr_t>(&(recv_ctx_pool_[i].local_meta_info_)),
+                                          sizeof(meta_info_t));
     }
 
     SLIME_LOG_INFO("Memory Regions Registered.");
 
-    data_channel_ = std::make_unique<RDMAChannel>();
-    meta_channel_ = std::make_unique<RDMAChannel>();
+    data_channel_ = std::make_unique<RDMAChannel>(memory_pool);
+    meta_channel_ = std::make_unique<RDMAChannel>(memory_pool);
 
     // Meta channel uses 1 QP (latency sensitive), Data channel uses num_qp_ (throughput sensitive).
     meta_channel_->init(ctx_, 1, 256);
@@ -129,11 +133,6 @@ json RDMAMsgEndpoint::endpointInfo() const
 void RDMAMsgEndpoint::connect(const json& remote_endpoint_info)
 {
     SLIME_LOG_INFO("Establishing RDMA Connection...");
-
-    for (auto& item : remote_endpoint_info["mr_info"].items()) {
-        ctx_->registerOrAccessRemoteMemoryRegion(item.value()["mr_key"].get<uintptr_t>(), item.value());
-    }
-
     meta_channel_->connect(remote_endpoint_info["meta_channel_info"]);
     data_channel_->connect(remote_endpoint_info["data_channel_info"]);
 
@@ -183,10 +182,10 @@ std::shared_ptr<SendFuture> RDMAMsgEndpoint::send(const chunk_tuple_t& chunk, vo
     auto length   = std::get<2>(chunk);
     // Fast path: check MR cache.
     storage_view_t view{data_ptr, offset, length};
-    auto           buffer_mr = ctx_->get_mr(data_ptr);
+    auto           buffer_mr = memory_pool_->get_mr(data_ptr + offset);
     if (not(buffer_mr and buffer_mr->length == length)) {
         SLIME_LOG_DEBUG("Registering new MR for buffer: ", data_ptr);
-        ctx_->registerOrAccessMemoryRegion(data_ptr, data_ptr, length);
+        memory_pool_->registerMemoryRegion(data_ptr, data_ptr + offset, length);
     }
 
     // Acquire a slot from the FIFO pool.
@@ -214,13 +213,15 @@ std::shared_ptr<SendFuture> RDMAMsgEndpoint::send(const chunk_tuple_t& chunk, vo
 
 std::shared_ptr<RecvFuture> RDMAMsgEndpoint::recv(const chunk_tuple_t& chunk, void* stream_handle)
 {
-    auto data_ptr  = std::get<0>(chunk);
-    auto offset    = std::get<1>(chunk);
-    auto length    = std::get<2>(chunk);
-    auto buffer_mr = ctx_->get_mr(data_ptr);
+    auto data_ptr = std::get<0>(chunk);
+    auto offset   = std::get<1>(chunk);
+    auto length   = std::get<2>(chunk);
+    // Fast path: check MR cache.
+    storage_view_t view{data_ptr, offset, length};
+    auto           buffer_mr = memory_pool_->get_mr(data_ptr + offset);
     if (not(buffer_mr and buffer_mr->length == length)) {
         SLIME_LOG_DEBUG("Registering new MR for buffer: ", data_ptr);
-        ctx_->registerOrAccessMemoryRegion(data_ptr, data_ptr, length);
+        memory_pool_->registerMemoryRegion(data_ptr, data_ptr + offset, length);
     }
 
     uint32_t target_mask = (1 << num_qp_) - 1;
@@ -236,7 +237,7 @@ std::shared_ptr<RecvFuture> RDMAMsgEndpoint::recv(const chunk_tuple_t& chunk, vo
     r_ctx->signal->bind_stream(stream_handle);
     r_ctx->signal->record_gpu_ready();
 
-    r_ctx->local_meta_info_.r_key_ = ctx_->get_mr(data_ptr)->rkey;
+    r_ctx->local_meta_info_.r_key_ = memory_pool_->get_mr(data_ptr)->rkey;
     r_ctx->local_meta_info_.view_  = {data_ptr, offset, length};
 
     while (jring_enqueue_burst(recv_buffer_ring_, (void**)&r_ctx, 1, nullptr) == 0) {
@@ -307,7 +308,7 @@ int32_t RDMAMsgEndpoint::sendProcess()
                     s_ctx->state_ = SendContextState::POST_DATA_SEND;
 
                     // Update remote MR info.
-                    ctx_->registerOrAccessRemoteMemoryRegion(s_ctx->remote_meta_info_.view_.data_ptr,
+                    memory_pool_->registerRemoteMemoryRegion(s_ctx->remote_meta_info_.view_.data_ptr,
                                                              s_ctx->remote_meta_info_.view_.data_ptr,
                                                              s_ctx->remote_meta_info_.view_.length,
                                                              s_ctx->remote_meta_info_.r_key_);

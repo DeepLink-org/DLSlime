@@ -3,7 +3,7 @@ import os
 import torch
 import torch.distributed as dist
 import xxhash
-from dlslime import NVLinkEndpoint
+from dlslime import _slime_c
 
 
 def run_benchmark():
@@ -18,7 +18,7 @@ def run_benchmark():
     if world_size < 2:
         raise RuntimeError("需要至少 2 个 GPU 才能运行此 P2P 测试")
 
-    ep = NVLinkEndpoint()
+    ep = _slime_c.NVLinkEndpoint()
 
     mr_key = xxhash.xxh64_intdigest("buffer")
 
@@ -32,7 +32,7 @@ def run_benchmark():
     ep.register_memory_region(
         mr_key,
         tensor.data_ptr(),
-        tensor.storage_offset(),
+        int(tensor.storage_offset()),
         tensor.numel() * tensor.itemsize,
     )
 
@@ -53,11 +53,7 @@ def run_benchmark():
     if rank == 0:
 
         ep.read(
-            [mr_key],
-            [mr_key],
-            [8],
-            [0],
-            [8],
+            [(mr_key, mr_key, 8, 0, 8)],
             None,
         )
 

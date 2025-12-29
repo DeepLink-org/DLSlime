@@ -10,6 +10,7 @@
 #include "dlslime/device/device_api.h"
 #include "dlslime/engine/assignment.h"
 
+#include "memory_pool.h"
 #include "rdma_assignment.h"
 #include "rdma_channel.h"
 #include "rdma_context.h"
@@ -69,7 +70,9 @@ public:
     RDMAIOEndpoint() = default;
     ~RDMAIOEndpoint();
 
-    explicit RDMAIOEndpoint(std::shared_ptr<RDMAContext> ctx, size_t num_qp);
+    explicit RDMAIOEndpoint(std::shared_ptr<RDMAContext>    ctx,
+                            std::shared_ptr<RDMAMemoryPool> memory_pool,
+                            size_t                          num_qp);
 
     void connect(const json& remote_endpoint_info);
     json endpointInfo() const;
@@ -92,8 +95,11 @@ private:
     int32_t immRecvProcess();
 
     std::shared_ptr<RDMAContext> ctx_;
+    std::shared_ptr<RDMAMemoryPool> memory_pool_;
+
     std::shared_ptr<RDMAChannel> data_channel_;
-    size_t                       num_qp_;
+
+    size_t num_qp_;
 
     ReadWriteContext* read_write_ctx_pool_;
     ImmRecvContext*   imm_recv_ctx_pool_;
