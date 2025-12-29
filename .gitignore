@@ -168,4 +168,4 @@ cython_debug/
 # Core file
 core.*
 
-# *.pyi
+*.pyi
