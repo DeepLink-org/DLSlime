@@ -1,18 +1,20 @@
 from __future__ import annotations
 
-import collections.abc
 import typing
 
-import typing_extensions
+import torch
 
 __all__: list[str] = [
+    "AllToAllIntraLLBuffer",
     "Assignment",
     "DeviceSignal",
+    "NVLinkEndpoint",
     "OpCode",
     "RDMAContext",
     "RDMAEndpoint",
     "RDMAWorker",
     "SlimeImmRecvFuture",
+    "SlimeNVLinkFuture",
     "SlimeReadWriteFuture",
     "SlimeRecvFuture",
     "SlimeSendFuture",
@@ -20,27 +22,48 @@ __all__: list[str] = [
     "socket_id",
 ]
 
+class AllToAllIntraLLBuffer:
+    def __init__(
+        self, arg0: int, arg1: int, arg2: int, arg3: int, arg4: int
+    ) -> None: ...
+    def all_to_all_ll(
+        self,
+        x: torch.Tensor,
+        is_transpose: bool = False,
+        mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """
+        AllGather with optional mask
+        """
+
+    def buffer_info(self) -> dict: ...
+    def connect_full_mesh(self, arg0: list[json]) -> int: ...
+    def get_buffer_size_hint(self: int, arg0: int, arg1: int, arg2: int) -> int: ...
+    def get_local_buffer(self) -> torch.Tensor: ...
+    def set_max_bs(self, arg0: int) -> int: ...
+
 class Assignment:
     @typing.overload
-    def __init__(
-        self,
-        arg0: typing.SupportsInt,
-        arg1: typing.SupportsInt,
-        arg2: typing.SupportsInt,
-        arg3: typing.SupportsInt,
-    ) -> None: ...
+    def __init__(self, arg0: int, arg1: int, arg2: int, arg3: int) -> None: ...
     @typing.overload
     def __init__(
-        self,
-        arg0: typing.SupportsInt,
-        arg1: typing.SupportsInt,
-        arg2: typing.SupportsInt,
-        arg3: typing.SupportsInt,
-        arg4: typing.SupportsInt,
+        self, arg0: int, arg1: int, arg2: int, arg3: int, arg4: int
     ) -> None: ...
 
 class DeviceSignal:
-    def wait(self, arg0: typing.SupportsInt) -> None: ...
+    def wait(self, arg0: int) -> None: ...
+
+class NVLinkEndpoint:
+    def __init__(self) -> None: ...
+    def connect(self, arg0: dict) -> int: ...
+    def endpoint_info(self) -> dict: ...
+    def read(
+        self, assign: list[tuple[int, int, int, int, int]], stream: capsule = None
+    ) -> SlimeNVLinkFuture: ...
+    def register_memory_region(
+        self, mr_key: int, data_ptr: int, offset: int, length: int
+    ) -> int: ...
+    def register_remote_memory_region(self, arg0: int, arg1: dict) -> int: ...
 
 class OpCode:
     """
@@ -71,11 +94,11 @@ class OpCode:
     def __getstate__(self) -> int: ...
     def __hash__(self) -> int: ...
     def __index__(self) -> int: ...
-    def __init__(self, value: typing.SupportsInt) -> None: ...
+    def __init__(self, value: int) -> None: ...
     def __int__(self) -> int: ...
     def __ne__(self, other: typing.Any) -> bool: ...
     def __repr__(self) -> str: ...
-    def __setstate__(self, state: typing.SupportsInt) -> None: ...
+    def __setstate__(self, state: int) -> None: ...
     def __str__(self) -> str: ...
     @property
     def name(self) -> str: ...
@@ -84,97 +107,65 @@ class OpCode:
 
 class RDMAContext:
     def __init__(self) -> None: ...
-    def init(self, arg0: str, arg1: typing.SupportsInt, arg2: str) -> int: ...
+    def init(self, arg0: str, arg1: int, arg2: str) -> int: ...
     def launch_future(self) -> None: ...
-    def reload_memory_pool(self) -> int: ...
     def stop_future(self) -> None: ...
 
 class RDMAEndpoint:
     @typing.overload
     def __init__(
-        self,
-        context: RDMAContext = None,
-        num_qp: typing.SupportsInt = 1,
-        worker: ... = None,
+        self, context: RDMAContext, num_qp: int = 1, worker: ... = None
     ) -> None: ...
     @typing.overload
     def __init__(
         self,
         device_name: str = "",
-        ib_port: typing.SupportsInt = 1,
+        ib_port: int = 1,
         link_type: str = "RoCE",
-        num_qp: typing.SupportsInt = 1,
+        num_qp: int = 1,
         worker: ... = None,
     ) -> None: ...
     def connect(self, arg0: dict) -> None: ...
     def endpoint_info(self) -> dict: ...
-    def imm_recv(self, stream: typing.Any = None) -> SlimeImmRecvFuture: ...
+    def imm_recv(self, stream: capsule = None) -> SlimeImmRecvFuture: ...
     def process(self) -> int: ...
     def read(
-        self,
-        mr_key: collections.abc.Sequence[typing.SupportsInt],
-        remote_mr_key: collections.abc.Sequence[typing.SupportsInt],
-        target_offset: collections.abc.Sequence[typing.SupportsInt],
-        source_offset: collections.abc.Sequence[typing.SupportsInt],
-        length: collections.abc.Sequence[typing.SupportsInt],
-        stream: typing.Any = None,
+        self, assign: list[tuple[int, int, int, int, int]], stream: capsule = None
     ) -> SlimeReadWriteFuture: ...
     def recv(
-        self,
-        data_ptr: typing.SupportsInt,
-        offset: typing.SupportsInt,
-        length: typing.SupportsInt,
-        stream_handler: typing.Any = None,
+        self, chunk: tuple[int, int, int], stream_handler: capsule = None
     ) -> SlimeRecvFuture: ...
     def register_memory_region(
-        self,
-        arg0: typing.SupportsInt,
-        arg1: typing.SupportsInt,
-        arg2: typing.SupportsInt,
+        self, mr_key: int, data_ptr: int, offset: int, length: int
     ) -> int: ...
-    def register_remote_memory_region(
-        self, arg0: typing.SupportsInt, arg1: dict
-    ) -> int: ...
+    def register_remote_memory_region(self, arg0: int, arg1: dict) -> int: ...
     def send(
-        self,
-        data_ptr: typing.SupportsInt,
-        offset: typing.SupportsInt,
-        length: typing.SupportsInt,
-        stream_handler: typing.Any = None,
+        self, chunk: tuple[int, int, int], stream_handler: capsule = None
     ) -> SlimeSendFuture: ...
     def write(
-        self,
-        mr_key: collections.abc.Sequence[typing.SupportsInt],
-        remote_mr_key: collections.abc.Sequence[typing.SupportsInt],
-        target_offset: collections.abc.Sequence[typing.SupportsInt],
-        source_offset: collections.abc.Sequence[typing.SupportsInt],
-        length: collections.abc.Sequence[typing.SupportsInt],
-        stream: typing.Any = None,
+        self, assign: list[tuple[int, int, int, int, int]], stream: capsule = None
     ) -> SlimeReadWriteFuture: ...
     def write_with_imm(
         self,
-        mr_key: collections.abc.Sequence[typing.SupportsInt],
-        remote_mr_key: collections.abc.Sequence[typing.SupportsInt],
-        target_offset: collections.abc.Sequence[typing.SupportsInt],
-        source_offset: collections.abc.Sequence[typing.SupportsInt],
-        length: collections.abc.Sequence[typing.SupportsInt],
-        imm_data: typing.SupportsInt = 0,
-        stream: typing.Any = None,
+        assign: list[tuple[int, int, int, int, int]],
+        imm_data: int = 0,
+        stream: capsule = None,
     ) -> SlimeReadWriteFuture: ...
 
 class RDMAWorker:
     @typing.overload
-    def __init__(self, dev_name: str, id: typing.SupportsInt) -> None: ...
+    def __init__(self, dev_name: str, id: int) -> None: ...
     @typing.overload
-    def __init__(
-        self, socket_id: typing.SupportsInt, id: typing.SupportsInt
-    ) -> None: ...
-    def add_endpoint(self, endpoint: RDMAEndpoint) -> None: ...
+    def __init__(self, socket_id: int, id: int) -> None: ...
+    def add_endpoint(self, endpoint: RDMAEndpoint) -> int: ...
     def start(self) -> None: ...
     def stop(self) -> None: ...
 
 class SlimeImmRecvFuture:
     def imm_data(self) -> int: ...
+    def wait(self) -> int: ...
+
+class SlimeNVLinkFuture:
     def wait(self) -> int: ...
 
 class SlimeReadWriteFuture:
@@ -190,7 +181,7 @@ def available_nic() -> list[str]: ...
 def socket_id(arg0: str) -> int: ...
 
 _BUILD_INTER_OPS: bool = False
-_BUILD_INTRA_OPS: bool = False
-_BUILD_NVLINK: bool = False
+_BUILD_INTRA_OPS: bool = True
+_BUILD_NVLINK: bool = True
 _BUILD_NVSHMEM: bool = False
 _BUILD_RDMA: bool = True

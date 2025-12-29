@@ -13,6 +13,7 @@
 #include "dlslime/engine/rdma/rdma_config.h"
 #include "dlslime/json.hpp"
 #include "dlslime/logging.h"
+#include "engine/rdma/rdma_context.h"
 
 namespace dlslime {
 
@@ -28,9 +29,17 @@ typedef struct remote_mr {
 } remote_mr_t;
 
 class RDMAMemoryPool {
+    friend class RDMAChannel;
 public:
-    RDMAMemoryPool() = default;
-    RDMAMemoryPool(ibv_pd* pd): pd_(pd) {}
+    RDMAMemoryPool(std::shared_ptr<RDMAContext> ctx)
+    {
+        SLIME_LOG_DEBUG("init memory Pool");
+        /* Alloc Protected Domain (PD) */
+        pd_ = ibv_alloc_pd(ctx->ib_ctx_);
+        if (!pd_) {
+            SLIME_LOG_ERROR("Failed to allocate PD");
+        }
+    };
 
     ~RDMAMemoryPool()
     {
@@ -39,6 +48,8 @@ public:
                 ibv_dereg_mr(mr.second);
         }
         mrs_.clear();
+        if (pd_)
+            ibv_dealloc_pd(pd_);
     }
 
     int registerMemoryRegion(const uintptr_t& mr_key, uintptr_t data_ptr, uint64_t length);

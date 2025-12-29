@@ -71,9 +71,13 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=200):
         remote_ptr = recv_tensor.data_ptr()
 
         # 注册 Initiator 内存 (虽然 Write 主要需要注册 Remote，但本地也需要注册在 PD 中)
-        ep1.register_memory_region(local_ptr, local_ptr, size)
+        ep1.register_memory_region(
+            local_ptr, local_ptr, int(send_tensor.storage_offset()), size
+        )
         # 注册 Target 内存
-        ep2.register_memory_region(remote_ptr, remote_ptr, size)
+        ep2.register_memory_region(
+            remote_ptr, remote_ptr, int(recv_tensor.storage_offset()), size
+        )
 
         ep1.register_remote_memory_region(
             remote_ptr, ep2.endpoint_info()["mr_info"][str(remote_ptr)]
@@ -89,7 +93,7 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=200):
 
             # Initiator: 执行 WriteWithImm
             send_slot = ep1.write_with_imm(
-                [local_ptr], [remote_ptr], [0], [0], [size], 888, None
+                [(local_ptr, remote_ptr, 0, 0, size)], 888, None
             )
 
             # 等待完成
@@ -111,7 +115,7 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=200):
 
             # 2. Initiator RDMA Write with Immediate
             send_slot = ep1.write_with_imm(
-                [local_ptr], [remote_ptr], [0], [0], [size], 888, None
+                [(local_ptr, remote_ptr, 0, 0, size)], 888, None
             )
 
             # 3. Synchronization

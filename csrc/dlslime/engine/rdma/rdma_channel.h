@@ -1,5 +1,6 @@
 #pragma once
 
+#include "engine/rdma/memory_pool.h"
 #include "rdma_context.h"
 
 #include "dlslime/json.hpp"
@@ -17,7 +18,8 @@ class RDMAChannel {
     inline static constexpr uint32_t UNDEFINED_IMM_DATA = -1;
 
 public:
-    RDMAChannel() = default;
+    RDMAChannel() = delete;
+    RDMAChannel(std::shared_ptr<RDMAMemoryPool> pool): memory_pool_(pool) {}
 
     ~RDMAChannel()
     {
@@ -59,7 +61,8 @@ private:
     std::vector<std::vector<ibv_sge>>     send_sge_pool_;
     std::vector<std::vector<ibv_sge>>     recv_sge_pool_;
 
-    std::shared_ptr<RDMAContext> ctx_{};
+    std::shared_ptr<RDMAContext>    ctx_{};
+    std::shared_ptr<RDMAMemoryPool> memory_pool_{};
 
     RDMAChannelState state{RDMAChannelState::Destroyed};
 };

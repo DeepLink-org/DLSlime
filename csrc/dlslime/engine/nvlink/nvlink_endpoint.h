@@ -1,11 +1,13 @@
 #pragma once
 
 #include <cstdint>
+#include <tuple>
 #include <vector>
 
 #include "cuda_common.cuh"
 #include "dlslime/engine/assignment.h"
 #include "memory_pool.h"
+#include "nvlink_future.h"
 
 namespace dlslime {
 
@@ -14,34 +16,34 @@ public:
     NVLinkEndpoint() = default;
 
     /* Async NVLink Read */
-    int64_t read(std::vector<uintptr_t>& mr_key,
-                 std::vector<uintptr_t>& remote_mr_key,
-                 std::vector<size_t>&    target_offset,
-                 std::vector<size_t>&    source_offset,
-                 std::vector<size_t>&    length,
-                 void*                   stream_handle = nullptr)
+    std::shared_ptr<NVLinkFuture> read(std::vector<assign_tuple_t>& assign, void* stream_handle = nullptr)
     {
         cudaStream_t stream = (cudaStream_t)stream_handle;
 
-        SLIME_ASSERT(mr_key.size() == remote_mr_key.size() == target_offset.size() == source_offset.size()
-                         == length.size(),
-                     "batchsize mismatch");
-        size_t bs = mr_key.size();
+        size_t bs = assign.size();
 
         for (size_t bid = 0; bid < bs; ++bid) {
-            nvlink_mr_t source_mr   = memory_pool_.get_mr(mr_key[bid]);
+            auto mr_key        = std::get<0>(assign[bid]);
+            auto remote_mr_key = std::get<1>(assign[bid]);
+
+            auto target_offset = std::get<2>(assign[bid]);
+            auto source_offset = std::get<3>(assign[bid]);
+
+            auto length = std::get<4>(assign[bid]);
+
+            nvlink_mr_t source_mr   = memory_pool_.get_mr(std::get<0>(assign[bid]));
             uint64_t    source_addr = source_mr.addr;
 
-            nvlink_mr_t target_mr   = memory_pool_.get_remote_mr(remote_mr_key[bid]);
+            nvlink_mr_t target_mr   = memory_pool_.get_remote_mr(std::get<1>(assign[bid]));
             uint64_t    target_addr = target_mr.addr;
 
-            cudaMemcpyAsync((char*)(source_addr + source_offset[bid]),
-                            (char*)(target_addr + target_offset[bid]),
-                            length[bid],
+            cudaMemcpyAsync((char*)(source_addr + std::get<3>(assign[bid])),
+                            (char*)(target_addr + std::get<2>(assign[bid])),
+                            std::get<4>(assign[bid]),
                             cudaMemcpyDeviceToDevice,
                             stream);
         }
-        return 0;
+        return std::make_shared<NVLinkFuture>();
     }
 
     /* Memory Management */

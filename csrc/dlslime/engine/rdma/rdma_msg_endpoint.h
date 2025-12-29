@@ -5,6 +5,7 @@
 
 #include "dlslime/engine/assignment.h"
 
+#include "engine/rdma/memory_pool.h"
 #include "rdma_assignment.h"
 #include "rdma_channel.h"
 
@@ -83,7 +84,7 @@ struct alignas(64) SendContext {
 
     SendContextState state_;
 
-    std::shared_ptr<slime::device::DeviceSignal> signal;
+    std::shared_ptr<dlslime::device::DeviceSignal> signal;
 
     uint64_t expected_mask = 0;
 
@@ -109,7 +110,7 @@ struct alignas(64) RecvContext {
 
     RecvContextState state_;
 
-    std::shared_ptr<slime::device::DeviceSignal> signal;
+    std::shared_ptr<dlslime::device::DeviceSignal> signal;
 
     uint64_t expected_mask = 0;
 
@@ -125,7 +126,9 @@ class RDMAMsgEndpoint: public std::enable_shared_from_this<RDMAMsgEndpoint> {
     friend class RDMAWorker;
 
 public:
-    explicit RDMAMsgEndpoint(std::shared_ptr<RDMAContext> ctx, size_t qp_nums);
+    explicit RDMAMsgEndpoint(std::shared_ptr<RDMAContext>    ctx,
+                             std::shared_ptr<RDMAMemoryPool> memory_pool,
+                             size_t                          qp_nums);
 
     ~RDMAMsgEndpoint();
 
@@ -133,9 +136,9 @@ public:
 
     json endpointInfo() const;
 
-    std::shared_ptr<SendFuture> send(uintptr_t data_ptr, size_t offset, size_t length, void* stream_handler);
+    std::shared_ptr<SendFuture> send(const chunk_tuple_t& chunk, void* stream_handler);
 
-    std::shared_ptr<RecvFuture> recv(uintptr_t data_ptr, size_t offset, size_t length, void* stream_handler);
+    std::shared_ptr<RecvFuture> recv(const chunk_tuple_t& chunk, void* stream_handler);
 
     int32_t process();
 
@@ -144,7 +147,8 @@ private:
 
     int64_t num_qp_;
 
-    std::shared_ptr<RDMAContext> ctx_;
+    std::shared_ptr<RDMAContext>    ctx_;
+    std::shared_ptr<RDMAMemoryPool> memory_pool_;
 
     std::unique_ptr<RDMAChannel> meta_channel_;
     std::unique_ptr<RDMAChannel> data_channel_;

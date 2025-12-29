@@ -14,14 +14,16 @@ target = RDMAEndpoint(num_qp=1, device_name=devices[-1], ib_port=1, link_type="R
 # Register local GPU memory with RDMA subsystem
 local_tensor = torch.zeros([16], device="cuda:0", dtype=torch.uint8)
 initiator.register_memory_region(
-    mr_key,
-    local_tensor.data_ptr() + local_tensor.storage_offset(),
+    local_tensor.data_ptr(),
+    local_tensor.data_ptr(),
+    int(local_tensor.storage_offset()),
     local_tensor.numel() * local_tensor.itemsize,
 )
 remote_tensor = torch.ones([16], device="cuda", dtype=torch.uint8)
 target.register_memory_region(
-    mr_key,
-    remote_tensor.data_ptr() + remote_tensor.storage_offset(),
+    remote_tensor.data_ptr(),
+    remote_tensor.data_ptr(),
+    int(remote_tensor.storage_offset()),
     remote_tensor.numel() * remote_tensor.itemsize,
 )
 
@@ -35,7 +37,9 @@ target.connect(initiator.endpoint_info())
 initiator.connect(target.endpoint_info())
 
 print("Remote tensor after RDMA write:", remote_tensor)
-write_slot = initiator.write_with_imm([mr_key], [mr_key], [0], [8], [8], 1, None)
+write_slot = initiator.write_with_imm(
+    [(local_tensor.data_ptr(), remote_tensor.data_ptr(), 0, 8, 8)], 1, None
+)
 recv_slot = target.imm_recv()
 
 write_slot.wait()

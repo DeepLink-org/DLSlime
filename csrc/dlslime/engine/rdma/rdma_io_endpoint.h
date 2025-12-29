@@ -10,6 +10,7 @@
 #include "dlslime/device/device_api.h"
 #include "dlslime/engine/assignment.h"
 
+#include "engine/rdma/memory_pool.h"
 #include "rdma_assignment.h"
 #include "rdma_channel.h"
 #include "rdma_context.h"
@@ -24,7 +25,7 @@ using json = nlohmann::json;
 class ReadWriteFuture;
 class ImmRecvFuture;
 
-constexpr int IO_BURST_SIZE     = 32;
+constexpr int IO_BURST_SIZE = 32;
 
 enum class IOContextState {
     FREE,
@@ -38,7 +39,7 @@ enum class IOContextState {
 struct ReadWriteContext {
     int32_t slot_id;
 
-    std::shared_ptr<slime::device::DeviceSignal> signal;
+    std::shared_ptr<dlslime::device::DeviceSignal> signal;
 
     std::vector<RDMAAssign> assigns_;
 
@@ -56,9 +57,9 @@ struct ReadWriteContext {
 };
 
 struct ImmRecvContext {
-    int32_t                                      slot_id;
-    std::shared_ptr<slime::device::DeviceSignal> signal;
-    std::vector<RDMAAssign>                      assigns_;
+    int32_t                                        slot_id;
+    std::shared_ptr<dlslime::device::DeviceSignal> signal;
+    std::vector<RDMAAssign>                        assigns_;
 
     uint32_t       expected_mask;
     IOContextState state_ = IOContextState::FREE;
@@ -69,53 +70,36 @@ public:
     RDMAIOEndpoint() = default;
     ~RDMAIOEndpoint();
 
-    explicit RDMAIOEndpoint(std::shared_ptr<RDMAContext> ctx, size_t num_qp);
+    explicit RDMAIOEndpoint(std::shared_ptr<RDMAContext>    ctx,
+                            std::shared_ptr<RDMAMemoryPool> memory_pool,
+                            size_t                          num_qp);
 
     void connect(const json& remote_endpoint_info);
     json endpointInfo() const;
 
     int32_t process();
 
-    std::shared_ptr<ReadWriteFuture> read(std::vector<uintptr_t>& mr_key,
-                                          std::vector<uintptr_t>& remote_mr_key,
-                                          std::vector<uintptr_t>& target_offset,
-                                          std::vector<uintptr_t>& source_offset,
-                                          std::vector<size_t>&    length,
-                                          void*                   stream);
-    std::shared_ptr<ReadWriteFuture> write(std::vector<uintptr_t>& mr_key,
-                                           std::vector<uintptr_t>& remote_mr_key,
-                                           std::vector<uintptr_t>& target_offset,
-                                           std::vector<uintptr_t>& source_offset,
-                                           std::vector<size_t>&    length,
-                                           void*                   stream);
-    std::shared_ptr<ReadWriteFuture> writeWithImm(std::vector<uintptr_t>& mr_key,
-                                                  std::vector<uintptr_t>& remote_mr_key,
-                                                  std::vector<uintptr_t>& target_offset,
-                                                  std::vector<uintptr_t>& source_offset,
-                                                  std::vector<size_t>&    length,
-                                                  int32_t                 imm_data,
-                                                  void*                   stream);
+    std::shared_ptr<ReadWriteFuture> read(const std::vector<assign_tuple_t>&, void* stream);
+    std::shared_ptr<ReadWriteFuture> write(const std::vector<assign_tuple_t>&, void* stream);
+    std::shared_ptr<ReadWriteFuture> writeWithImm(const std::vector<assign_tuple_t>&, int32_t imm_data, void* stream);
 
     std::shared_ptr<ImmRecvFuture> immRecv(void* stream = nullptr);
 
 private:
     void dummyReset(ImmRecvContext* ctx);
 
-    int32_t dispatchTask(OpCode                  op_code,
-                         std::vector<uintptr_t>& local_ptr,
-                         std::vector<uintptr_t>& remote_ptr,
-                         std::vector<size_t>&    target_offset,
-                         std::vector<size_t>&    source_offset,
-                         std::vector<size_t>&    length,
-                         int32_t                 imm_data = 0,
-                         void*                   stream   = nullptr);
+    int32_t
+    dispatchTask(OpCode op_code, const std::vector<assign_tuple_t>&, int32_t imm_data = 0, void* stream = nullptr);
 
     int32_t readWriteProcess();
     int32_t immRecvProcess();
 
     std::shared_ptr<RDMAContext> ctx_;
+    std::shared_ptr<RDMAMemoryPool> memory_pool_;
+
     std::shared_ptr<RDMAChannel> data_channel_;
-    size_t                       num_qp_;
+
+    size_t num_qp_;
 
     ReadWriteContext* read_write_ctx_pool_;
     ImmRecvContext*   imm_recv_ctx_pool_;

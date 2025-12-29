@@ -12,6 +12,7 @@
 
 #include "dlslime/engine/assignment.h"
 
+#include "engine/rdma/memory_pool.h"
 #include "rdma_assignment.h"
 #include "rdma_env.h"
 #include "rdma_future.h"
@@ -49,18 +50,12 @@ void RDMAIOEndpoint::dummyReset(ImmRecvContext* ctx)
 // Helper function (Striping)
 // ============================================================
 
-int32_t RDMAIOEndpoint::dispatchTask(OpCode                  op_code,
-                                     std::vector<uintptr_t>& local_ptr,
-                                     std::vector<uintptr_t>& remote_ptr,
-                                     std::vector<size_t>&    target_offset,
-                                     std::vector<size_t>&    source_offset,
-                                     std::vector<size_t>&    length,
-                                     int32_t                 imm_data,
-                                     void*                   stream)
+int32_t
+RDMAIOEndpoint::dispatchTask(OpCode op_code, const std::vector<assign_tuple_t>& assign, int32_t imm_data, void* stream)
 {
     size_t req_idx    = 0;
     size_t req_offset = 0;
-    size_t total_reqs = local_ptr.size();
+    size_t total_reqs = assign.size();
 
     int32_t last_slot = -1;
 
@@ -80,7 +75,7 @@ int32_t RDMAIOEndpoint::dispatchTask(OpCode                  op_code,
 
         while (req_idx < total_reqs && current_batch_size < SLIME_MAX_SEND_WR) {
 
-            size_t total_len  = length[req_idx];
+            size_t total_len  = std::get<4>(assign[req_idx]);
             size_t remain_len = total_len - req_offset;
             size_t chunk_len  = std::min(remain_len, SLIME_MAX_LENGTH_PER_ASSIGNMENT);
 
@@ -91,10 +86,10 @@ int32_t RDMAIOEndpoint::dispatchTask(OpCode                  op_code,
                 slot_op_code = OpCode::WRITE;
             }
 
-            uintptr_t l_base     = local_ptr[req_idx];
-            uintptr_t r_base     = remote_ptr[req_idx];
-            uintptr_t t_off_base = target_offset[req_idx] + req_offset;
-            uintptr_t s_off_base = source_offset[req_idx] + req_offset;
+            uintptr_t l_base     = std::get<0>(assign[req_idx]);
+            uintptr_t r_base     = std::get<1>(assign[req_idx]);
+            uintptr_t t_off_base = std::get<2>(assign[req_idx]) + req_offset;
+            uintptr_t s_off_base = std::get<3>(assign[req_idx]) + req_offset;
 
             size_t qp_chunk_size = (chunk_len + num_qp_ - 1) / num_qp_;
 
@@ -159,11 +154,14 @@ int32_t RDMAIOEndpoint::dispatchTask(OpCode                  op_code,
     return last_slot;
 }
 
-RDMAIOEndpoint::RDMAIOEndpoint(std::shared_ptr<RDMAContext> ctx, size_t num_qp): ctx_(ctx), num_qp_(num_qp)
+RDMAIOEndpoint::RDMAIOEndpoint(std::shared_ptr<RDMAContext>    ctx,
+                               std::shared_ptr<RDMAMemoryPool> memory_pool,
+                               size_t                          num_qp):
+    ctx_(ctx), memory_pool_(memory_pool), num_qp_(num_qp)
 {
     SLIME_LOG_INFO("Initializing RDMA IO Endpoint. QPs: ", num_qp, ", Token Bucket: ", SLIME_MAX_SEND_WR);
 
-    data_channel_ = std::make_shared<RDMAChannel>();
+    data_channel_ = std::make_shared<RDMAChannel>(memory_pool);
     data_channel_->init(ctx_, num_qp_, 0);
 
     for (int i = 0; i < num_qp_; ++i) {
@@ -189,12 +187,12 @@ RDMAIOEndpoint::RDMAIOEndpoint(std::shared_ptr<RDMAContext> ctx, size_t num_qp):
 
     for (int i = 0; i < SLIME_MAX_IO_FIFO_DEPTH; ++i) {
         new (&read_write_ctx_pool_[i]) ReadWriteContext();
-        read_write_ctx_pool_[i].signal = slime::device::createSignal(false);
+        read_write_ctx_pool_[i].signal = dlslime::device::createSignal(false);
         read_write_ctx_pool_[i].assigns_.resize(num_qp_);
         read_write_ctx_pool_[i].finished_qp_mask.store(0);
 
         new (&imm_recv_ctx_pool_[i]) ImmRecvContext();
-        imm_recv_ctx_pool_[i].signal = slime::device::createSignal(false);
+        imm_recv_ctx_pool_[i].signal = dlslime::device::createSignal(false);
         imm_recv_ctx_pool_[i].assigns_.resize(num_qp_);
     }
 
@@ -209,7 +207,7 @@ RDMAIOEndpoint::RDMAIOEndpoint(std::shared_ptr<RDMAContext> ctx, size_t num_qp):
     }
     dummy_ = (int64_t*)dummy_mem;
 
-    ctx_->registerOrAccessMemoryRegion(
+    memory_pool->registerMemoryRegion(
         reinterpret_cast<uintptr_t>(dummy_), reinterpret_cast<uintptr_t>(dummy_), sizeof(int64_t));
     SLIME_LOG_INFO("IOEndpoint initialized");
 }
@@ -234,9 +232,6 @@ RDMAIOEndpoint::~RDMAIOEndpoint()
 
 void RDMAIOEndpoint::connect(const json& remote_endpoint_info)
 {
-    for (auto& item : remote_endpoint_info["mr_info"].items()) {
-        ctx_->registerOrAccessRemoteMemoryRegion(item.value()["mr_key"], item.value());
-    }
     data_channel_->connect(remote_endpoint_info["data_channel_info"]);
 }
 
@@ -249,40 +244,22 @@ json RDMAIOEndpoint::endpointInfo() const
 // Producer (Enqueue to Ring)
 // ============================================================
 
-std::shared_ptr<ReadWriteFuture> RDMAIOEndpoint::read(std::vector<uintptr_t>& local_ptr,
-                                                      std::vector<uintptr_t>& remote_ptr,
-                                                      std::vector<uintptr_t>& target_offset,
-                                                      std::vector<uintptr_t>& source_offset,
-                                                      std::vector<size_t>&    length,
-                                                      void*                   stream)
+std::shared_ptr<ReadWriteFuture> RDMAIOEndpoint::read(const std::vector<assign_tuple_t>& assign, void* stream)
 {
-    int32_t slot_id =
-        dispatchTask(OpCode::READ, local_ptr, remote_ptr, target_offset, source_offset, length, 0, stream);
+    int32_t slot_id = dispatchTask(OpCode::READ, assign, 0, stream);
     return read_write_future_pool_[slot_id];
 }
 
-std::shared_ptr<ReadWriteFuture> RDMAIOEndpoint::write(std::vector<uintptr_t>& local_ptr,
-                                                       std::vector<uintptr_t>& remote_ptr,
-                                                       std::vector<uintptr_t>& target_offset,
-                                                       std::vector<uintptr_t>& source_offset,
-                                                       std::vector<size_t>&    length,
-                                                       void*                   stream)
+std::shared_ptr<ReadWriteFuture> RDMAIOEndpoint::write(const std::vector<assign_tuple_t>& assign, void* stream)
 {
-    int32_t slot_id =
-        dispatchTask(OpCode::WRITE, local_ptr, remote_ptr, target_offset, source_offset, length, 0, stream);
+    int32_t slot_id = dispatchTask(OpCode::WRITE, assign, 0, stream);
     return read_write_future_pool_[slot_id];
 }
 
-std::shared_ptr<ReadWriteFuture> RDMAIOEndpoint::writeWithImm(std::vector<uintptr_t>& local_ptr,
-                                                              std::vector<uintptr_t>& remote_ptr,
-                                                              std::vector<uintptr_t>& target_offset,
-                                                              std::vector<uintptr_t>& source_offset,
-                                                              std::vector<size_t>&    length,
-                                                              int32_t                 imm_data,
-                                                              void*                   stream)
+std::shared_ptr<ReadWriteFuture>
+RDMAIOEndpoint::writeWithImm(const std::vector<assign_tuple_t>& assign, int32_t imm_data, void* stream)
 {
-    int32_t slot_id = dispatchTask(
-        OpCode::WRITE_WITH_IMM, local_ptr, remote_ptr, target_offset, source_offset, length, imm_data, stream);
+    int32_t slot_id = dispatchTask(OpCode::WRITE_WITH_IMM, assign, imm_data, stream);
     return read_write_future_pool_[slot_id];
 }
 

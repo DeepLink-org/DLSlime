@@ -15,6 +15,9 @@ namespace dlslime {
 
 struct Assignment;
 
+using assign_tuple_t = std::tuple<uintptr_t, uintptr_t, uint64_t, uint64_t, size_t>;
+using chunk_tuple_t  = std::tuple<uintptr_t, uint64_t, size_t>;
+
 using json            = nlohmann::json;
 using AssignmentBatch = std::vector<Assignment>;
 
@@ -31,7 +34,15 @@ struct alignas(64) Assignment {
     friend std::ostream& operator<<(std::ostream& os, const Assignment& assignment);
     Assignment() = default;
 
-    // 构造函数保持不变...
+    Assignment(const assign_tuple_t& assign):
+        mr_key(std::get<0>(assign)),
+        remote_mr_key(std::get<1>(assign)),
+        target_offset(std::get<2>(assign)),
+        source_offset(std::get<3>(assign)),
+        length(std::get<4>(assign))
+    {
+    }
+
     Assignment(const uintptr_t& mr_key, uint64_t target_offset, uint64_t source_offset, uint64_t length):
         mr_key(mr_key),
         remote_mr_key(mr_key),
@@ -58,15 +69,12 @@ struct alignas(64) Assignment {
 
     uintptr_t mr_key{};
     uintptr_t remote_mr_key{};
-    uint64_t  source_offset{};
     uint64_t  target_offset{};
+    uint64_t  source_offset{};
     uint64_t  length{};
 };
 
-inline void split_assign_by_max_length(OpCode                 opcode,
-                                       const AssignmentBatch& batch,
-                                       AssignmentBatch&       output,
-                                       size_t                 max_length)
+inline void split_assign_by_max_length(OpCode, const AssignmentBatch& batch, AssignmentBatch& output, size_t max_length)
 {
     if (batch.empty())
         return;
@@ -97,10 +105,8 @@ inline void split_assign_by_max_length(OpCode                 opcode,
     }
 }
 
-inline void split_assign_by_step(OpCode                        opcode,
-                                 const AssignmentBatch&        batch,
-                                 std::vector<AssignmentBatch>& batch_split,
-                                 size_t                        step)
+inline void
+split_assign_by_step(OpCode, const AssignmentBatch& batch, std::vector<AssignmentBatch>& batch_split, size_t step)
 {
     if (batch.empty() || step == 0)
         return;
@@ -128,7 +134,7 @@ inline void nsplit_assign_by_step(OpCode                        opcode,
     if (nstep == 0)
         return;
     size_t bsize = batch.size();
-    size_t step = (bsize + nstep - 1) / nstep;
+    size_t step  = (bsize + nstep - 1) / nstep;
     split_assign_by_step(opcode, batch, batch_nsplit, step);
 }
 

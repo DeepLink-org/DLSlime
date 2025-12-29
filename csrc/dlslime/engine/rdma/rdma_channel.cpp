@@ -45,7 +45,7 @@ int32_t RDMAChannel::init(std::shared_ptr<RDMAContext> ctx, size_t num_qp, int32
         qp_init_attr.cap.max_recv_sge = 1;
         qp_init_attr.sq_sig_all       = false;
 
-        qp_[qpi] = ibv_create_qp(ctx_->pd_, &qp_init_attr);
+        qp_[qpi] = ibv_create_qp(memory_pool_->pd_, &qp_init_attr);
         if (!qp_[qpi]) {
             SLIME_LOG_ERROR(
                 "[" << ctx_->device_name_ << "] Failed to create QP " << qp_[qpi]->qp_num, ": ", strerror(errno));
@@ -216,7 +216,7 @@ int64_t RDMAChannel::post_send_batch(int qpi, RDMAAssign* assign)
     for (size_t i = 0; i < batch_size; ++i) {
 
         Assignment&    subassign = assign->batch_[i];
-        struct ibv_mr* mr        = ctx_->memory_pool_->get_mr(subassign.mr_key);
+        struct ibv_mr* mr        = memory_pool_->get_mr(subassign.mr_key);
         sge[i].addr              = (uintptr_t)mr->addr + subassign.source_offset;
         sge[i].length            = subassign.length;
         sge[i].lkey              = mr->lkey;
@@ -247,7 +247,7 @@ int64_t RDMAChannel::post_recv_batch(int qpi, RDMAAssign* assign)
     for (size_t i = 0; i < batch_size; ++i) {
 
         Assignment&    subassign = assign->batch_[i];
-        struct ibv_mr* mr        = ctx_->memory_pool_->get_mr(subassign.mr_key);
+        struct ibv_mr* mr        = memory_pool_->get_mr(subassign.mr_key);
         sge[i].addr              = (uintptr_t)mr->addr + subassign.source_offset;
         sge[i].length            = subassign.length;
         sge[i].lkey              = mr->lkey;
@@ -274,8 +274,8 @@ int64_t RDMAChannel::post_rc_oneside_batch(int qpi, RDMAAssign* assign)
 
     for (size_t i = 0; i < batch_size; ++i) {
         Assignment     subassign   = assign->batch_[i];
-        struct ibv_mr* mr          = ctx_->memory_pool_->get_mr(subassign.mr_key);
-        remote_mr_t    remote_mr   = ctx_->memory_pool_->get_remote_mr(subassign.remote_mr_key);
+        struct ibv_mr* mr          = memory_pool_->get_mr(subassign.mr_key);
+        remote_mr_t    remote_mr   = memory_pool_->get_remote_mr(subassign.remote_mr_key);
         uint64_t       remote_addr = remote_mr.addr;
         uint32_t       remote_rkey = remote_mr.rkey;
         sge[i].addr                = (uint64_t)mr->addr + subassign.source_offset;
