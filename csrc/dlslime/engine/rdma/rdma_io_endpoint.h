@@ -10,7 +10,7 @@
 #include "dlslime/device/device_api.h"
 #include "dlslime/engine/assignment.h"
 
-#include "engine/rdma/memory_pool.h"
+#include "memory_pool.h"
 #include "rdma_assignment.h"
 #include "rdma_channel.h"
 #include "rdma_context.h"
