@@ -1,5 +1,6 @@
 #include "rdma_endpoint.h"
 
+#include "engine/rdma/rdma_channel.h"
 #include "rdma_context_pool.h"
 #include "rdma_io_endpoint.h"
 #include "rdma_utils.h"
@@ -19,7 +20,9 @@ namespace dlslime {
 
 RDMAEndpoint::RDMAEndpoint(std::shared_ptr<RDMAContext> ctx, size_t num_qp, std::shared_ptr<RDMAWorker> worker)
 {
-    ctx_         = ctx;
+    ctx_ = ctx;
+    if (not ctx_)
+        SLIME_ABORT("No NIC Resources");
     memory_pool_ = std::make_shared<RDMAMemoryPool>(ctx);
     worker_      = worker ? worker : GlobalWorkerManager::instance().get_default_worker(socketId(ctx_->device_name_));
 
@@ -60,7 +63,6 @@ void RDMAEndpoint::connect(const json& remote_endpoint_info)
 
 json RDMAEndpoint::endpointInfo() const
 {
-    // 2. 聚合连接信息：将两个子 Endpoint 的信息打包
     return json{{"mr_info", memory_pool_->mr_info()},
                 {"io_info", io_endpoint_->endpointInfo()},
                 {"msg_info", msg_endpoint_->endpointInfo()}};

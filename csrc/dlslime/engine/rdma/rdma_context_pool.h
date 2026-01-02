@@ -28,7 +28,7 @@ public:
         std::string key  = dev_name;
         auto        nics = available_nic();
         if (nics.empty()) {
-            SLIME_LOG_ERROR("No Available nics");
+            SLIME_LOG_WARN("No Available nics");
             return nullptr;
         }
         if (std::find(nics.begin(), nics.end(), key) == nics.end() or dev_name.empty()) {

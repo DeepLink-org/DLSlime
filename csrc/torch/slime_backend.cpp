@@ -193,7 +193,9 @@ slimeBackend::slimeBackend(const c10::intrusive_ptr<::c10d::Store>& store, int r
     size_t            qp_num    = SLIME_QP_NUM;
 
     std::shared_ptr<RDMAContext> context = GlobalContextManager::instance().get_context(dev_name, ib_port, link_type);
-    rdma_worker_                         = GlobalWorkerManager::instance().get_default_worker(socketId(dev_name));
+    if (not context)
+        SLIME_ABORT("No Available RNICs");
+    rdma_worker_ = GlobalWorkerManager::instance().get_default_worker(socketId(dev_name));
     for (int i = 0; i < size - 1; ++i) {
 
         auto endpoint = std::make_shared<RDMAEndpoint>(context, qp_num, rdma_worker_);

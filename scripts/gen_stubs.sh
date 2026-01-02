@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-pybind11-stubgen dlslime._slime_c --output-dir . \
+${PYTHON_PATH}pybind11-stubgen dlslime._slime_c --output-dir . \
     --ignore-unresolved-names json \
     --ignore-unresolved-names _abc._abc_data
 

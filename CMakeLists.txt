@@ -47,8 +47,10 @@ endif()
 
 if (BUILD_PYTHON)
     set(DLSLIME_INSTALL_PATH "${SKBUILD_PROJECT_NAME}")
+    set(DLSLIME_CONFIG_DEST "${DLSLIME_INSTALL_PATH}/share/cmake/dlslime")
 else()
     set(DLSLIME_INSTALL_PATH "lib")
+    set(DLSLIME_CONFIG_DEST "share/cmake/dlslime")
 endif()
 
 if (BUILD_TORCH_PLUGIN OR BUILD_INTRA_OPS OR BUILD_INTER_OPS)
@@ -79,7 +81,7 @@ install(
 # 2. Install Targets Export
 install(EXPORT dlslimeTargets
     NAMESPACE dlslime::
-    DESTINATION ${DLSLIME_INSTALL_PATH}/share/cmake/dlslime
+    DESTINATION ${DLSLIME_CONFIG_DEST}
 )
 
 # 3. Generate Config File
@@ -88,7 +90,7 @@ set(INSTALL_INCLUDE_DIR "include/dlslime")
 configure_package_config_file(
     cmake/dlslimeConfig.cmake.in
     "${CMAKE_CURRENT_BINARY_DIR}/dlslimeConfig.cmake"
-    INSTALL_DESTINATION ${DLSLIME_INSTALL_PATH}/share/cmake/dlslime
+    INSTALL_DESTINATION ${DLSLIME_CONFIG_DEST}
     PATH_VARS INSTALL_INCLUDE_DIR
 )
 
@@ -102,5 +104,5 @@ install(
     FILES
         "${CMAKE_CURRENT_BINARY_DIR}/dlslimeConfig.cmake"
         "${CMAKE_CURRENT_BINARY_DIR}/dlslimeConfigVersion.cmake"
-    DESTINATION ${DLSLIME_INSTALL_PATH}/share/cmake/dlslime
+    DESTINATION ${DLSLIME_CONFIG_DEST}
 )
