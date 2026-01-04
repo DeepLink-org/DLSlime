@@ -28,7 +28,7 @@ repos:
     rev: v2.1.0
     hooks:
       - id: codespell
-        args: ["--skip=docs/*,docs/imgs/*,csrc/dlslime/json.hpp,csrc/python/pybind_json/pybind_json.hpp"]
+        args: ["--skip=docs/*,docs/imgs/*,csrc/dlslime/json.hpp,csrc/python/pybind_json/pybind_json.hpp,*json_merge_manually*,*json_merger*,*.svg,*.csv,*jring*,*json*,*dlpack*,*gloo*,*/ibgda_device.cuh"]
 
   - repo: https://github.com/pre-commit/mirrors-clang-format
     rev: v18.1.6
@@ -36,6 +36,7 @@ repos:
       - id: clang-format
         args: ["--style=file"]
         files: \.(cpp|hpp|c|h|cu|cuh)$
+        exclude: '(?i).*(json|jring|dlpack|gloo|ibgda_device\.cuh).*'
 
   # - repo: https://github.com/myint/docformatter
   #   rev: v1.4

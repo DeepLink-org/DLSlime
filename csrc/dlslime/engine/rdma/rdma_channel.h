@@ -1,9 +1,8 @@
 #pragma once
 
 #include "dlslime/engine/rdma/memory_pool.h"
-#include "rdma_context.h"
-
 #include "dlslime/json.hpp"
+#include "rdma_context.h"
 
 namespace dlslime {
 

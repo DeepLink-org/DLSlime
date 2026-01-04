@@ -4,13 +4,13 @@
 
 #pragma once
 
-#include "dlslime/env.h"
-
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <mutex>
 #include <string>
+
+#include "dlslime/env.h"
 
 namespace dlslime {
 
@@ -65,8 +65,8 @@ inline std::mutex& get_console_mutex()
     (__VA_ARGS__)
 
 #define SLIME_CONSOLE_LOCK                                                                                             \
-    std::unique_lock<std::mutex> _slime_console_lock(dlslime::get_console_mutex(), std::defer_lock);                     \
-    if (dlslime::is_mutex_logging_enabled()) {                                                                           \
+    std::unique_lock<std::mutex> _slime_console_lock(dlslime::get_console_mutex(), std::defer_lock);                   \
+    if (dlslime::is_mutex_logging_enabled()) {                                                                         \
         _slime_console_lock.lock();                                                                                    \
     }
 

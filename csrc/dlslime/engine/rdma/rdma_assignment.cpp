@@ -4,6 +4,7 @@
 #include <stdexcept>
 
 #include "dlslime/engine/assignment.h"
+#include "rdma_env.h"
 
 namespace dlslime {
 
@@ -24,7 +25,7 @@ void RDMAAssign::reset(
 
     SLIME_ASSERT(callback_, "NULL CALLBACK!!");
 
-    if (batch.size() > 4096) {
+    if (batch.size() > SLIME_MAX_SEND_WR) {
         SLIME_ABORT("Batch size too large for pooled object!");
     }
 

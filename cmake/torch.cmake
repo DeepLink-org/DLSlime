@@ -18,7 +18,7 @@ run_python(TORCH_ENABLE_ABI
     "Failed to find torch ABI info"
 )
 
-    
+
 # 1. 先利用 run_python 获取当前 Torch 的版本号
 # 注意：使用 .split('+')[0] 是为了去掉可能的 cuda 后缀 (例如 2.9.0+cu118)，确保 CMake 能正确比较
 run_python(
@@ -75,5 +75,3 @@ add_compile_options("-D_GLIBCXX_USE_CXX11_ABI=${TORCH_ENABLE_ABI}")
 if(TORCH_CURRENT_VERSION VERSION_LESS "2.9")
     add_compile_options(-DPYBIND11_BUILD_ABI=\"${Torch_PYBIND11_BUILD_ABI}\")
 endif()
-
-

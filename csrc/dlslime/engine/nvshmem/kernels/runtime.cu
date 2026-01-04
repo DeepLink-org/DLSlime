@@ -38,11 +38,13 @@ void* alloc(size_t size, size_t alignment)
     return nvshmem_align(alignment, size);
 }
 
-void free(void* ptr) {
+void free(void* ptr)
+{
     nvshmem_free(ptr);
 }
 
-void barrier() {
+void barrier()
+{
     nvshmem_barrier_all();
 }
 

@@ -1,16 +1,13 @@
-import time
 import argparse
 import os
-from typing import Optional, List
+import time
 from pathlib import Path
+from typing import List, Optional
 
 import torch
 import torch.distributed as dist
-
 from dlslime.buffer.inter.all_gather_inter_ll_buffer import AllGatherInterLLBuffer
-
 from dlslime.utils.json_merger import _merge_json
-
 
 # Get SPMD Info
 rank = int(os.environ["RANK"])
@@ -104,13 +101,21 @@ def main():
     if args.op_type == "all-gather":
         input_tensor.copy_(torch.ones(bs, msg_size, dtype=dtype, device=device) * rank)
     else:
-        input_tensor.copy_(torch.ones(bs * world_size, msg_size, dtype=dtype, device=device) * rank)
+        input_tensor.copy_(
+            torch.ones(bs * world_size, msg_size, dtype=dtype, device=device) * rank
+        )
 
     # profiling
     output_dir = "./"
     os.makedirs(output_dir, exist_ok=True)
-    profiler_per_rank_output = Path(os.path.join(output_dir, f"profiler_{root_time}", "per_rank"))
-    profiler_merged_output = Path(os.path.join(output_dir, f"profiler_{root_time}", f"profiler_{root_time}_merged.json"))
+    profiler_per_rank_output = Path(
+        os.path.join(output_dir, f"profiler_{root_time}", "per_rank")
+    )
+    profiler_merged_output = Path(
+        os.path.join(
+            output_dir, f"profiler_{root_time}", f"profiler_{root_time}_merged.json"
+        )
+    )
 
     with torch.profiler.profile(
         activities=[
@@ -144,12 +149,12 @@ def main():
     print(output, output.shape)
     dist.barrier(group=gpu_group, device_ids=[local_rank])
     dist.barrier()
-    json_files_to_merge: List[Path] = list(profiler_per_rank_output.rglob('*.json'))
+    json_files_to_merge: List[Path] = list(profiler_per_rank_output.rglob("*.json"))
     _merge_json(
         to_merge_files=json_files_to_merge,
         output_json=profiler_merged_output,
         compress=False,
-        version=2
+        version=2,
     )
     dist.destroy_process_group()
 

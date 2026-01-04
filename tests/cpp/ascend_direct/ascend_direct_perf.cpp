@@ -1,7 +1,8 @@
 #include <gflags/gflags.h>
+#include <sys/time.h>
+
 #include <iostream>
 #include <memory>
-#include <sys/time.h>
 #include <zmq.hpp>
 
 #include "acl/acl.h"

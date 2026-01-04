@@ -1,8 +1,8 @@
+#include <cstddef>
+
 #include "dlslime/device/device_api.h"
 #include "dlslime/device/host/host_signal.h"
 #include "dlslime/logging.h"
-
-#include <cstddef>
 
 namespace dlslime {
 namespace device {

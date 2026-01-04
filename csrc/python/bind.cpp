@@ -1,7 +1,3 @@
-#include <cstdint>
-#include <functional>
-#include <memory>
-
 #include <pybind11/attr.h>
 #include <pybind11/cast.h>
 #include <pybind11/chrono.h>
@@ -10,6 +6,10 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/pytypes.h>
 #include <pybind11/stl.h>
+
+#include <cstdint>
+#include <functional>
+#include <memory>
 
 #include "dlslime/engine/assignment.h"
 #include "dlslime/engine/dlpack.h"

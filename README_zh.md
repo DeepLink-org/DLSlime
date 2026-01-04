@@ -157,17 +157,17 @@ mkdir -p DLSlime/build && cmake -DFLAG=<ON|OFF> ..
 
 `FLAG` 可以是以下选项：
 
-| 标志 (Flag)              | 描述                                  | 平台     | 默认值  |
-| :----------------------- | :------------------------------------ | :------- | ------: |
-| `BUILD_RDMA`             | 构建 RDMA 传输引擎                    | Hetero   |      ON |
-| `BUILD_PYTHON`           | 构建 Python 封装                      | Hetero   |      ON |
-| `BUILD_NVLINK`           | 构建 NVLINK 传输引擎                  | GPGPU    |     OFF |
-| `BUILD_NVSHMEM`          | 构建 NVShmem 传输引擎                 | NVIDIA   |     OFF |
-| `BUILD_ASCEND_DIRECT`    | 构建 Ascend 直连传输                  | ASCEND   |     OFF |
-| `BUILD_TORCH_PLUGIN`     | 构建 DLSlime 为 Torch 后端            | Hetero   |     OFF |
-| `USE_GLOO_BACKEND`       | 使用 GLOO RDMA Send/Recv Torch 后端   | Hetero   |     OFF |
-| `BUILD_INTRA_OPS`        | 使用 INTRA Collective OPS (节点内)    | GPGPU    |     OFF |
-| `BUILD_INTER_OPS`        | 使用 INTER Collective OPS (NVSHMEM)   | NVIDIA   |     OFF |
+| 标志 (Flag)           | 描述                                | 平台   | 默认值 |
+| :-------------------- | :---------------------------------- | :----- | -----: |
+| `BUILD_RDMA`          | 构建 RDMA 传输引擎                  | Hetero |     ON |
+| `BUILD_PYTHON`        | 构建 Python 封装                    | Hetero |     ON |
+| `BUILD_NVLINK`        | 构建 NVLINK 传输引擎                | GPGPU  |    OFF |
+| `BUILD_NVSHMEM`       | 构建 NVShmem 传输引擎               | NVIDIA |    OFF |
+| `BUILD_ASCEND_DIRECT` | 构建 Ascend 直连传输                | ASCEND |    OFF |
+| `BUILD_TORCH_PLUGIN`  | 构建 DLSlime 为 Torch 后端          | Hetero |    OFF |
+| `USE_GLOO_BACKEND`    | 使用 GLOO RDMA Send/Recv Torch 后端 | Hetero |    OFF |
+| `BUILD_INTRA_OPS`     | 使用 INTRA Collective OPS (节点内)  | GPGPU  |    OFF |
+| `BUILD_INTER_OPS`     | 使用 INTER Collective OPS (NVSHMEM) | NVIDIA |    OFF |
 
 > \[!Note\]
 > 在 Metax 平台上使用 DLSlime 作为 Torch 后端时，请启用 `USE_MECA`。
@@ -364,12 +364,12 @@ torchrun --master-addr 10.130.8.145 --master-port 6006 --nnodes 2 --nproc-per-no
 
 - 硬件配置
 
-| 设备 |                       NIC 型号 | 带宽      | PCIe 版本 | PCIe 通道数 |
-| :--- | -----------------------------: | --------: | --------: | ----------: |
-| A    | Mellanox ConnectX-7 Lx (MT4129) |  400 Gbps |  PCIe 5.0 |         x16 |
-| B    | Mellanox ConnectX-7 Lx (MT4129) |  400 Gbps |  PCIe 5.0 |          x8 |
-| C    | Mellanox ConnectX-7 Lx (MT4129) |  200 Gbps |  PCIe 5.0 |         x16 |
-| D    | Mellanox ConnectX-7 Lx (MT4129) |  400 Gbps |  PCIe 5.0 |         x16 |
+| 设备 |                        NIC 型号 |     带宽 | PCIe 版本 | PCIe 通道数 |
+| :--- | ------------------------------: | -------: | --------: | ----------: |
+| A    | Mellanox ConnectX-7 Lx (MT4129) | 400 Gbps |  PCIe 5.0 |         x16 |
+| B    | Mellanox ConnectX-7 Lx (MT4129) | 400 Gbps |  PCIe 5.0 |          x8 |
+| C    | Mellanox ConnectX-7 Lx (MT4129) | 200 Gbps |  PCIe 5.0 |         x16 |
+| D    | Mellanox ConnectX-7 Lx (MT4129) | 400 Gbps |  PCIe 5.0 |         x16 |
 
 - 实验配置
 

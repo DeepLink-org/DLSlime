@@ -1,6 +1,7 @@
 #pragma once
-#include "signal.h"
 #include <memory>
+
+#include "signal.h"
 
 namespace dlslime {
 namespace device {

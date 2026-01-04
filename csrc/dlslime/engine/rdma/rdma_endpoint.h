@@ -1,15 +1,13 @@
 #pragma once
 
+#include <memory>
 
-#include "dlslime/json.hpp"
 #include "dlslime/engine/assignment.h"
-
+#include "dlslime/json.hpp"
 #include "memory_pool.h"
 #include "rdma_context.h"
 #include "rdma_io_endpoint.h"
 #include "rdma_msg_endpoint.h"
-
-#include <memory>
 
 namespace dlslime {
 

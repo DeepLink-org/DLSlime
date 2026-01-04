@@ -1,16 +1,17 @@
 #pragma once
 
-#include "dlslime/json.hpp"
-#include "dlslime/logging.h"
+#include <infiniband/verbs.h>
 
 #include <cstddef>
 #include <cstdint>
 #include <functional>
-#include <infiniband/verbs.h>
 #include <iostream>
 #include <string>
 #include <tuple>
 #include <unordered_map>
+
+#include "dlslime/json.hpp"
+#include "dlslime/logging.h"
 
 namespace dlslime {
 

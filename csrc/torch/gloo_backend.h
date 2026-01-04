@@ -4,26 +4,24 @@
  ************************************************************************/
 #pragma once
 
+#include <pybind11/chrono.h>
+#include <torch/extension.h>
+
+#include <memory>
 #include <torch/csrc/distributed/c10d/Backend.hpp>
 #include <torch/csrc/distributed/c10d/Store.hpp>
 #include <torch/csrc/distributed/c10d/Types.hpp>
 #include <torch/csrc/distributed/c10d/Utils.hpp>
 #include <torch/csrc/distributed/c10d/Work.hpp>
-#include <torch/extension.h>
-
-#include <pybind11/chrono.h>
-
-#include <memory>
-#include <pybind11/chrono.h>
 #include <unordered_map>
 #include <vector>
 
 #include "c10/util/intrusive_ptr.h"
+#include "dlslime/logging.h"
 #include "gloo/context.h"
 #include "gloo/rendezvous/store.h"
 #include "gloo/transport/device.h"
 #include "gloo/transport/unbound_buffer.h"
-#include "dlslime/logging.h"
 
 namespace dlslime {
 namespace c10d {
@@ -371,11 +369,11 @@ protected:
     std::vector<std::thread>                      threads_;
     bool                                          stop_;
 
-    void initComm(at::Device dev){};
-    void initComm(){};
-    void syncStream(at::Device device, int index = 0){};
-    void groupStart(){};
-    void groupEnd(){};
+    void initComm(at::Device dev) {};
+    void initComm() {};
+    void syncStream(at::Device device, int index = 0) {};
+    void groupStart() {};
+    void groupEnd() {};
     // Entrypoint for worker threads.
     void runLoop(int workerIndex);
 

@@ -1,18 +1,16 @@
 #pragma once
 
+#include <torch/torch.h>
+
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
-
 #include <optional>
 #include <vector>
 
-#include <torch/torch.h>
-
+#include "all_to_all_intra_ll.h"
 #include "dlslime/json.hpp"
 #include "dlslime/ops/exception.cuh"
-
-#include "all_to_all_intra_ll.h"
 #include "torch/types.h"
 
 using json = nlohmann::json;

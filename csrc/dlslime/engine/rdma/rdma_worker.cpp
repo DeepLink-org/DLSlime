@@ -1,12 +1,13 @@
 #include "rdma_worker.h"
 
 // Include full definition of UnifiedRDMAEndpoint
+#include <emmintrin.h>  // for _mm_pause
+
+#include <iterator>  // for std::make_move_iterator
+
 #include "dlslime/logging.h"  // SLIME_LOG_INFO
 #include "rdma_endpoint.h"
 #include "rdma_utils.h"  // socketId(), bindToSocket()
-
-#include <emmintrin.h>  // for _mm_pause
-#include <iterator>     // for std::make_move_iterator
 
 namespace dlslime {
 

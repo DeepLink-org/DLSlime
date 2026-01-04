@@ -9,7 +9,7 @@
 
 #define FINISHED_SUM_TAG 1024
 #define NUM_CPU_TIMEOUT_SECS 100
-#define NUM_TIMEOUT_CYCLES 200000000000ull // 200G cycles ~= 100s
+#define NUM_TIMEOUT_CYCLES 200000000000ull  // 200G cycles ~= 100s
 #define NUM_WAIT_NANOSECONDS 500
 
 #define LOW_LATENCY_SEND_PHASE 1
@@ -17,9 +17,12 @@
 
 // Make CLion CUDA indexing work
 #ifdef __CLION_IDE__
-#define __CUDA_ARCH__ 900 // NOLINT(*-reserved-identifier)
-#define __CUDACC_RDC__ // NOLINT(*-reserved-identifier)
-__host__ __device__ __forceinline__ void host_device_printf(const char* format, ...) { asm volatile("trap;"); }
+#define __CUDA_ARCH__ 900  // NOLINT(*-reserved-identifier)
+#define __CUDACC_RDC__     // NOLINT(*-reserved-identifier)
+__host__ __device__ __forceinline__ void host_device_printf(const char* format, ...)
+{
+    asm volatile("trap;");
+}
 #define printf host_device_printf
 #endif
 
@@ -43,8 +46,9 @@ __host__ __device__ __forceinline__ void host_device_printf(const char* format, 
 #include <cuda_bf16.h>
 #include <cuda_fp8.h>
 #include <cuda_runtime.h>
+#include <device_host_transport/nvshmem_common_ibgda.h>
+#include <infiniband/mlx5dv.h>
 #include <nvshmem.h>
 #include <nvshmemx.h>
-#include <infiniband/mlx5dv.h>
+
 #include <non_abi/device/threadgroup/nvshmemi_common_device_defines.cuh>
-#include <device_host_transport/nvshmem_common_ibgda.h>

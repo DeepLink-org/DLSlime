@@ -1,3 +1,12 @@
+#include "rdma_context.h"
+
+#include <emmintrin.h>
+#include <infiniband/verbs.h>
+#include <numa.h>
+#include <poll.h>
+#include <sys/types.h>
+#include <unistd.h>
+
 #include <algorithm>
 #include <atomic>
 #include <cassert>
@@ -5,19 +14,12 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
-#include <emmintrin.h>
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
 #include <thread>
 #include <vector>
-
-#include <infiniband/verbs.h>
-#include <numa.h>
-#include <poll.h>
-#include <sys/types.h>
-#include <unistd.h>
 
 #include "dlslime/engine/assignment.h"
 #include "dlslime/engine/rdma/ibv_helper.h"
@@ -29,8 +31,6 @@
 #include "dlslime/engine/rdma/rdma_utils.h"
 #include "dlslime/jring.h"
 #include "dlslime/logging.h"
-
-#include "rdma_context.h"
 
 namespace dlslime {
 

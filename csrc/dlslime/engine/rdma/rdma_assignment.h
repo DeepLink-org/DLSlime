@@ -50,7 +50,7 @@ struct alignas(64) RDMAAssign {
     friend std::ostream& operator<<(std::ostream& os, const RDMAAssign& assignment);
 
 public:
-    typedef enum : int {
+    typedef enum: int {
         SUCCESS                   = 0,
         ASSIGNMENT_BATCH_OVERFLOW = 400,
         UNKNOWN_OPCODE            = 401,

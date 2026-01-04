@@ -1,13 +1,13 @@
 #pragma once
 
+#include <numa.h>
+
 #include <cstdlib>
 #include <iostream>
 #include <sstream>
 #include <string>
 #include <type_traits>
 #include <vector>
-
-#include <numa.h>
 
 namespace dlslime {
 

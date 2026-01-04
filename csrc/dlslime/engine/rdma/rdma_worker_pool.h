@@ -2,9 +2,8 @@
 
 #include <unordered_map>
 
-#include "rdma_worker.h"
-
 #include "dlslime/logging.h"
+#include "rdma_worker.h"
 
 namespace dlslime {
 class GlobalWorkerManager {
@@ -30,7 +29,7 @@ public:
 
 private:
     GlobalWorkerManager() = default;
-    std::mutex mutex_;
+    std::mutex                                           mutex_;
     std::unordered_map<int, std::shared_ptr<RDMAWorker>> default_workers_;
 };
 }  // namespace dlslime

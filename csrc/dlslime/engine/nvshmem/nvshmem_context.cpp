@@ -1,10 +1,9 @@
-#include "dlslime/engine/dlpack.h"
+#include "nvshmem_context.h"
 
+#include "dlslime/engine/dlpack.h"
 #include "dlslime/engine/nvshmem/kernels/api.cuh"
 #include "dlslime/engine/nvshmem/kernels/exception.cuh"
 #include "dlslime/engine/nvshmem/kernels/internode_ll.cuh"
-
-#include "nvshmem_context.h"
 
 namespace dlslime {
 

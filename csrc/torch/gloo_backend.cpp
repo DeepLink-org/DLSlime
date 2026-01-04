@@ -1,23 +1,21 @@
 #include "gloo_backend.h"
-#include "c10/util/intrusive_ptr.h"
-#include "torch/csrc/distributed/c10d/PrefixStore.hpp"
 
 #include <pybind11/chrono.h>
 #include <pybind11/functional.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
-
-#include <torch/csrc/distributed/c10d/Store.hpp>
 #include <torch/extension.h>
 
-#include "gloo/rendezvous/context.h"
-#include "gloo/rendezvous/prefix_store.h"
-#include "gloo/transport/ibverbs/device.h"
+#include <torch/csrc/distributed/c10d/Store.hpp>
 
+#include "c10/util/intrusive_ptr.h"
 #include "dlslime/engine/rdma/rdma_env.h"
 #include "dlslime/engine/rdma/utils.h"
 #include "dlslime/logging.h"
-
+#include "gloo/rendezvous/context.h"
+#include "gloo/rendezvous/prefix_store.h"
+#include "gloo/transport/ibverbs/device.h"
+#include "torch/csrc/distributed/c10d/PrefixStore.hpp"
 
 namespace dlslime {
 namespace c10d {
@@ -220,7 +218,7 @@ slimeBackend::slimeBackend(const c10::intrusive_ptr<::c10d::Store>& store, int r
 #ifdef GLOO_SHARED_STORE
     auto connectStore = prefix_store;
 #else
-    auto& connectStore    = *prefix_store;
+    auto& connectStore = *prefix_store;
 #endif
 
     // context->setTimeout(options_->timeout);

@@ -1,11 +1,11 @@
 #pragma once
 
+#include <torch/torch.h>
+
 #include <cstdint>
 #include <functional>
 #include <tuple>
 #include <vector>
-
-#include <torch/torch.h>
 
 #include "dlslime/json.hpp"
 #include "ops/configs.cuh"
