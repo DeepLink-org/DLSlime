@@ -1,4 +1,3 @@
-# 查找所有需要的源文件
 file(GLOB COMMON_SRCS "common/*.cc")
 file(GLOB RENDEZVOUS_SRCS "rendezvous/*.cc")
 file(GLOB TRANSPORT_SRCS "transport/*.cc")

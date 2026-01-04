@@ -108,7 +108,7 @@ public:
     {
         __atomic_store_n(&host_ptr_->gpu_ready, 0, __ATOMIC_RELAXED);
         __atomic_store_n(&host_ptr_->comm_done, 0, __ATOMIC_RELAXED);
-        __sync_synchronize();  // 内存屏障
+        __sync_synchronize();  // Memory barrier
     }
 
 private:
