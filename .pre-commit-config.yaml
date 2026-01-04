@@ -30,6 +30,13 @@ repos:
       - id: codespell
         args: ["--skip=docs/*,docs/imgs/*,csrc/dlslime/json.hpp,csrc/python/pybind_json/pybind_json.hpp"]
 
+  - repo: https://github.com/pre-commit/mirrors-clang-format
+    rev: v18.1.6
+    hooks:
+      - id: clang-format
+        args: ["--style=file"]
+        files: \.(cpp|hpp|c|h|cu|cuh)$
+
   # - repo: https://github.com/myint/docformatter
   #   rev: v1.4
   #   hooks:
