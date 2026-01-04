@@ -1,10 +1,10 @@
 #include "rdma_future.h"
 
+#include <stdexcept>
+
 #include "dlslime/device/signal.h"
 #include "rdma_io_endpoint.h"
 #include "rdma_msg_endpoint.h"
-
-#include <stdexcept>
 
 namespace dlslime {
 

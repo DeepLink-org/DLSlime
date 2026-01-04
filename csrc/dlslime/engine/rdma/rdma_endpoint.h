@@ -1,15 +1,13 @@
 #pragma once
 
-#include "dlslime/engine/assignment.h"
+#include <memory>
 
+#include "dlslime/engine/assignment.h"
+#include "dlslime/json.hpp"
 #include "memory_pool.h"
 #include "rdma_context.h"
 #include "rdma_io_endpoint.h"
 #include "rdma_msg_endpoint.h"
-
-#include "dlslime/json.hpp"
-
-#include <memory>
 
 namespace dlslime {
 
@@ -34,7 +32,8 @@ public:
 
     void connect(const json& remote_endpoint_info);
 
-    json    endpointInfo() const;
+    json endpointInfo() const;
+    void shutdown();
 
     int32_t registerOrAccessMemoryRegion(uintptr_t mr_key, uintptr_t ptr, uintptr_t, size_t length);
     int32_t registerOrAccessRemoteMemoryRegion(uintptr_t ptr, json mr_info);
@@ -69,7 +68,7 @@ private:
     std::shared_ptr<RDMAContext>    ctx_;
     std::shared_ptr<RDMAMemoryPool> memory_pool_;
 
-    std::shared_ptr<RDMAWorker>      worker_;
+    std::shared_ptr<RDMAWorker> worker_;
 
     std::shared_ptr<RDMAIOEndpoint>  io_endpoint_;
     std::shared_ptr<RDMAMsgEndpoint> msg_endpoint_;

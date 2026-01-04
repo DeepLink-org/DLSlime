@@ -1,24 +1,23 @@
 #include "rdma_io_endpoint.h"
 
+#include <emmintrin.h>
+
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
-#include <emmintrin.h>
 #include <memory>
 #include <new>
 #include <stdexcept>
 
 #include "dlslime/engine/assignment.h"
-
+#include "dlslime/logging.h"
+#include "dlslime/utils.h"
 #include "engine/rdma/memory_pool.h"
 #include "rdma_assignment.h"
 #include "rdma_env.h"
 #include "rdma_future.h"
-
-#include "dlslime/logging.h"
-#include "dlslime/utils.h"
 
 namespace dlslime {
 
@@ -27,7 +26,7 @@ void RDMAIOEndpoint::dummyReset(ImmRecvContext* ctx)
     for (int qpi = 0; qpi < num_qp_; ++qpi) {
         ctx->assigns_[qpi].opcode_ = OpCode::RECV;
 
-        ctx->assigns_[qpi].batch_size_ = 1;
+        ctx->assigns_[qpi].batch_.resize(1);
 
         ctx->assigns_[qpi].batch_[0].length        = sizeof(*dummy_);
         ctx->assigns_[qpi].batch_[0].mr_key        = (uintptr_t)dummy_;
@@ -71,6 +70,11 @@ RDMAIOEndpoint::dispatchTask(OpCode op_code, const std::vector<assign_tuple_t>& 
 
         OpCode slot_op_code = op_code;
 
+        for (size_t i = 0; i < num_qp_; ++i) {
+            ctx->assigns_[i].batch_.clear();
+            ctx->assigns_[i].batch_.reserve(SLIME_MAX_SEND_WR);
+        }
+
         size_t current_batch_size = 0;
 
         while (req_idx < total_reqs && current_batch_size < SLIME_MAX_SEND_WR) {
@@ -94,8 +98,9 @@ RDMAIOEndpoint::dispatchTask(OpCode op_code, const std::vector<assign_tuple_t>& 
             size_t qp_chunk_size = (chunk_len + num_qp_ - 1) / num_qp_;
 
             for (size_t qpi = 0; qpi < num_qp_; ++qpi) {
-                size_t qp_rel_off  = qpi * qp_chunk_size;
-                auto&  assign_elem = ctx->assigns_[qpi].batch_[current_batch_size];
+                size_t qp_rel_off = qpi * qp_chunk_size;
+                ctx->assigns_[qpi].batch_.emplace_back();
+                auto& assign_elem = ctx->assigns_[qpi].batch_.back();
 
                 if (qp_rel_off >= chunk_len) {
                     assign_elem.length = 0;
@@ -121,16 +126,15 @@ RDMAIOEndpoint::dispatchTask(OpCode op_code, const std::vector<assign_tuple_t>& 
         bool is_final_slot = (req_idx >= total_reqs);
 
         for (size_t qpi = 0; qpi < num_qp_; ++qpi) {
-            auto& assign       = ctx->assigns_[qpi];
-            assign.batch_size_ = current_batch_size;
-            assign.opcode_     = slot_op_code;
-            assign.is_inline_  = false;
+            auto& assign      = ctx->assigns_[qpi];
+            assign.opcode_    = slot_op_code;
+            assign.is_inline_ = false;
 
             assign.callback_ = [this, ctx, qpi, is_final_slot](int32_t status, int32_t imm) {
                 uint32_t old_mask = ctx->finished_qp_mask.fetch_or(1 << qpi, std::memory_order_acq_rel);
                 uint32_t new_mask = old_mask | (1 << qpi);
 
-                token_bucket_[qpi].fetch_add(ctx->assigns_[qpi].batch_size_);
+                token_bucket_[qpi].fetch_add(ctx->assigns_[qpi].batch_.size());
 
                 if (is_final_slot) {
                     ctx->signal->set_comm_done(qpi);
@@ -265,19 +269,30 @@ RDMAIOEndpoint::writeWithImm(const std::vector<assign_tuple_t>& assign, int32_t 
 
 std::shared_ptr<ImmRecvFuture> RDMAIOEndpoint::immRecv(void* stream)
 {
+    // Just claim the next slot index. The Worker thread ensures it is posted.
     uint64_t        slot = recv_slot_id_.fetch_add(1, std::memory_order_relaxed) % SLIME_MAX_IO_FIFO_DEPTH;
     ImmRecvContext* ctx  = &imm_recv_ctx_pool_[slot];
 
-    ctx->slot_id       = slot;
-    ctx->expected_mask = (1 << num_qp_) - 1;
-    ctx->signal->reset_all();
+    // Bind stream to the signal (safe even if signal is already set/posted)
+    // Note: We do NOT reset signal here, as Worker might have already posted it and it could complete any microsecond.
+    // Worker is responsible for resetting signal before Posting.
     ctx->signal->bind_stream(stream);
 
-    dummyReset(ctx);
-
-    while (jring_enqueue_burst(imm_recv_buffer_ring_, (void**)&ctx, 1, nullptr) == 0)
-        _mm_pause();
     return imm_recv_future_pool_[slot];
+}
+
+void RDMAIOEndpoint::cancelAll()
+{
+    for (int i = 0; i < SLIME_MAX_IO_FIFO_DEPTH; ++i) {
+        if (read_write_ctx_pool_) {
+            read_write_ctx_pool_[i].signal->force_complete();
+        }
+    }
+    for (int i = 0; i < SLIME_MAX_IO_FIFO_DEPTH; ++i) {
+        if (imm_recv_ctx_pool_) {
+            imm_recv_ctx_pool_[i].signal->force_complete();
+        }
+    }
 }
 
 // ============================================================
@@ -305,7 +320,7 @@ int32_t RDMAIOEndpoint::readWriteProcess()
 
         bool has_token = true;
         for (int qpi = 0; qpi < num_qp_; ++qpi) {
-            if (token_bucket_[qpi].load(std::memory_order_acquire) < ctx->assigns_[qpi].batch_size_) {
+            if (token_bucket_[qpi].load(std::memory_order_acquire) < ctx->assigns_[qpi].batch_.size()) {
                 has_token = false;
                 break;
             }
@@ -318,7 +333,7 @@ int32_t RDMAIOEndpoint::readWriteProcess()
         work_done++;
 
         for (size_t qpi = 0; qpi < num_qp_; ++qpi) {
-            token_bucket_[qpi].fetch_sub(ctx->assigns_[qpi].batch_size_, std::memory_order_release);
+            token_bucket_[qpi].fetch_sub(ctx->assigns_[qpi].batch_.size(), std::memory_order_release);
             data_channel_->post_rc_oneside_batch(qpi, &(ctx->assigns_[qpi]));
         }
 
@@ -330,18 +345,58 @@ int32_t RDMAIOEndpoint::readWriteProcess()
 int32_t RDMAIOEndpoint::immRecvProcess()
 {
     int32_t work_done = 0;
-    int     n_recv    = jring_dequeue_burst(imm_recv_buffer_ring_, burst_buf_, IO_BURST_SIZE, nullptr);
 
-    if (n_recv > 0) {
-        work_done += n_recv;
-        for (int i = 0; i < n_recv; ++i) {
-            auto* ctx = (ImmRecvContext*)burst_buf_[i];
-            for (size_t qpi = 0; qpi < num_qp_; ++qpi) {
-                data_channel_->post_recv_batch(qpi, &(ctx->assigns_[qpi]));
-            }
-            ctx->state_ = IOContextState::POSTED;
+    // We want to keep Posted Recvs ahead of User Requests by a window
+    // to avoid RNR (Receiver Not Ready) errors.
+    const uint64_t PRE_POST_WINDOW = 32;
+
+    uint64_t user_req_cnt = recv_slot_id_.load(std::memory_order_relaxed);
+    uint64_t posted_cnt   = posted_recv_cnt_.load(std::memory_order_relaxed);
+
+    // Target: We want posted >= user + WINDOW
+    // Also respect ring buffer limit (don't overwrite unconsumed slots) -> handled by user flow usually (blocking on
+    // future) But safely: posted - user should not exceed FIFO_DEPTH.
+
+    uint64_t target_post = user_req_cnt + PRE_POST_WINDOW;
+
+    while (posted_cnt < target_post) {
+        uint64_t slot = posted_cnt % SLIME_MAX_IO_FIFO_DEPTH;
+
+        // Safety check: Don't lap the user by more than FIFO Depth (unlikely given window << depth)
+        // If posted is too far ahead of user, we stop.
+        if (posted_cnt > user_req_cnt + SLIME_MAX_IO_FIFO_DEPTH) {
+            break;
         }
+
+        ImmRecvContext* ctx = &imm_recv_ctx_pool_[slot];
+
+        // Prepare Context (Reset)
+        ctx->slot_id       = slot;
+        ctx->expected_mask = (1 << num_qp_) - 1;
+
+        // CRITICAL: Reset signal BEFORE posting.
+        // User might bind stream later, which is fine.
+        ctx->signal->reset_all();
+
+        dummyReset(ctx);  // Sets up Assigns
+
+        // Post to NIC
+        for (size_t qpi = 0; qpi < num_qp_; ++qpi) {
+            data_channel_->post_recv_batch(qpi, &(ctx->assigns_[qpi]));
+        }
+        ctx->state_ = IOContextState::POSTED;
+
+        posted_cnt++;
+        work_done++;
     }
+
+    if (work_done > 0) {
+        posted_recv_cnt_.store(posted_cnt, std::memory_order_relaxed);
+    }
+
+    // Drain ring just in case (legacy cleanup), though we don't push to it anymore.
+    // jring_dequeue_burst(imm_recv_buffer_ring_, burst_buf_, IO_BURST_SIZE, nullptr);
+
     return work_done;
 }
 

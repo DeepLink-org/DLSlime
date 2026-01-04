@@ -1,9 +1,6 @@
 #pragma once
 
-#include "dlslime/engine/nvshmem/kernels/api.cuh"
-#include "dlslime/engine/nvshmem/kernels/internode_ll.cuh"
-#include "dlslime/json.hpp"
-#include "dlslime/logging.h"
+#include <cuda_runtime.h>
 
 #include <cstdint>
 #include <iostream>
@@ -11,7 +8,10 @@
 #include <memory>
 #include <vector>
 
-#include <cuda_runtime.h>
+#include "dlslime/engine/nvshmem/kernels/api.cuh"
+#include "dlslime/engine/nvshmem/kernels/internode_ll.cuh"
+#include "dlslime/json.hpp"
+#include "dlslime/logging.h"
 
 namespace dlslime {
 
@@ -54,7 +54,8 @@ public:
 
     void barrier();
 
-    int gpu_device_id() {
+    int gpu_device_id()
+    {
         return gpu_device_id_;
     }
 

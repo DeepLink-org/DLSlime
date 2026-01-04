@@ -9,3 +9,15 @@ endif()
 if(USE_GLOO_BACKEND)
     add_subdirectory(gloo)
 endif()
+
+add_library(dlslime INTERFACE)
+target_link_libraries(dlslime INTERFACE _slime_engine _slime_device)
+
+if(BUILD_RDMA)
+    target_link_libraries(dlslime INTERFACE _slime_rdma)
+endif()
+
+install(
+    TARGETS dlslime
+    EXPORT dlslimeTargets
+)

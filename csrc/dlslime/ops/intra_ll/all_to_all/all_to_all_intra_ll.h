@@ -1,9 +1,9 @@
 #pragma once
 
+#include <torch/torch.h>
+
 #include <cstdint>
 #include <cstdlib>
-
-#include <torch/torch.h>
 
 namespace dlslime {
 

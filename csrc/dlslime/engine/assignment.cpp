@@ -1,8 +1,9 @@
+#include "assignment.h"
+
 #include <cstdint>
 #include <functional>
 #include <vector>
 
-#include "assignment.h"
 #include "dlslime/logging.h"
 
 namespace dlslime {

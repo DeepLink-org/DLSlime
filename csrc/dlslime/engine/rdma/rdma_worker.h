@@ -24,8 +24,12 @@ public:
     // Thread-safe, non-blocking for the worker loop.
     // Returns the assigned Endpoint ID.
     int64_t addEndpoint(std::shared_ptr<RDMAEndpoint> endpoint);
+    void    removeEndpoint(std::shared_ptr<RDMAEndpoint> endpoint);
 
-    int32_t getSocketId() const { return socket_id_; }
+    int32_t getSocketId() const
+    {
+        return socket_id_;
+    }
 
 private:
     // Main loop function executed by the worker thread.
@@ -40,8 +44,9 @@ private:
 
     // --- Thread-Safe Staging Area ---
     // Accessed by control thread (addEndpoint) and worker thread (merge)
-    std::mutex staging_mutex_;
+    std::mutex                                 staging_mutex_;
     std::vector<std::shared_ptr<RDMAEndpoint>> staging_endpoints_;
+    std::vector<std::shared_ptr<RDMAEndpoint>> pending_removals_;
 
     // Atomic counter for generating unique endpoint IDs
     std::atomic<int64_t> next_endpoint_id_{0};

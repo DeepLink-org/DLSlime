@@ -2,9 +2,7 @@ import os
 
 import torch
 import torch.distributed as dist
-
 from dlslime.buffer.intra.all_to_all_intra_ll_buffer import AllToAllIntraLLBuffer
-
 
 dist.init_process_group("cpu:gloo,cuda:nccl")
 

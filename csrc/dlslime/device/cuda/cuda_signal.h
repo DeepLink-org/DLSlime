@@ -1,14 +1,14 @@
 #pragma once
-#include "dlslime/device/signal.h"
-#include "dlslime/engine/rdma/rdma_env.h"
-#include "dlslime/logging.h"
-
-#include <atomic>
 #include <cuda.h>
 #include <cuda_runtime.h>
 #include <immintrin.h>  // for _mm_pause
+
+#include <atomic>
 #include <stdexcept>
 
+#include "dlslime/device/signal.h"
+#include "dlslime/engine/rdma/rdma_env.h"
+#include "dlslime/logging.h"
 #include "nvtx_helper.h"
 
 namespace dlslime {
@@ -98,11 +98,17 @@ public:
         }
     }
 
+    void force_complete() override
+    {
+        NVTX_RANGE("Signal: Force Complete", COLOR_PURPLE);
+        __atomic_store_n(&host_ptr_->comm_done, 0xFFFFFFFF, __ATOMIC_RELEASE);
+    }
+
     void reset_all() override
     {
         __atomic_store_n(&host_ptr_->gpu_ready, 0, __ATOMIC_RELAXED);
         __atomic_store_n(&host_ptr_->comm_done, 0, __ATOMIC_RELAXED);
-        __sync_synchronize();  // 内存屏障
+        __sync_synchronize();  // Memory barrier
     }
 
 private:

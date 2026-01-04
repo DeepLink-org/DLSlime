@@ -1,17 +1,15 @@
-#include <algorithm>
-#include <cstdint>
-#include <memory>
-#include <stdexcept>
-
-#include <cstdio>
-
+#include <ATen/cuda/CUDAContext.h>
+#include <ATen/cuda/CUDADataType.h>
 #include <cuda.h>
 #include <cuda_runtime.h>
 #include <cuda_runtime_api.h>
-
-#include <ATen/cuda/CUDAContext.h>
-#include <ATen/cuda/CUDADataType.h>
 #include <torch/torch.h>
+
+#include <algorithm>
+#include <cstdint>
+#include <cstdio>
+#include <memory>
+#include <stdexcept>
 
 #include "dlslime/logging.h"
 #include "dlslime/ops/launch.cuh"

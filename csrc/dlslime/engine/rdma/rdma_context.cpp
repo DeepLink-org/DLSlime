@@ -1,3 +1,12 @@
+#include "rdma_context.h"
+
+#include <emmintrin.h>
+#include <infiniband/verbs.h>
+#include <numa.h>
+#include <poll.h>
+#include <sys/types.h>
+#include <unistd.h>
+
 #include <algorithm>
 #include <atomic>
 #include <cassert>
@@ -5,18 +14,12 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
-#include <emmintrin.h>
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
 #include <thread>
 #include <vector>
-
-#include <infiniband/verbs.h>
-#include <numa.h>
-#include <sys/types.h>
-#include <unistd.h>
 
 #include "dlslime/engine/assignment.h"
 #include "dlslime/engine/rdma/ibv_helper.h"
@@ -28,8 +31,6 @@
 #include "dlslime/engine/rdma/rdma_utils.h"
 #include "dlslime/jring.h"
 #include "dlslime/logging.h"
-
-#include "rdma_context.h"
 
 namespace dlslime {
 
@@ -200,11 +201,11 @@ int64_t RDMAContext::cq_poll_handle()
             if (wc[i].status != IBV_WC_SUCCESS) {
                 status_code = RDMAAssign::FAILED;
                 if (wc[i].status != IBV_WC_WR_FLUSH_ERR) {
-                    SLIME_LOG_ERROR("WR failed: ", ibv_wc_status_str(wc[i].status),
-                                    ", Vendor Err: ", wc[i].vendor_err);
+                    SLIME_LOG_ERROR("WR failed: ", ibv_wc_status_str(wc[i].status), ", Vendor Err: ", wc[i].vendor_err);
 
                     if (wc[i].wr_id != 0) {
                         RDMAAssign* assign = reinterpret_cast<RDMAAssign*>(wc[i].wr_id);
+                        SLIME_LOG_ERROR("Failed WR ID: " << (void*)assign);
                     }
                 }
             }
@@ -223,7 +224,7 @@ int64_t RDMAContext::cq_poll_handle()
 
         while (spin_count < MAX_SPIN_COUNT && !stop_cq_thread_) {
             struct ibv_wc wc[SLIME_POLL_COUNT];
-            int nr_poll = ibv_poll_cq(cq_, SLIME_POLL_COUNT, wc);
+            int           nr_poll = ibv_poll_cq(cq_, SLIME_POLL_COUNT, wc);
 
             if (nr_poll > 0) {
                 process_wcs(nr_poll, wc);
@@ -239,7 +240,8 @@ int64_t RDMAContext::cq_poll_handle()
             }
         }
 
-        if (stop_cq_thread_) break;
+        if (stop_cq_thread_)
+            break;
 
         if (ibv_req_notify_cq(cq_, 0)) {
             SLIME_LOG_ERROR("Failed to re-arm CQ");
@@ -247,7 +249,7 @@ int64_t RDMAContext::cq_poll_handle()
         }
 
         struct ibv_wc wc_check[SLIME_POLL_COUNT];
-        int nr_check = ibv_poll_cq(cq_, SLIME_POLL_COUNT, wc_check);
+        int           nr_check = ibv_poll_cq(cq_, SLIME_POLL_COUNT, wc_check);
 
         if (nr_check > 0) {
             process_wcs(nr_check, wc_check);
@@ -259,7 +261,23 @@ int64_t RDMAContext::cq_poll_handle()
         }
 
         struct ibv_cq* ev_cq;
-        void* cq_context;
+        void*          cq_context;
+
+        struct pollfd pfd;
+        pfd.fd      = comp_channel_->fd;
+        pfd.events  = POLLIN;
+        pfd.revents = 0;
+
+        int poll_ret = poll(&pfd, 1, 100);  // 100ms timeout
+        if (poll_ret == 0) {
+            continue;
+        }
+        else if (poll_ret < 0) {
+            if (errno == EINTR)
+                continue;
+            SLIME_LOG_ERROR("poll() failed");
+            break;
+        }
 
         if (ibv_get_cq_event(comp_channel_, &ev_cq, &cq_context) != 0) {
             if (!stop_cq_thread_) {
@@ -269,7 +287,6 @@ int64_t RDMAContext::cq_poll_handle()
         }
 
         ibv_ack_cq_events(ev_cq, 1);
-
     }
 
     return 0;

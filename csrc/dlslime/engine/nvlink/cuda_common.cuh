@@ -1,14 +1,14 @@
 #pragma once
 
 #pragma once
-#include <cassert>
-#include <cinttypes>
-#include <cstdio>
-
 #include <cuda.h>
 #include <cuda_bf16.h>
 #include <cuda_fp16.h>
 #include <cuda_runtime.h>
+
+#include <cassert>
+#include <cinttypes>
+#include <cstdio>
 
 // Macros for error checking
 

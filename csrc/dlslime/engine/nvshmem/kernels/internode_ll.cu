@@ -1,6 +1,7 @@
-#include "ibgda_device.cuh"
-#include "dlslime/logging.h"
 #include <cstdint>
+
+#include "dlslime/logging.h"
+#include "ibgda_device.cuh"
 
 namespace dlslime {
 

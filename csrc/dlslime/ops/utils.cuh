@@ -35,8 +35,7 @@
 namespace deep_ep {
 
 template<int kBytes>
-struct VecInt {
-};
+struct VecInt {};
 template<>
 struct VecInt<1> {
     using vec_t = int8_t;

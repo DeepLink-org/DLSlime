@@ -1,5 +1,7 @@
 #pragma once
 
+#include <infiniband/verbs.h>
+
 #include <cstdint>
 #include <functional>
 #include <future>
@@ -12,17 +14,13 @@
 #include <unordered_map>
 #include <vector>
 
-#include <infiniband/verbs.h>
-
 #include "dlslime/engine/assignment.h"
-
-#include "rdma_assignment.h"
-#include "rdma_config.h"
-#include "rdma_env.h"
-
 #include "dlslime/jring.h"
 #include "dlslime/json.hpp"
 #include "dlslime/logging.h"
+#include "rdma_assignment.h"
+#include "rdma_config.h"
+#include "rdma_env.h"
 
 namespace dlslime {
 

@@ -3,8 +3,7 @@ build-backend = "scikit_build_core.build"
 requires = [
   "scikit-build-core>=0.10",
   "pybind11>=2.12",
-  "ninja",
-  "pybind11-stubgen",
+  "ninja"
 ]
 
 [project]
@@ -26,7 +25,7 @@ description = "DLSlime Transfer Engine"
 name = "dlslime"
 readme = "README.md"
 requires-python = ">=3.8"
-version = "0.0.1.post10"
+version = "0.0.2.rc1"
 dependencies = [
   "xxhash",
   "pydantic>=2.0",

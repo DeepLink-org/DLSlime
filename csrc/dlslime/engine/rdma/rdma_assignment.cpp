@@ -1,8 +1,10 @@
 #include "rdma_assignment.h"
-#include "dlslime/engine/assignment.h"
 
 #include <cstdint>
 #include <stdexcept>
+
+#include "dlslime/engine/assignment.h"
+#include "rdma_env.h"
 
 namespace dlslime {
 
@@ -23,19 +25,18 @@ void RDMAAssign::reset(
 
     SLIME_ASSERT(callback_, "NULL CALLBACK!!");
 
-    if (batch.size() > MAX_ASSIGN_CAPACITY) {
+    if (batch.size() > SLIME_MAX_SEND_WR) {
         SLIME_ABORT("Batch size too large for pooled object!");
     }
 
-    batch_size_ = batch.size();
-    std::memcpy(batch_, batch.data(), sizeof(Assignment) * batch_size_);
+    batch_ = batch;
 }
 
 json RDMAAssign::dump() const
 {
     json j = {{"opcode", opcode_}};
-    for (int i = 0; i < batch_size_; ++i)
-        j["rdma_assign"].push_back(batch_[i].dump());
+    for (const auto& item : batch_)
+        j["rdma_assign"].push_back(item.dump());
     j["is_inline"] = is_inline_;
     return j;
 }

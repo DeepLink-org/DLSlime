@@ -1,5 +1,9 @@
 #pragma once
 
+#include <immintrin.h>
+#include <infiniband/verbs.h>
+#include <numa.h>
+
 #include <cstdlib>
 #include <functional>
 #include <iostream>
@@ -7,10 +11,6 @@
 #include <string>
 #include <thread>
 #include <vector>
-
-#include <immintrin.h>
-#include <infiniband/verbs.h>
-#include <numa.h>
 
 #include "dlslime/engine/rdma/ibv_helper.h"
 #include "dlslime/engine/rdma/rdma_env.h"

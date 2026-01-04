@@ -1,13 +1,13 @@
-#include <stdexcept>
+#include "all_gather_inter_ll_buffer.h"
 
 #include <c10/core/ScalarType.h>
 #include <torch/types.h>
 
-#include "dlslime/logging.h"
-#include "ops/nvshmem_api.cuh"
+#include <stdexcept>
 
 #include "all_gather_inter_ll.h"
-#include "all_gather_inter_ll_buffer.h"
+#include "dlslime/logging.h"
+#include "ops/nvshmem_api.cuh"
 
 namespace dlslime {
 
@@ -57,7 +57,7 @@ int AllGatherInterLLBuffer::allocSymBuffer()
 {
     size_t buffer_size = getBufferSize();
 
-    sym_buffer_          = reinterpret_cast<int8_t*>(nvshmem_api::alloc(buffer_size, nvshmem_alignment));
+    sym_buffer_ = reinterpret_cast<int8_t*>(nvshmem_api::alloc(buffer_size, nvshmem_alignment));
     SLIME_ASSERT(sym_buffer_ != NULL, "failure of symbuffer allocation!");
     nvshmem_api::barrier();
     sym_signal_ = reinterpret_cast<int*>(nvshmem_api::alloc(world_size_ * sizeof(int), nvshmem_alignment));

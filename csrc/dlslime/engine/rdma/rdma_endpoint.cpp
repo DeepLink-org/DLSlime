@@ -1,15 +1,16 @@
 #include "rdma_endpoint.h"
 
+#include <atomic>
+#include <memory>
+#include <stdexcept>
+#include <string>
+
+#include "engine/rdma/rdma_channel.h"
 #include "rdma_context_pool.h"
 #include "rdma_io_endpoint.h"
 #include "rdma_utils.h"
 #include "rdma_worker.h"
 #include "rdma_worker_pool.h"
-
-#include <atomic>
-#include <memory>
-#include <stdexcept>
-#include <string>
 
 namespace dlslime {
 
@@ -19,7 +20,9 @@ namespace dlslime {
 
 RDMAEndpoint::RDMAEndpoint(std::shared_ptr<RDMAContext> ctx, size_t num_qp, std::shared_ptr<RDMAWorker> worker)
 {
-    ctx_         = ctx;
+    ctx_ = ctx;
+    if (not ctx_)
+        SLIME_ABORT("No NIC Resources");
     memory_pool_ = std::make_shared<RDMAMemoryPool>(ctx);
     worker_      = worker ? worker : GlobalWorkerManager::instance().get_default_worker(socketId(ctx_->device_name_));
 
@@ -60,10 +63,30 @@ void RDMAEndpoint::connect(const json& remote_endpoint_info)
 
 json RDMAEndpoint::endpointInfo() const
 {
-    // 2. 聚合连接信息：将两个子 Endpoint 的信息打包
     return json{{"mr_info", memory_pool_->mr_info()},
                 {"io_info", io_endpoint_->endpointInfo()},
                 {"msg_info", msg_endpoint_->endpointInfo()}};
+}
+
+void RDMAEndpoint::shutdown()
+{
+    connected_.store(false, std::memory_order_release);
+
+    // Manually cancel all pending futures to unblock waiting threads (e.g. Client destructor)
+    if (io_endpoint_) {
+        io_endpoint_->cancelAll();
+    }
+    if (msg_endpoint_) {
+        msg_endpoint_->cancelAll();
+    }
+
+    if (worker_) {
+        worker_->removeEndpoint(shared_from_this());
+    }
+
+    // Do NOT reset endpoints here.
+    // Worker loop might still be accessing them until removed.
+    // Let shared_ptr reference counting handle destruction naturally.
 }
 
 // ============================================================

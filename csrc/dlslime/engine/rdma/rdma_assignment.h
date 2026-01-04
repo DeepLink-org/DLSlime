@@ -1,5 +1,8 @@
 #pragma once
 
+#include <emmintrin.h>
+#include <infiniband/verbs.h>
+
 #include <algorithm>
 #include <atomic>
 #include <cstddef>
@@ -11,16 +14,11 @@
 #include <thread>
 #include <unordered_map>
 
-#include <emmintrin.h>
-#include <infiniband/verbs.h>
-
 #include "dlslime/engine/assignment.h"
-
-#include "rdma_context.h"
-#include "rdma_env.h"
-
 #include "dlslime/json.hpp"
 #include "dlslime/logging.h"
+#include "rdma_context.h"
+#include "rdma_env.h"
 
 namespace dlslime {
 
@@ -42,7 +40,6 @@ static const std::map<OpCode, ibv_wr_opcode> ASSIGN_OP_2_IBV_WR_OP = {
 };
 
 struct alignas(64) RDMAAssign {
-    static constexpr size_t MAX_ASSIGN_CAPACITY = 4096;
     friend class SendFuture;
     friend class RecvFuture;
     friend class ReadWriteFuture;
@@ -73,7 +70,7 @@ public:
 
     inline size_t batch_size()
     {
-        return batch_size_;
+        return batch_.size();
     };
 
     void wait();
@@ -93,8 +90,7 @@ private:
 
     OpCode opcode_;
 
-    size_t     batch_size_{0};
-    Assignment batch_[MAX_ASSIGN_CAPACITY];
+    AssignmentBatch batch_;
 
     int32_t imm_data_{0};
     bool    with_imm_data_{false};

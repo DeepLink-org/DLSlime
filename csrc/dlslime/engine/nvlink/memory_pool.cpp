@@ -1,8 +1,9 @@
+#include "memory_pool.h"
+
 #include <cstdint>
 #include <vector>
 
 #include "cuda_common.cuh"
-#include "memory_pool.h"
 
 namespace dlslime {
 int NVLinkMemoryPool::register_memory_region(const uintptr_t& mr_key, uintptr_t addr, uint64_t offset, size_t length)

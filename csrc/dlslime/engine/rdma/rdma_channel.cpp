@@ -267,8 +267,8 @@ int64_t RDMAChannel::post_recv_batch(int qpi, RDMAAssign* assign)
 
 int64_t RDMAChannel::post_rc_oneside_batch(int qpi, RDMAAssign* assign)
 {
-    size_t              batch_size = assign->batch_size();
-    struct ibv_send_wr* bad_wr     = NULL;
+    size_t                          batch_size = assign->batch_size();
+    struct ibv_send_wr*             bad_wr     = NULL;
     std::vector<struct ibv_send_wr> wr(batch_size);
     std::vector<struct ibv_sge>     sge(batch_size);
 

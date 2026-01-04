@@ -15,15 +15,16 @@ static_assert(false,
               "the architecture.");
 #endif
 
-static void inline machnet_pause() {
+static void inline machnet_pause()
+{
 #if defined(__x86_64__)
-  _mm_pause();
+    _mm_pause();
 #elif defined(__aarch64__) || defined(_M_ARM64)
-  __asm__ volatile("yield" ::: "memory");
+    __asm__ volatile("yield" ::: "memory");
 #else
-  static_assert(false,
-                "Unsupported architecture, please add the pause intrinsic for "
-                "the architecture.");
+    static_assert(false,
+                  "Unsupported architecture, please add the pause intrinsic for "
+                  "the architecture.");
 #endif
 }
 
