@@ -68,6 +68,27 @@ json RDMAEndpoint::endpointInfo() const
                 {"msg_info", msg_endpoint_->endpointInfo()}};
 }
 
+void RDMAEndpoint::shutdown()
+{
+    connected_.store(false, std::memory_order_release);
+
+    // Manually cancel all pending futures to unblock waiting threads (e.g. Client destructor)
+    if (io_endpoint_) {
+        io_endpoint_->cancelAll();
+    }
+    if (msg_endpoint_) {
+        msg_endpoint_->cancelAll();
+    }
+
+    if (worker_) {
+        worker_->removeEndpoint(shared_from_this());
+    }
+
+    // Do NOT reset endpoints here.
+    // Worker loop might still be accessing them until removed.
+    // Let shared_ptr reference counting handle destruction naturally.
+}
+
 // ============================================================
 // Memory Management
 // ============================================================

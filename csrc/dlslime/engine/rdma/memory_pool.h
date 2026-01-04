@@ -1,14 +1,14 @@
 #pragma once
 
+#include <infiniband/verbs.h>
+#include <sys/types.h>
+
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <mutex>
 #include <string>
 #include <unordered_map>
-
-#include <infiniband/verbs.h>
-#include <sys/types.h>
 
 #include "dlslime/engine/rdma/rdma_config.h"
 #include "dlslime/engine/rdma/rdma_context.h"

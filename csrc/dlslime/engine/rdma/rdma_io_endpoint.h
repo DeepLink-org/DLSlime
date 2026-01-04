@@ -9,14 +9,12 @@
 
 #include "dlslime/device/device_api.h"
 #include "dlslime/engine/assignment.h"
-
+#include "dlslime/jring.h"
+#include "dlslime/json.hpp"
 #include "memory_pool.h"
 #include "rdma_assignment.h"
 #include "rdma_channel.h"
 #include "rdma_context.h"
-
-#include "dlslime/jring.h"
-#include "dlslime/json.hpp"
 
 namespace dlslime {
 
@@ -76,6 +74,7 @@ public:
 
     void connect(const json& remote_endpoint_info);
     json endpointInfo() const;
+    void cancelAll();
 
     int32_t process();
 
@@ -94,7 +93,7 @@ private:
     int32_t readWriteProcess();
     int32_t immRecvProcess();
 
-    std::shared_ptr<RDMAContext> ctx_;
+    std::shared_ptr<RDMAContext>    ctx_;
     std::shared_ptr<RDMAMemoryPool> memory_pool_;
 
     std::shared_ptr<RDMAChannel> data_channel_;
@@ -114,6 +113,9 @@ private:
 
     std::atomic<uint64_t> rw_slot_id_{0};
     std::atomic<uint64_t> recv_slot_id_{0};
+
+    // Track how many Recvs we have actually posted to HW
+    std::atomic<uint64_t> posted_recv_cnt_{0};
 
     std::atomic<int32_t> token_bucket_[64];
 

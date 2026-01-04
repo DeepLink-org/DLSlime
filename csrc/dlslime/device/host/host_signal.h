@@ -1,8 +1,10 @@
 #pragma once
+#include <immintrin.h>
+
+#include <atomic>
+
 #include "dlslime/device/signal.h"
 #include "dlslime/logging.h"
-#include <atomic>
-#include <immintrin.h>
 
 namespace dlslime {
 namespace device {
@@ -51,14 +53,18 @@ public:
         flags_->comm_done.fetch_or(bit, std::memory_order_release);
     }
 
-    void bind_stream(void*) override{};
-    void wait_comm_done_on_stream(uint32_t) override
+    // Force wake all waiters regardless of their expected_mask
+    void force_complete() override
     {
+        flags_->comm_done.store(0xFFFFFFFF, std::memory_order_release);
     }
+
+    void bind_stream(void*) override {};
+    void wait_comm_done_on_stream(uint32_t) override {}
 
     void wait_comm_done_cpu(uint32_t target_mask) override
     {
-        while (flags_->comm_done.load(std::memory_order_acquire) != target_mask) {
+        while ((flags_->comm_done.load(std::memory_order_acquire) & target_mask) != target_mask) {
             _mm_pause();
         }
     }
@@ -70,8 +76,8 @@ public:
     }
 
 private:
-    Flags* flags_ = nullptr;
-    void* stream_handler_ = nullptr;
+    Flags* flags_          = nullptr;
+    void*  stream_handler_ = nullptr;
 };
 
 }  // namespace device

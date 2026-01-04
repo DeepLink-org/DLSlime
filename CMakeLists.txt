@@ -60,6 +60,13 @@ endif()
 include_directories(csrc)
 add_subdirectory(csrc)
 
+# Define global imported target for external consumers (e.g. NanoDeploy, Spoke)
+if(TARGET _slime_rdma AND NOT TARGET dlslime::dlslime)
+    add_library(dlslime::dlslime INTERFACE IMPORTED GLOBAL)
+    target_link_libraries(dlslime::dlslime INTERFACE _slime_rdma)
+endif()
+
+
 if (BUILD_BENCH)
     add_subdirectory(bench/cpp)
 endif (BUILD_BENCH)

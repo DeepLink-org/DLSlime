@@ -1,12 +1,13 @@
 #include "dlslime/engine/rdma/memory_pool.h"
 
-#include "dlslime/logging.h"
+#include <infiniband/verbs.h>
+#include <sys/types.h>
 
 #include <cstdint>
 #include <cstdlib>
-#include <infiniband/verbs.h>
-#include <sys/types.h>
 #include <unordered_map>
+
+#include "dlslime/logging.h"
 
 namespace dlslime {
 

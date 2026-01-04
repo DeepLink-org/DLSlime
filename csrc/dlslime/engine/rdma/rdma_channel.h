@@ -1,6 +1,6 @@
 #pragma once
 
-#include "engine/rdma/memory_pool.h"
+#include "dlslime/engine/rdma/memory_pool.h"
 #include "rdma_context.h"
 
 #include "dlslime/json.hpp"

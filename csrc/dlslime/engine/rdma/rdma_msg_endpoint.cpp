@@ -1,8 +1,20 @@
 #include "rdma_msg_endpoint.h"
 
+#include <stdlib.h>
+#include <sys/types.h>
+
+#include <atomic>
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <new>
+#include <thread>
+#include <vector>
+
 #include "dlslime/device/device_api.h"
 #include "dlslime/engine/assignment.h"
-
+#include "dlslime/logging.h"
+#include "dlslime/utils.h"
 #include "engine/rdma/memory_pool.h"
 #include "rdma_assignment.h"
 #include "rdma_channel.h"
@@ -11,18 +23,6 @@
 #include "rdma_env.h"
 #include "rdma_future.h"
 #include "rdma_utils.h"
-
-#include "dlslime/logging.h"
-#include "dlslime/utils.h"
-
-#include <atomic>
-#include <cstddef>
-#include <cstdint>
-#include <memory>
-#include <stdlib.h>
-#include <sys/types.h>
-#include <thread>
-#include <vector>
 
 namespace dlslime {
 
@@ -49,18 +49,28 @@ RDMAMsgEndpoint::RDMAMsgEndpoint(std::shared_ptr<RDMAContext>    ctx,
     dummy_ = (int64_t*)dummy_mem;
 
     // Allocate context pools aligned to cache lines.
-    void* raw_send_ctx = nullptr;
-    if (posix_memalign(&raw_send_ctx, 64, sizeof(SendContext) * SLIME_MAX_MSG_FIFO_DEPTH) != 0)
-        throw std::runtime_error("remote meta alloc fail");
-    send_ctx_pool_ = static_cast<SendContext*>(raw_send_ctx);
+    // Coalesced allocation for Send and Recv Contexts
+    size_t send_pool_size = sizeof(SendContext) * SLIME_MAX_MSG_FIFO_DEPTH;
+    size_t recv_pool_size = sizeof(RecvContext) * SLIME_MAX_MSG_FIFO_DEPTH;
+    size_t total_size     = send_pool_size + recv_pool_size;
 
-    void* raw_recv_ctx = nullptr;
-    if (posix_memalign(&raw_recv_ctx, 64, sizeof(RecvContext) * SLIME_MAX_MSG_FIFO_DEPTH) != 0)
-        throw std::runtime_error("remote meta alloc fail");
-    recv_ctx_pool_ = static_cast<RecvContext*>(raw_recv_ctx);
+    void* raw_pool_ptr = nullptr;
+    if (posix_memalign(&raw_pool_ptr, 64, total_size) != 0)
+        throw std::runtime_error("context pool alloc fail");
 
+    // Assign pointers
+    send_ctx_pool_ = static_cast<SendContext*>(raw_pool_ptr);
+    // Recv pool follows Send pool immediately
+    recv_ctx_pool_ = reinterpret_cast<RecvContext*>(static_cast<char*>(raw_pool_ptr) + send_pool_size);
+
+    // Initialize Signals
     for (int i = 0; i < SLIME_MAX_MSG_FIFO_DEPTH; ++i) {
+        // Construct objects in place (placement new is good practice for POD-like structs with
+        // constructors/std::shared_ptr) Adjusting access to properly initialize
+        new (&send_ctx_pool_[i]) SendContext();  // Ensure constructor called if any
         send_ctx_pool_[i].signal = dlslime::device::createSignal(bypass_signal_);
+
+        new (&recv_ctx_pool_[i]) RecvContext();
         recv_ctx_pool_[i].signal = dlslime::device::createSignal(bypass_signal_);
     }
 
@@ -74,14 +84,15 @@ RDMAMsgEndpoint::RDMAMsgEndpoint(std::shared_ptr<RDMAContext>    ctx,
     memory_pool->registerMemoryRegion(
         reinterpret_cast<uintptr_t>(dummy_), reinterpret_cast<uintptr_t>(dummy_), sizeof(int64_t));
 
-    for (int i = 0; i < SLIME_MAX_MSG_FIFO_DEPTH; ++i) {
-        memory_pool->registerMemoryRegion(reinterpret_cast<uintptr_t>(&(send_ctx_pool_[i].remote_meta_info_)),
-                                          reinterpret_cast<uintptr_t>(&(send_ctx_pool_[i].remote_meta_info_)),
-                                          sizeof(meta_info_t));
-        memory_pool->registerMemoryRegion(reinterpret_cast<uintptr_t>(&(recv_ctx_pool_[i].local_meta_info_)),
-                                          reinterpret_cast<uintptr_t>(&(recv_ctx_pool_[i].local_meta_info_)),
-                                          sizeof(meta_info_t));
-    }
+    // Register the single large block
+    memory_pool->registerMemoryRegion(
+        reinterpret_cast<uintptr_t>(send_ctx_pool_), reinterpret_cast<uintptr_t>(send_ctx_pool_), total_size);
+
+    // Calculate offset of remote_meta_info_ at runtime to avoid offsetof() warning on non-POD types
+    send_ctx_meta_offset_ = reinterpret_cast<uintptr_t>(&(send_ctx_pool_[0].remote_meta_info_))
+                            - reinterpret_cast<uintptr_t>(send_ctx_pool_);
+
+    SLIME_LOG_INFO("Endpoint initialized. Send/Recv Pool Coalesced. Meta Offset: ", send_ctx_meta_offset_);
 
     SLIME_LOG_INFO("Memory Regions Registered.");
 
@@ -105,8 +116,15 @@ RDMAMsgEndpoint::~RDMAMsgEndpoint()
     try {
 
         free(dummy_);
+        // Coalesced allocation, only need to free the base pointer (send_ctx_pool_)
+        // Need to manually call destructors if they are non-trivial (which they are, shared_ptr)
+        for (int i = 0; i < SLIME_MAX_MSG_FIFO_DEPTH; ++i) {
+            send_ctx_pool_[i].~SendContext();
+            recv_ctx_pool_[i].~RecvContext();
+        }
         free(send_ctx_pool_);
-        free(recv_ctx_pool_);
+        // free(recv_ctx_pool_); // Logic: recv_ctx_pool_ is part of the same block as send_ctx_pool_
+
         freeRing(send_buffer_ring_);
         freeRing(recv_buffer_ring_);
 
@@ -119,14 +137,14 @@ RDMAMsgEndpoint::~RDMAMsgEndpoint()
 
 json RDMAMsgEndpoint::endpointInfo() const
 {
-    json remote_meta_key = {};
+    // Export Base Info for SendPool (Target of Remote Write)
+    auto           base_ptr = reinterpret_cast<uintptr_t>(send_ctx_pool_);
+    struct ibv_mr* mr       = memory_pool_->get_mr(base_ptr);
+    SLIME_ASSERT(mr, "Send Context Pool MR not found");
 
-    for (int i = 0; i < SLIME_MAX_MSG_FIFO_DEPTH; ++i) {
-        remote_meta_key.push_back((uintptr_t)(&(send_ctx_pool_[i].remote_meta_info_)));
-    }
     json endpoint_info = json{{"meta_channel_info", meta_channel_->channelInfo()},
                               {"data_channel_info", data_channel_->channelInfo()},
-                              {"remote_meta_key", remote_meta_key}};
+                              {"remote_meta_base", {{"addr", base_ptr}, {"rkey", mr->rkey}, {"length", mr->length}}}};
     return endpoint_info;
 }
 
@@ -138,10 +156,14 @@ void RDMAMsgEndpoint::connect(const json& remote_endpoint_info)
 
     SLIME_LOG_INFO("Connection Established. Pre-posting RECV requests...");
 
-    SLIME_ASSERT_EQ(remote_endpoint_info["remote_meta_key"].size(), SLIME_MAX_MSG_FIFO_DEPTH, "FIFO Depth mismatch");
+    // Register the single Remote MR for Meta
+    auto      meta_info   = remote_endpoint_info["remote_meta_base"];
+    uintptr_t remote_base = meta_info["addr"].get<uintptr_t>();
+
+    memory_pool_->registerRemoteMemoryRegion(remote_base, meta_info);
 
     for (int i = 0; i < SLIME_MAX_MSG_FIFO_DEPTH; ++i) {
-        recv_ctx_pool_[i].remote_meta_key_ = remote_endpoint_info["remote_meta_key"][i];
+        recv_ctx_pool_[i].remote_meta_key_ = remote_base;
     }
 
     // Pre-post RECV requests for Meta Channel to handle incoming handshake signals.
@@ -160,15 +182,16 @@ void RDMAMsgEndpoint::connect(const json& remote_endpoint_info)
         for (size_t qpi = 0; qpi < num_qp_; ++qpi) {
             std::vector<Assignment> batch{Assignment(reinterpret_cast<uintptr_t>(dummy_), 0, 0, sizeof(int64_t))};
 
-            recv_ctx->data_recv_assign_.reset(OpCode::RECV, qpi, batch, [recv_ctx, qpi](int32_t status, int32_t imm) {
-                if (status == 0) {
-                    recv_ctx->signal->set_comm_done(qpi);
-                }
-                else {
-                    SLIME_LOG_ERROR("Data Recv Failed during pre-post");
-                }
-            });
-            data_channel_->post_recv_batch(qpi, &(recv_ctx->data_recv_assign_));
+            recv_ctx->data_recv_assigns_[qpi].reset(
+                OpCode::RECV, qpi, batch, [recv_ctx, qpi](int32_t status, int32_t imm) {
+                    if (status == 0) {
+                        recv_ctx->signal->set_comm_done(qpi);
+                    }
+                    else {
+                        SLIME_LOG_ERROR("Data Recv Failed during pre-post");
+                    }
+                });
+            data_channel_->post_recv_batch(qpi, &(recv_ctx->data_recv_assigns_[qpi]));
         }
     }
 
@@ -318,11 +341,18 @@ int32_t RDMAMsgEndpoint::sendProcess()
                     size_t chunk_size = (total_len + num_qp_ - 1) / num_qp_;
 
                     for (size_t qpi = 0; qpi < num_qp_; ++qpi) {
-                        size_t offset = qpi * chunk_size;
-                        if (offset >= total_len)
-                            break;
+                        size_t offset      = qpi * chunk_size;
+                        size_t current_len = 0;
 
-                        size_t current_len = std::min(chunk_size, total_len - offset);
+                        if (offset < total_len) {
+                            current_len = std::min(chunk_size, total_len - offset);
+                        }
+                        else {
+                            // Even if no data left, we must signal this QP to prevent receiver hanging.
+                            current_len = 0;
+                            // Reset offset to 0 (valid range) for safety, though 0-len read usually ignores address.
+                            offset = 0;
+                        }
 
                         Assignment      assign(s_ctx->local_meta_info_.view_.data_ptr,
                                           s_ctx->remote_meta_info_.view_.data_ptr,
@@ -331,14 +361,14 @@ int32_t RDMAMsgEndpoint::sendProcess()
                                           current_len);
                         AssignmentBatch batch{assign};
 
-                        s_ctx->data_send_assign_.reset(
+                        s_ctx->data_send_assigns_[qpi].reset(
                             OpCode::WRITE_WITH_IMM,
                             qpi,
                             batch,
                             [s_ctx, qpi](int32_t stat, int32_t imm_data) { s_ctx->signal->set_comm_done(qpi); },
                             false);
 
-                        data_channel_->post_rc_oneside_batch(qpi, &(s_ctx->data_send_assign_));
+                        data_channel_->post_rc_oneside_batch(qpi, &(s_ctx->data_send_assigns_[qpi]));
                     }
 
                     task_completed = true;
@@ -391,23 +421,35 @@ int32_t RDMAMsgEndpoint::recvProcess()
             case RecvContextState::INIT_SEND_META: {
                 for (size_t qpi = 0; qpi < num_qp_; ++qpi) {
                     std::vector<Assignment> batch{Assignment(reinterpret_cast<uintptr_t>(dummy_), 0, 0, 8)};
-                    r_ctx->data_recv_assign_.reset(OpCode::RECV, qpi, batch, [r_ctx, qpi](int32_t status, int32_t imm) {
-                        if (status == 0) {
-                            r_ctx->signal->set_comm_done(qpi);
-                        }
-                        else {
-                            SLIME_LOG_ERROR("Data Recv Failed during completion");
-                        }
-                    });
-                    data_channel_->post_recv_batch(qpi, &(r_ctx->data_recv_assign_));
+                    r_ctx->data_recv_assigns_[qpi].reset(
+                        OpCode::RECV, qpi, batch, [r_ctx, qpi](int32_t status, int32_t imm) {
+                            if (status == 0) {
+                                r_ctx->signal->set_comm_done(qpi);
+                            }
+                            else {
+                                SLIME_LOG_ERROR("Data Recv Failed during completion");
+                            }
+                        });
+                    data_channel_->post_recv_batch(qpi, &(r_ctx->data_recv_assigns_[qpi]));
                 }
 
                 // Step 2: Send Meta to notify sender.
-                int             slot = r_ctx->slot_id;
-                Assignment      assign(reinterpret_cast<uintptr_t>(&(r_ctx->local_meta_info_)),
-                                  r_ctx->remote_meta_key_,
-                                  0,
-                                  0,
+                int slot = r_ctx->slot_id;
+
+                // Use send_ctx_pool_ base as it is the registered single MR key
+                uintptr_t local_meta_addr = reinterpret_cast<uintptr_t>(&(r_ctx->local_meta_info_));
+                uintptr_t send_pool_base  = reinterpret_cast<uintptr_t>(send_ctx_pool_);
+                uint64_t  local_offset    = local_meta_addr - send_pool_base;
+
+                // Calculate remote offset: slot * sizeof(SendContext) + send_ctx_meta_offset_
+                // usage of offsetof on non-standard layout type is conditionally supported.
+                // using runtime calculated offset instead.
+                uint64_t remote_offset = slot * sizeof(SendContext) + send_ctx_meta_offset_;
+
+                Assignment      assign(send_pool_base,
+                                  r_ctx->remote_meta_key_,  // Base address of remote SendPool
+                                  remote_offset,
+                                  local_offset,
                                   sizeof(meta_info_t));
                 AssignmentBatch assign_batch{assign};
 
@@ -430,6 +472,21 @@ int32_t RDMAMsgEndpoint::recvProcess()
     }
 
     return work_done;
+}
+
+void RDMAMsgEndpoint::cancelAll()
+{
+    for (int i = 0; i < SLIME_MAX_MSG_FIFO_DEPTH; ++i) {
+        if (send_ctx_pool_) {
+            send_ctx_pool_[i].signal->force_complete();
+        }
+    }
+
+    for (int i = 0; i < SLIME_MAX_MSG_FIFO_DEPTH; ++i) {
+        if (recv_ctx_pool_) {
+            recv_ctx_pool_[i].signal->force_complete();
+        }
+    }
 }
 
 }  // namespace dlslime

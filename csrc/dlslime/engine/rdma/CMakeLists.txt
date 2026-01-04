@@ -46,7 +46,7 @@ set_target_properties(
 )
 
 target_include_directories(_slime_rdma PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../..>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../../..>
     $<INSTALL_INTERFACE:include/dlslime>
 )
 

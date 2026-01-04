@@ -1,19 +1,5 @@
 #pragma once
 
-#include "dlslime/device/host/host_signal.h"
-#include "dlslime/device/signal.h"
-
-#include "dlslime/engine/assignment.h"
-
-#include "engine/rdma/memory_pool.h"
-#include "rdma_assignment.h"
-#include "rdma_channel.h"
-
-#include "dlslime/jring.h"
-#include "dlslime/json.hpp"
-#include "rdma_common.h"
-#include "rdma_context.h"
-
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -22,6 +8,17 @@
 #include <string>
 #include <thread>
 #include <vector>
+
+#include "dlslime/device/host/host_signal.h"
+#include "dlslime/device/signal.h"
+#include "dlslime/engine/assignment.h"
+#include "dlslime/jring.h"
+#include "dlslime/json.hpp"
+#include "memory_pool.h"
+#include "rdma_assignment.h"
+#include "rdma_channel.h"
+#include "rdma_common.h"
+#include "rdma_context.h"
 
 namespace dlslime {
 
@@ -80,7 +77,7 @@ struct alignas(64) SendContext {
     meta_info_t remote_meta_info_;
 
     RDMAAssign meta_recv_assign_;
-    RDMAAssign data_send_assign_;
+    RDMAAssign data_send_assigns_[64];
 
     SendContextState state_;
 
@@ -104,7 +101,7 @@ struct alignas(64) RecvContext {
     meta_info_t local_meta_info_;
 
     RDMAAssign meta_send_assign_;
-    RDMAAssign data_recv_assign_;
+    RDMAAssign data_recv_assigns_[64];
 
     uintptr_t remote_meta_key_;
 
@@ -139,6 +136,8 @@ public:
     std::shared_ptr<SendFuture> send(const chunk_tuple_t& chunk, void* stream_handler);
 
     std::shared_ptr<RecvFuture> recv(const chunk_tuple_t& chunk, void* stream_handler);
+
+    void cancelAll();
 
     int32_t process();
 
@@ -175,6 +174,8 @@ private:
 
     int32_t sendProcess();
     int32_t recvProcess();
+
+    size_t send_ctx_meta_offset_{0};
 
     int64_t* dummy_;
 };
