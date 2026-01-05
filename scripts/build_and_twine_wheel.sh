@@ -21,7 +21,7 @@ for py_version in "${PYTHON_VERSIONS[@]}"; do
     $PIP_EXE install cmake pip build twine pybind11-stubgen scikit-build-core pybind11 ninja
 
     rm -rf build dlslime.egg-info
-    rm -f dlslime/*.pyi
+    # rm -f dlslime/*.pyi
 
     echo "Compiling and installing temporarily to generate stubs..."
     $PIP_EXE install -v -e . --no-build-isolation
@@ -60,8 +60,6 @@ for whl in dist/*-linux_x86_64.whl; do
     echo "Renaming: $(basename "$whl") -> $(basename "$new_name")"
     mv "$whl" "$new_name"
 done
-
-rm -f dist/*-linux_x86_64.whl
 
 echo "Ready for upload..."
 
