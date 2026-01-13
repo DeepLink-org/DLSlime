@@ -151,8 +151,18 @@ int64_t RDMAContext::init(const std::string& dev_name, uint8_t ib_port, const st
 
     /* Alloc Complete Queue (CQ) */
     SLIME_ASSERT(ib_ctx_, "init rdma context first");
+
+    struct ibv_device_attr dev_attr;
+    if (ibv_query_device(ib_ctx_, &dev_attr) != 0) {
+        SLIME_ABORT("Failed to query device for max_cqe");
+    }
+
+    int actual_cq_depth = std::min(SLIME_MAX_CQ_DEPTH, dev_attr.max_cqe);
+    SLIME_LOG_INFO("Creating CQ with depth: " << actual_cq_depth << " (Requested: " << SLIME_MAX_CQ_DEPTH
+                                              << ", Hardware Max: " << dev_attr.max_cqe << ")");
+
     comp_channel_ = ibv_create_comp_channel(ib_ctx_);
-    cq_           = ibv_create_cq(ib_ctx_, SLIME_MAX_CQ_DEPTH, NULL, comp_channel_, 0);
+    cq_           = ibv_create_cq(ib_ctx_, actual_cq_depth, NULL, comp_channel_, 0);
     SLIME_ASSERT(cq_, "create CQ failed");
 
     launch_future();
