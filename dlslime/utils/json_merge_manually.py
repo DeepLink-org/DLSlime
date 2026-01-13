@@ -1,10 +1,12 @@
-import re
-from json_merger import _merge_json
 import argparse
 import logging
+import re
+from datetime import datetime
 from pathlib import Path
 from typing import List
-from datetime import datetime
+
+from json_merger import _merge_json
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(
@@ -15,28 +17,28 @@ def main() -> None:
             " Example usage: python json_merge_manually.py -i input_dir [-o merged_output.json]"
         )
     )
-    
+
     parser.add_argument(
-        "-i", "--input-dir",
+        "-i",
+        "--input-dir",
         type=Path,
         required=True,
-        help="Path to the input directory containing profiler result directories."
+        help="Path to the input directory containing profiler result directories.",
     )
-    
+
     current_time = datetime.now()
     default_output = f"merged_trace_{current_time.strftime('%Y%m%d_%H%M%S')}.json"
-    
+
     parser.add_argument(
-        "-o", "--output-file",
+        "-o",
+        "--output-file",
         type=Path,
         default=Path(default_output),
-        help=f"Path to the output merged JSON file. Default: {default_output}"
+        help=f"Path to the output merged JSON file. Default: {default_output}",
     )
 
     parser.add_argument(
-        "-v", "--verbose",
-        action="store_true",
-        help="Enable debug logging output."
+        "-v", "--verbose", action="store_true", help="Enable debug logging output."
     )
 
     args = parser.parse_args()
@@ -44,34 +46,38 @@ def main() -> None:
     input_dir: Path = args.input_dir
     output_file: Path = args.output_file
     log_level = logging.DEBUG if args.verbose else logging.INFO
-    logging.basicConfig(level=log_level, format="%(asctime)s - %(levelname)s - %(message)s")
+    logging.basicConfig(
+        level=log_level, format="%(asctime)s - %(levelname)s - %(message)s"
+    )
 
     # Check if input directory exists
     if not input_dir.exists():
         logging.error(f"Input directory '{input_dir}' does not exist.")
         return
-    
+
     if not input_dir.is_dir():
         logging.error(f"Input path '{input_dir}' is not a directory.")
         return
 
     # Recursively search for all JSON files
-    json_files_to_merge: List[Path] = list(input_dir.rglob('*.json'))
-    
+    json_files_to_merge: List[Path] = list(input_dir.rglob("*.json"))
+
     if not json_files_to_merge:
         logging.warning("No JSON files found to merge.")
         return
-        
+
     logging.info(f"Found {len(json_files_to_merge)} JSON files to merge.")
 
     _merge_json(
         to_merge_files=json_files_to_merge,
         output_json=output_file,
         compress=False,
-        version=2
+        version=2,
     )
 
-    logging.info(f"Successfully merged {len(json_files_to_merge)} JSON files into '{output_file}'.")
+    logging.info(
+        f"Successfully merged {len(json_files_to_merge)} JSON files into '{output_file}'."
+    )
 
 
 if __name__ == "__main__":

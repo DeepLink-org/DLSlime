@@ -20,7 +20,7 @@
 # CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 # TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-# 
+#
 # This code is adapted from:
 # https://github.com/ByteDance-Seed/Triton-distributed/blob/ff4b0d59be46f03ccc01f249206c9f372fcd9d4d/python/triton_dist/utils.py
 #
@@ -35,12 +35,12 @@ import re
 import shutil
 import string
 from contextlib import contextmanager, nullcontext, redirect_stdout
-from multiprocessing import Pool, cpu_count
+from functools import wraps
+from multiprocessing import cpu_count, Pool
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
-from functools import wraps
-import torch
 
+import torch
 
 
 def _make_tensor(
@@ -56,7 +56,7 @@ def _make_tensor(
     if isinstance(shape, Sequence):
         shape = tuple([x() if isinstance(x, Callable) else x for x in shape])
     elif isinstance(shape, int):
-        shape = (shape, )
+        shape = (shape,)
     elif isinstance(shape, Callable):
         shape = shape()
     else:
@@ -69,7 +69,9 @@ def _make_tensor(
         out = torch.randint(-scale, scale, shape, dtype=torch.int8, device=device)
         out = out + bias
     elif is_fp8_dtype(dtype):
-        out = (torch.rand(shape, dtype=torch.float16, device=device) * 2 - 1) * scale + bias
+        out = (
+            torch.rand(shape, dtype=torch.float16, device=device) * 2 - 1
+        ) * scale + bias
         with with_torch_deterministic(False):
             out = out.to(dtype)
     else:
@@ -84,14 +86,18 @@ def generate_data(configs):
 
 
 def get_torch_prof_ctx(do_prof: bool):
-    ctx = (torch.profiler.profile(
-        activities=[
-            torch.profiler.ProfilerActivity.CPU,
-            torch.profiler.ProfilerActivity.CUDA,
-        ],
-        record_shapes=True,
-        with_stack=False,
-    ) if do_prof else nullcontext())
+    ctx = (
+        torch.profiler.profile(
+            activities=[
+                torch.profiler.ProfilerActivity.CPU,
+                torch.profiler.ProfilerActivity.CUDA,
+            ],
+            record_shapes=True,
+            with_stack=False,
+        )
+        if do_prof
+        else nullcontext()
+    )
     return ctx
 
 
@@ -175,7 +181,9 @@ def load_json(json_file):
         # Regex to find "name": "<value>"
         def replace_non_ascii_and_quotes(match):
             name = match.group(1)
-            visible_printable = "".join(c for c in string.printable if c not in "\t\n\r\x0b\x0c}{")
+            visible_printable = "".join(
+                c for c in string.printable if c not in "\t\n\r\x0b\x0c}{"
+            )
             cleaned_name = "".join(c if c in visible_printable else "x" for c in name)
             cleaned_name = cleaned_name.replace('"', "y")  # Replace internal quotes
             return f'"name": "{cleaned_name}"'
@@ -221,7 +229,9 @@ def process_trace_json(json_file):
     return trace
 
 
-def _merge_json_v1(to_merge_files: List[Path], output_json: Path, compress: bool = True):
+def _merge_json_v1(
+    to_merge_files: List[Path], output_json: Path, compress: bool = True
+):
     events = []
     for json_file in to_merge_files:
         logging.info(f"process {json_file}")
@@ -265,14 +275,19 @@ class ParallelJsonDumper:
 
     def _chunkify_list(self, pvalue: List[Any]) -> List[List[Any]]:
         """Split list into chunks for parallel processing"""
-        return [pvalue[i:i + self.chunk_size] for i in range(0, len(pvalue), self.chunk_size)]
+        return [
+            pvalue[i : i + self.chunk_size]
+            for i in range(0, len(pvalue), self.chunk_size)
+        ]
 
     def _process_chunk(self, chunk: List[Any]) -> str:
         """Convert chunk to JSON and strip enclosing brackets"""
         chunk_json = json.dumps(chunk, separators=(",", ":"))
         return chunk_json[1:-1]  # Remove [ and ]
 
-    def _write_output(self, base_data: Dict[str, Any], chunk_strings: List[str], output_path: Path) -> None:
+    def _write_output(
+        self, base_data: Dict[str, Any], chunk_strings: List[str], output_path: Path
+    ) -> None:
         """Write JSON to disk with proper structure"""
         with open(output_path, "w") as f:
             # Write base data
@@ -307,8 +322,9 @@ def _merge_json_v2(
     ParallelJsonDumper("traceEvents", 100000).dump(trace, Path(output_json))
 
     if compress:
-        with gzip.open(output_json.with_suffix(".tar.gz"), mode="wb", compresslevel=3) as g, open(output_json,
-                                                                                                  "rb") as f:
+        with gzip.open(
+            output_json.with_suffix(".tar.gz"), mode="wb", compresslevel=3
+        ) as g, open(output_json, "rb") as f:
             logging.info("compress...")
             g.write(f.read())
         output_json.unlink()
@@ -352,7 +368,9 @@ class group_profile:
         self.merge_group = merge_group
         self.keep_merged_only = keep_merged_only
         self.compress = compress
-        self.trace_file = (Path("prof") / f"{self.name}" / f"rank{self.group.rank()}.json")
+        self.trace_file = (
+            Path("prof") / f"{self.name}" / f"rank{self.group.rank()}.json"
+        )
 
     def __enter__(self):
         if self.do_prof:
@@ -396,7 +414,9 @@ class group_profile:
                     f.write(trace_content_list[n])
 
             # merge all json
-            to_merge_files = [Path(tmpdir) / f"trace_{n}.json" for n in range(self.group.size())]
+            to_merge_files = [
+                Path(tmpdir) / f"trace_{n}.json" for n in range(self.group.size())
+            ]
             merged_json = Path("prof") / f"{self.name}_merged.json"
             _merge_json(to_merge_files, merged_json, self.compress)
 
