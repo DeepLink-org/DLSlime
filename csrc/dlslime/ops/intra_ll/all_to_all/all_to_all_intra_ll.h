@@ -15,6 +15,7 @@ void all_to_all_intra_ll(torch::Tensor                buffer_ori,
                          int32_t                      rank,
                          int32_t                      world_size,
                          bool                         is_transpose,
-                         c10::optional<torch::Tensor> mask);
+                         c10::optional<torch::Tensor> mask,
+                         c10::optional<torch::Tensor> offsets);
 
 }  // namespace dlslime
