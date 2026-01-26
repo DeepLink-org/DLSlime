@@ -299,8 +299,9 @@ PYBIND11_MODULE(_slime_c, m)
              &dlslime::AllToAllIntraLLBuffer::allToAllLL2D,
              py::arg("x"),
              py::arg("is_transpose") = false,
-             py::arg("mask")         = py::none(),
-             "AllGather with optional mask");
+             py::arg("mask") = py::none(),
+             py::arg("offsets") = py::none(),
+             "AllGather with optional mask and offsets");
 #endif
 
 #ifdef BUILD_INTER_OPS

@@ -53,6 +53,6 @@ class AllToAllIntraLLBuffer:
         return self._buffer.connect_full_mesh(all_buffer_info)
 
     def all_to_all_ll(
-        self, x: torch.Tensor, is_transpose=False, mask=None
+        self, x: torch.Tensor, is_transpose=False, mask=None, offsets=None
     ) -> torch.Tensor:
-        return self._buffer.all_to_all_ll(x, is_transpose, mask)
+        return self._buffer.all_to_all_ll(x, is_transpose, mask, offsets)
