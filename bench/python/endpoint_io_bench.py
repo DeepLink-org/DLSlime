@@ -76,19 +76,21 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=200):
         # 注册 Initiator 内存，保存 handle 用于 write_with_imm 的 tuple
         local_handle = ep1.register_memory_region(
             local_name,
-            local_ptr + int(send_tensor.storage_offset()),
+            local_ptr,
+            int(send_tensor.storage_offset()),
             size,
         )
         # 注册 Target 内存 (string name so it is exported via endpoint_info mr_info)
         ep2.register_memory_region(
             mr_name,
-            remote_ptr + int(recv_tensor.storage_offset()),
+            remote_ptr,
+            int(recv_tensor.storage_offset()),
             size,
         )
 
         # 在 ep1 的 remote pool 中注册，返回 remote handle
         remote_handle = ep1.register_remote_memory_region(
-            mr_name, ep2.endpoint_info()["mr_info"][mr_name]
+            mr_name, ep2.mr_info()[mr_name]
         )
 
         # ---------------------------------------------------------

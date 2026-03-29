@@ -112,7 +112,7 @@ int RDMAMemoryPool::unregisterMemoryRegion(const uintptr_t& mr_key)
     return 0;
 }
 
-json RDMAMemoryPool::mr_info()
+json RDMAMemoryPool::mrInfo()
 {
     std::unique_lock<std::mutex> lock(name_mutex_);
     json                         mr_info;

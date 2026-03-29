@@ -8,12 +8,12 @@
 #include <string>
 #include <vector>
 
+#include "dlslime/csrc/common/json.hpp"
 #include "dlslime/csrc/device/device_api.h"
 #include "dlslime/csrc/device/signal.h"
 #include "dlslime/csrc/engine/assignment.h"
 #include "dlslime/csrc/jring.h"
 #include "memory_pool.h"
-#include "dlslime/csrc/common/json.hpp"
 #include "rdma_assignment.h"
 #include "rdma_channel.h"
 #include "rdma_common.h"
@@ -197,10 +197,11 @@ public:
     void connect(const json& remote_endpoint_info);
 
     json endpointInfo() const;
+    json mrInfo() const;
     void shutdown();
 
     int32_t registerOrAccessMemoryRegion(uintptr_t mr_key, uintptr_t ptr, uintptr_t, size_t length);
-    int32_t registerOrAccessMemoryRegion(const std::string& name, uintptr_t ptr, size_t length);
+    int32_t registerOrAccessMemoryRegion(const std::string& name, uintptr_t ptr, uintptr_t, size_t length);
 
     int32_t registerOrAccessRemoteMemoryRegion(const std::string& name, json mr_info);
 

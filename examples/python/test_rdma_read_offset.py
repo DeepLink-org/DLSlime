@@ -62,10 +62,16 @@ def test_rdma_read_offset_order():
     )  # Fill with 42
 
     local_mr_1 = agent1.register_memory_region(
-        "test_buffer", local_buffer_1.data_ptr(), local_buffer_1.numel() * 4
+        "test_buffer",
+        local_buffer_1.data_ptr(),
+        int(local_buffer_1.storage_offset()),
+        local_buffer_1.numel() * 4,
     )
     local_mr_2 = agent2.register_memory_region(
-        "test_buffer", local_buffer_2.data_ptr(), local_buffer_2.numel() * 4
+        "test_buffer",
+        local_buffer_2.data_ptr(),
+        int(local_buffer_2.storage_offset()),
+        local_buffer_2.numel() * 4,
     )
 
     print(f"   Agent1 local MR handler: {local_mr_1}")

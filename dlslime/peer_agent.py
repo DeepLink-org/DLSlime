@@ -492,10 +492,13 @@ class PeerAgent:
         self,
         mr_name: str,
         ptr: int,
+        offset: int,
         length: int,
     ) -> int:
         """Register local memory region (p2p via Redis, no control plane)."""
-        handler = self._memory_pool.register_memory_region(ptr, length, mr_name)
+        handler = self._memory_pool.register_memory_region(
+            ptr, length + offset, mr_name
+        )
         mr_info = self._memory_pool.mr_info()[mr_name]
 
         # Write directly to Redis (p2p, no HTTP)

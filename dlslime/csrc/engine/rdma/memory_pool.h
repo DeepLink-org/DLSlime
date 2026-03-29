@@ -11,10 +11,10 @@
 #include <string>
 #include <unordered_map>
 
+#include "dlslime/csrc/common/json.hpp"
 #include "dlslime/csrc/engine/rdma/rdma_config.h"
 #include "dlslime/csrc/engine/rdma/rdma_context.h"
 #include "dlslime/csrc/logging.h"
-#include "dlslime/csrc/common/json.hpp"
 
 namespace dlslime {
 
@@ -116,7 +116,7 @@ public:
 
     int unregisterMemoryRegion(const uintptr_t& mr_key);
 
-    json mr_info();
+    json mrInfo();
 
 private:
     ibv_pd*                      pd_;

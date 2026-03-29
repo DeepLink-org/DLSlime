@@ -338,7 +338,12 @@ json RDMAEndpoint::endpointInfo() const
                          {"data_channel_info", msg_data_channel_->channelInfo()},
                          {"remote_meta_base", {{"addr", base_ptr}, {"rkey", mr->rkey}, {"length", mr->length}}}};
 
-    return json{{"mr_info", local_pool_->mr_info()}, {"io_info", io_info}, {"msg_info", msg_info}};
+    return json{{"mr_info", local_pool_->mrInfo()}, {"io_info", io_info}, {"msg_info", msg_info}};
+}
+
+json RDMAEndpoint::mrInfo() const
+{
+    return local_pool_->mrInfo();
 }
 
 void RDMAEndpoint::shutdown()
@@ -363,9 +368,10 @@ int32_t RDMAEndpoint::registerOrAccessMemoryRegion(uintptr_t mr_key, uintptr_t p
     return local_pool_->registerMemoryRegion(ptr + offset, length);
 }
 
-int32_t RDMAEndpoint::registerOrAccessMemoryRegion(const std::string& name, uintptr_t ptr, size_t length)
+int32_t
+RDMAEndpoint::registerOrAccessMemoryRegion(const std::string& name, uintptr_t ptr, uintptr_t offset, size_t length)
 {
-    return local_pool_->registerMemoryRegion(ptr, length, name);
+    return local_pool_->registerMemoryRegion(ptr + offset, length, name);
 }
 
 int32_t RDMAEndpoint::registerOrAccessRemoteMemoryRegion(const std::string& name, json mr_info)

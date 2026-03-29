@@ -53,9 +53,9 @@
 //
 // #endif
 
-#include "dlslime/csrc/logging.h"
 #include "dlslime/csrc/common/json.hpp"
 #include "dlslime/csrc/common/pybind_json/pybind_json.hpp"
+#include "dlslime/csrc/logging.h"
 
 using json = nlohmann::json;
 
@@ -137,7 +137,7 @@ PYBIND11_MODULE(_slime_c, m)
         .def("get_handle",
              static_cast<int32_t (dlslime::RDMAMemoryPool::*)(const std::string&)>(
                  &dlslime::RDMAMemoryPool::get_mr_handle))
-        .def("mr_info", &dlslime::RDMAMemoryPool::mr_info);
+        .def("mr_info", &dlslime::RDMAMemoryPool::mrInfo);
     py::class_<dlslime::RDMAEndpoint, std::shared_ptr<dlslime::RDMAEndpoint>>(m, "RDMAEndpoint")
         .def(py::init<std::shared_ptr<dlslime::RDMAMemoryPool>, size_t, std::shared_ptr<dlslime::RDMAWorker>>(),
              py::arg("pool"),
@@ -156,6 +156,7 @@ PYBIND11_MODULE(_slime_c, m)
 
         .def("connect", &dlslime::RDMAEndpoint::connect, py::call_guard<py::gil_scoped_release>())
         .def("endpoint_info", &dlslime::RDMAEndpoint::endpointInfo)
+        .def("mr_info", &dlslime::RDMAEndpoint::mrInfo)
         .def("get_pool", &dlslime::RDMAEndpoint::get_local_pool)
 
         .def("register_memory_region",
@@ -167,10 +168,11 @@ PYBIND11_MODULE(_slime_c, m)
              py::arg("length"),
              py::call_guard<py::gil_scoped_release>())
         .def("register_memory_region",
-             py::overload_cast<const std::string&, uintptr_t, size_t>(
+             py::overload_cast<const std::string&, uintptr_t, uintptr_t, size_t>(
                  &dlslime::RDMAEndpoint::registerOrAccessMemoryRegion),
              py::arg("name"),
              py::arg("data_ptr"),
+             py::arg("offset"),
              py::arg("length"),
              py::call_guard<py::gil_scoped_release>())
 

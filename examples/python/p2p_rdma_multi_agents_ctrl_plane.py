@@ -124,7 +124,8 @@ with contextlib.ExitStack() as stack:
             try:
                 handler = agent.register_memory_region(
                     "data",
-                    tensor.data_ptr() + int(tensor.storage_offset()),
+                    tensor.data_ptr(),
+                    int(tensor.storage_offset()),
                     tensor.numel() * tensor.itemsize,
                 )
                 source_handlers[alias] = handler
@@ -142,7 +143,8 @@ with contextlib.ExitStack() as stack:
                     recv_name = f"recv_{reader_alias}_from_{peer_alias}"
                     handler = agent.register_memory_region(
                         recv_name,
-                        recv_tensor.data_ptr() + int(recv_tensor.storage_offset()),
+                        recv_tensor.data_ptr(),
+                        int(recv_tensor.storage_offset()),
                         recv_tensor.numel() * recv_tensor.itemsize,
                     )
                     recv_handlers[(reader_alias, peer_alias)] = handler

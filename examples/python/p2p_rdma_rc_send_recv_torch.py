@@ -14,9 +14,6 @@ parser.add_argument("--master-port", type=str, default="6006")
 
 args = parser.parse_args()
 
-os.environ["MASTER_ADDR"] = args.master_addr
-os.environ["MASTER_PORT"] = args.master_port
-
 rank = int(os.environ.get("RANK", None) or args.rank)
 dist.init_process_group("cuda:dlslime", rank=rank, world_size=2)
 torch.cuda.set_device(rank)

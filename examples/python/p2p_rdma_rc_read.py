@@ -14,13 +14,15 @@ target = RDMAEndpoint(device_name=devices[-1], ib_port=1, link_type="RoCE")
 local_tensor = torch.zeros([16], device="cpu", dtype=torch.uint8)
 handler = initiator.register_memory_region(
     "kv",
-    local_tensor.data_ptr() + int(local_tensor.storage_offset()),
+    local_tensor.data_ptr(),
+    int(local_tensor.storage_offset()),
     local_tensor.numel() * local_tensor.itemsize,
 )
 remote_tensor = torch.ones([16], device="cpu", dtype=torch.uint8)
 hremote = target.register_memory_region(
     "kv",
-    remote_tensor.data_ptr() + int(remote_tensor.storage_offset()),
+    remote_tensor.data_ptr(),
+    int(remote_tensor.storage_offset()),
     remote_tensor.numel() * remote_tensor.itemsize,
 )
 
