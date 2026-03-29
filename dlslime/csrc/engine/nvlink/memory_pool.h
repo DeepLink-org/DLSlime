@@ -4,7 +4,7 @@
 #include <unordered_map>
 
 #include "cuda_common.cuh"
-#include "nanocommon/json.hpp"
+#include "dlslime/csrc/common/json.hpp"
 
 namespace dlslime {
 using json = nlohmann::json;

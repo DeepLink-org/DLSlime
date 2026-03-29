@@ -68,18 +68,6 @@ python example/python/p2p_rdma_rc_send_recv_torch.py --rank 1
 torchrun --nproc_per_node=2 p2p_nvlink.py
 ```
 
-#### NVShmem Mode
-
-```
-# send
-python example/python/p2p_nvshmem_ibgda_sendrecv.py --rank 0 --world-size 2
-```
-
-```
-# recv
-python example/python/p2p_nvshmem_ibgda_sendrecv.py --rank 1 --world-size 2
-```
-
 ### Huawei Ascend Direct Mode
 
 See: [Huawei README](docs/huawei_ascend/README.md)
