@@ -3,7 +3,7 @@
 #include <stdexcept>
 #include <string>
 
-#include "dlslime/csrc/jring.h"
+#include "dlslime/csrc/common/jring.h"
 
 namespace dlslime {
 

@@ -8,11 +8,11 @@
 #include <string>
 #include <vector>
 
+#include "dlslime/csrc/common/jring.h"
 #include "dlslime/csrc/common/json.hpp"
 #include "dlslime/csrc/device/device_api.h"
 #include "dlslime/csrc/device/signal.h"
 #include "dlslime/csrc/engine/assignment.h"
-#include "dlslime/csrc/jring.h"
 #include "memory_pool.h"
 #include "rdma_assignment.h"
 #include "rdma_channel.h"

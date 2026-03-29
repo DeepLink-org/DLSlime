@@ -3,8 +3,8 @@
 // Include full definition of UnifiedRDMAEndpoint
 #include <iterator>  // for std::make_move_iterator
 
+#include "dlslime/csrc/common/pause.h"
 #include "dlslime/csrc/logging.h"  // SLIME_LOG_INFO
-#include "dlslime/csrc/pause.h"
 #include "rdma_endpoint.h"
 #include "rdma_utils.h"  // socketId(), bindToSocket()
 

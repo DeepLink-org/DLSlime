@@ -1,9 +1,9 @@
 #pragma once
 #include <atomic>
 
+#include "dlslime/csrc/common/pause.h"
 #include "dlslime/csrc/device/signal.h"
 #include "dlslime/csrc/logging.h"
-#include "dlslime/csrc/pause.h"
 
 namespace dlslime {
 namespace device {

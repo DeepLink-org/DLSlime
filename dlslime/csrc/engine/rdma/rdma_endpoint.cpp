@@ -15,10 +15,10 @@
 #include <string>
 #include <vector>
 
+#include "dlslime/csrc/common/pause.h"
 #include "dlslime/csrc/device/device_api.h"
 #include "dlslime/csrc/engine/assignment.h"
 #include "dlslime/csrc/logging.h"
-#include "dlslime/csrc/pause.h"
 #include "dlslime/csrc/utils.h"
 #include "engine/rdma/memory_pool.h"
 #include "engine/rdma/rdma_channel.h"

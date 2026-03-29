@@ -9,10 +9,10 @@
 #include <string>
 #include <vector>
 
+#include "dlslime/csrc/common/pause.h"
 #include "dlslime/csrc/engine/rdma/ibv_helper.h"
 #include "dlslime/csrc/engine/rdma/rdma_env.h"
 #include "dlslime/csrc/logging.h"
-#include "dlslime/csrc/pause.h"
 
 namespace dlslime {
 
