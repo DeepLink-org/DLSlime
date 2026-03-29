@@ -20,7 +20,7 @@ Under folder `/csrc/dlslime/engine/ascend_direct`
 
 ### Build the test case
 
-Go to the repo root and compile DLSlime with Asecond Direct
+Go to the repo root and compile DLSlime with Ascond Direct
 
 ```
 mkdir build

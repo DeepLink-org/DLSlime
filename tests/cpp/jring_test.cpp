@@ -3,7 +3,7 @@
 #include <cstring> // for memset, strncpy, strcmp
 #include <cstdlib> // for posix_memalign, free
 #include <cstdio>  // for snprintf
-#include "dlslime/jring.h"
+#include "dlslime/csrc/jring.h"
 
 // --------------------------------------------------------------------------
 // Definition of a dummy communication packet.

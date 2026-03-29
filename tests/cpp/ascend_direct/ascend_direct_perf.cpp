@@ -6,8 +6,8 @@
 #include <zmq.hpp>
 
 #include "acl/acl.h"
-#include "dlslime/engine/ascend_direct/ascend_direct_transport.h"
-#include "dlslime/logging.h"
+#include "dlslime/csrc/engine/ascend_direct/ascend_direct_transport.h"
+#include "dlslime/csrc/logging.h"
 
 DEFINE_string(localhost, "100.97.164.197", "local IP");
 DEFINE_int32(local_port, 16777, "Port number");
@@ -113,7 +113,7 @@ std::vector<uintptr_t> allocRegistMem(const std::unique_ptr<AscendDirectContext>
 
         uintptr_t dev_addr_uintptr = reinterpret_cast<uintptr_t>(dev_addr);
         ret                        = as_ctx->register_memory_region(
-            "npu:" + std::to_string(FLAGS_device_id), dev_addr_uintptr, batched_block_size);
+            FLAGS_device_id, dev_addr_uintptr, batched_block_size);
         if (ret != 0) {
             SLIME_LOG_ERROR("Failed to registerLocalMemory, ret: ", ret);
             return {};
@@ -153,9 +153,9 @@ int initiator()
         uint64_t        block_size = (FLAGS_block_size << i);
         AssignmentBatch batched_assignments;
         for (int j = 0; j < FLAGS_batch_size; ++j) {
-            std::string mr_key        = "npu:" + std::to_string(FLAGS_device_id);
-            uint64_t    source_offset = static_cast<uint64_t>(dev_addrs[i]) + block_size * j;
-            uint64_t    target_offset = static_cast<uint64_t>(remote_dev_addrs[i]) + block_size * j;
+            uintptr_t mr_key        = FLAGS_device_id;
+            uint64_t  source_offset = static_cast<uint64_t>(dev_addrs[i]) + block_size * j;
+            uint64_t  target_offset = static_cast<uint64_t>(remote_dev_addrs[i]) + block_size * j;
             batched_assignments.push_back(Assignment(mr_key, target_offset, source_offset, block_size));
         }
         struct timeval start_tv, stop_tv;
@@ -221,7 +221,7 @@ int main(int argc, char** argv)
 {
     gflags::ParseCommandLineFlags(&argc, &argv, false);
     std::cout << "Initializing ACL" << std::endl;
-    slime::AscendDirectContext ascend_direct;
+    dlslime::AscendDirectContext ascend_direct;
 
     const char* aclConfigPath = NULL;
     aclError    ret           = aclInit(aclConfigPath);

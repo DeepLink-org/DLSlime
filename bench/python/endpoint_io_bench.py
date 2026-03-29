@@ -53,9 +53,9 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=200):
         # ---------------------------------------------------------
         if device_type == "cuda":
             send_tensor = torch.randint(
-                0, 255, (size,), dtype=torch.uint8, device="cuda:0"
+                0, 255, (size,), dtype=torch.uint8, device="cpu"
             )
-            recv_tensor = torch.zeros((size,), dtype=torch.uint8, device="cuda:1")
+            recv_tensor = torch.zeros((size,), dtype=torch.uint8, device="cpu")
             torch.cuda.synchronize()
         else:
             send_tensor = torch.randint(
@@ -70,17 +70,25 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=200):
         local_ptr = send_tensor.data_ptr()
         remote_ptr = recv_tensor.data_ptr()
 
-        # 注册 Initiator 内存 (虽然 Write 主要需要注册 Remote，但本地也需要注册在 PD 中)
-        ep1.register_memory_region(
-            local_ptr, local_ptr, int(send_tensor.storage_offset()), size
+        local_name = str(local_ptr)
+        mr_name = str(remote_ptr)
+
+        # 注册 Initiator 内存，保存 handle 用于 write_with_imm 的 tuple
+        local_handle = ep1.register_memory_region(
+            local_name,
+            local_ptr + int(send_tensor.storage_offset()),
+            size,
         )
-        # 注册 Target 内存
+        # 注册 Target 内存 (string name so it is exported via endpoint_info mr_info)
         ep2.register_memory_region(
-            remote_ptr, remote_ptr, int(recv_tensor.storage_offset()), size
+            mr_name,
+            remote_ptr + int(recv_tensor.storage_offset()),
+            size,
         )
 
-        ep1.register_remote_memory_region(
-            remote_ptr, ep2.endpoint_info()["mr_info"][str(remote_ptr)]
+        # 在 ep1 的 remote pool 中注册，返回 remote handle
+        remote_handle = ep1.register_remote_memory_region(
+            mr_name, ep2.endpoint_info()["mr_info"][mr_name]
         )
 
         # ---------------------------------------------------------
@@ -93,7 +101,7 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=200):
 
             # Initiator: 执行 WriteWithImm
             send_slot = ep1.write_with_imm(
-                [(local_ptr, remote_ptr, 0, 0, size)], 888, None
+                [(local_handle, remote_handle, 0, 0, size)], 888, None
             )
 
             # 等待完成
@@ -115,7 +123,7 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=200):
 
             # 2. Initiator RDMA Write with Immediate
             send_slot = ep1.write_with_imm(
-                [(local_ptr, remote_ptr, 0, 0, size)], 888, None
+                [(local_handle, remote_handle, 0, 0, size)], 888, None
             )
 
             # 3. Synchronization
