@@ -29,7 +29,7 @@ def run_benchmark():
         role = "Target"
 
     ep.register_memory_region(
-        mr_key,
+        tensor.data_ptr(),
         tensor.data_ptr(),
         int(tensor.storage_offset()),
         tensor.numel() * tensor.itemsize,
@@ -51,8 +51,9 @@ def run_benchmark():
 
     if rank == 0:
 
+        remote_data_ptr = int(list(remote_info["mr_info"].keys())[0])
         ep.read(
-            [(mr_key, mr_key, 8, 0, 8)],
+            [(tensor.data_ptr(), remote_data_ptr, 8, 0, 8)],
             None,
         )
 
