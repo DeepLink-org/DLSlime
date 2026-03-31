@@ -25,10 +25,13 @@ description = "DLSlime Transfer Engine"
 name = "dlslime"
 readme = "README.md"
 requires-python = ">=3.8"
-version = "0.0.2.post1"
+version = "0.0.3.rc1"
 dependencies = [
-  "xxhash",
   "pydantic>=2.0",
+  "pyzmq>=25.0",
+  "redis>=4.0",
+  "requests>=2.0",
+  "nanoctrl>=0.0.1",
   # for --build-no-isolation
   "scikit-build-core>=0.10",
   "pybind11>=2.12",

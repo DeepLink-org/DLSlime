@@ -3,6 +3,7 @@ import time
 
 import torch
 from dlslime import _slime_c
+from dlslime._slime_c import available_nic
 
 
 def get_readable_size(size_in_bytes):
@@ -15,7 +16,9 @@ def get_readable_size(size_in_bytes):
 
 def run_benchmark(device_type="cuda", num_qp=1, iterations=200):
     # 检查设备
-    nic_devices = _slime_c.available_nic()
+    nic_devices = available_nic()
+    if not nic_devices:
+        raise RuntimeError("No RDMA NIC available.")
     dev = nic_devices[0]
 
     print(f"Initializing Endpoints: Send[{dev}] <-> Recv[{dev}]")
@@ -51,9 +54,9 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=200):
         # 使用 uint8，这样 numel 就等于 bytes
         if device_type == "cuda":
             send_tensor = torch.randint(
-                0, 255, (size,), dtype=torch.uint8, device="cuda:0"
+                0, 255, (size,), dtype=torch.uint8, device="cpu"
             )
-            recv_tensor = torch.zeros((size,), dtype=torch.uint8, device="cuda:1")
+            recv_tensor = torch.zeros((size,), dtype=torch.uint8, device="cpu")
             torch.cuda.synchronize()
         else:
             send_tensor = torch.randint(
@@ -130,11 +133,14 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=200):
 
         # 6. 数据校验 (抽样检查，避免大内存 copy 耗时)
         check_status = "OK"
+        sample = min(size, 128)
         if device_type == "cuda":
             # CUDA 校验需要把数据拷回 CPU，为了不影响后续测试，简单检查头尾
             if not torch.equal(
-                send_tensor[:100].cpu(), recv_tensor[:100].cpu()
-            ) or not torch.equal(send_tensor[-100:].cpu(), recv_tensor[-100:].cpu()):
+                send_tensor[:sample].cpu(), recv_tensor[:sample].cpu()
+            ) or not torch.equal(
+                send_tensor[-sample:].cpu(), recv_tensor[-sample:].cpu()
+            ):
                 check_status = "FAIL"
         else:
             if not torch.equal(send_tensor, recv_tensor):

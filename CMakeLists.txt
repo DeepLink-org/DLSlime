@@ -7,29 +7,24 @@ include(${CMAKE_CURRENT_LIST_DIR}/cmake/utils.cmake)
 # Slime options for transfer engine
 slime_option(BUILD_RDMA                "Build RDMA"                        ON)
 
+
 slime_option(USE_CUDA                  "USE in CUDA Platform"             OFF)
 slime_option(USE_MACA                  "USE in MACA Platform"             OFF)
 
 slime_option(BUILD_NVLINK              "Build NVLINK"                     OFF)
-slime_option(BUILD_NVSHMEM             "Build NVSHMEM"                    OFF)
 slime_option(BUILD_ASCEND_DIRECT       "Build Ascend direct transport"    OFF)
-
-# Slime options for ops
-slime_option(BUILD_INTRA_OPS           "Build intra LL collective ops"    OFF)
-slime_option(BUILD_INTER_OPS           "Build inter LL collective ops"    OFF)
 
 # Slime options for custom python wrapper
 slime_option(BUILD_PYTHON              "Build python wrapper"             OFF)
 
 # Slime options for torch plugin
-slime_option(USE_GLOO_BACKEND          "Build gloo backend"               OFF)
 slime_option(BUILD_TORCH_PLUGIN        "Build torch plugin"               OFF)
 
 # Slime options for test
 slime_option(BUILD_BENCH               "Build transfer engine benchmark"  OFF)
 slime_option(BUILD_TEST                "Build test"                       OFF)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
@@ -37,7 +32,7 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(DLSLIME_INSTALL_PATH "lib" CACHE STRING "Library installation directory")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-if (BUILD_NVSHMEM OR BUILD_NVLINK OR BUILD_INTRA_OPS OR BUILD_INTER_OPS)
+if (BUILD_NVLINK)
     enable_language(CUDA)
     set(CMAKE_CUDA_STANDARD 17)
     set(CMAKE_CUDA_ARCHITECTURES "90")
@@ -53,12 +48,14 @@ else()
     set(DLSLIME_CONFIG_DEST "share/cmake/dlslime")
 endif()
 
-if (BUILD_TORCH_PLUGIN OR BUILD_INTRA_OPS OR BUILD_INTER_OPS)
+if (BUILD_TORCH_PLUGIN)
     include(${CMAKE_CURRENT_LIST_DIR}/cmake/torch.cmake)
 endif()
 
-include_directories(csrc)
-add_subdirectory(csrc)
+# --- Dependencies ---
+# Define NanoInfra root path (for third_party when building from NanoInfra)
+include_directories(.)
+add_subdirectory(dlslime/csrc)
 
 # Define global imported target for external consumers (e.g. NanoDeploy, Spoke)
 if(TARGET _slime_rdma AND NOT TARGET dlslime::dlslime)
