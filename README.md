@@ -58,8 +58,7 @@ python example/python/p2p_rdma_rc_send_recv_gdr.py
 - DLSlime torch backend
 
 ```
-python example/python/p2p_rdma_rc_send_recv_torch.py --rank 0
-python example/python/p2p_rdma_rc_send_recv_torch.py --rank 1
+torchrun --nproc_per_node=2 examples/python/p2p_rdma_rc_send_recv_torch.py
 ```
 
 #### NVLink Mode

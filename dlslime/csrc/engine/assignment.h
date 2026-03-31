@@ -6,17 +6,19 @@
 #include <cstring>
 #include <functional>
 #include <string>
+#include <tuple>
 #include <vector>
 
-#include "dlslime/csrc/logging.h"
 #include "dlslime/csrc/common/json.hpp"
+#include "dlslime/csrc/logging.h"
 
 namespace dlslime {
 
 struct Assignment;
 
-using assign_tuple_t = std::tuple<uintptr_t, uintptr_t, uint64_t, uint64_t, size_t>;
-using chunk_tuple_t  = std::tuple<uintptr_t, uint64_t, size_t>;
+using assign_tuple_t       = std::tuple<uintptr_t, uintptr_t, uint64_t, uint64_t, size_t>;
+using chunk_tuple_t        = std::tuple<uintptr_t, uint64_t, size_t>;
+using named_assign_tuple_t = std::tuple<std::string, std::string, uint64_t, uint64_t, size_t>;
 
 using json            = nlohmann::json;
 using AssignmentBatch = std::vector<Assignment>;

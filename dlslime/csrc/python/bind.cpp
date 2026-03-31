@@ -239,19 +239,46 @@ PYBIND11_MODULE(_slime_c, m)
         .def("wait", &dlslime::NVLinkFuture::wait, py::call_guard<py::gil_scoped_release>());
     py::class_<dlslime::NVLinkEndpoint>(m, "NVLinkEndpoint")
         .def(py::init<>())
-        .def("register_memory_region",
-             &dlslime::NVLinkEndpoint::register_memory_region,
-             py::arg("mr_key"),
-             py::arg("data_ptr"),
-             py::arg("offset"),
-             py::arg("length"))
-        .def("register_remote_memory_region",
-             &dlslime::NVLinkEndpoint::register_remote_memory_region,
-             py::call_guard<py::gil_scoped_release>())
+        .def(
+            "register_memory_region",
+            [](dlslime::NVLinkEndpoint& self, uintptr_t addr, uint64_t offset, size_t length, py::object name_obj) {
+                std::optional<std::string> name = std::nullopt;
+                if (!name_obj.is_none()) {
+                    name = name_obj.cast<std::string>();
+                }
+                return self.register_memory_region(addr, offset, length, name);
+            },
+            py::arg("addr"),
+            py::arg("offset"),
+            py::arg("length"),
+            py::arg("name") = py::none(),
+            py::call_guard<py::gil_scoped_release>())
+        .def(
+            "register_remote_memory_region",
+            [](dlslime::NVLinkEndpoint& self, const json& mr_info, py::object name_obj) {
+                std::optional<std::string> name = std::nullopt;
+                if (!name_obj.is_none()) {
+                    name = name_obj.cast<std::string>();
+                }
+                return self.register_remote_memory_region(mr_info, name);
+            },
+            py::arg("mr_info"),
+            py::arg("name") = py::none(),
+            py::call_guard<py::gil_scoped_release>())
+        .def("get_mr_handle", &dlslime::NVLinkEndpoint::get_mr_handle, py::arg("name"))
+        .def("get_remote_mr_handle", &dlslime::NVLinkEndpoint::get_remote_mr_handle, py::arg("name"))
         .def("endpoint_info", &dlslime::NVLinkEndpoint::endpoint_info)
+        .def("mr_info", &dlslime::NVLinkEndpoint::mr_info)
         .def("connect", &dlslime::NVLinkEndpoint::connect)
         .def("read",
-             &dlslime::NVLinkEndpoint::read,
+             static_cast<std::shared_ptr<dlslime::NVLinkFuture> (dlslime::NVLinkEndpoint::*)(
+                 std::vector<dlslime::named_assign_tuple_t>&, void*)>(&dlslime::NVLinkEndpoint::read),
+             py::arg("assign"),
+             py::arg("stream") = nullptr,
+             py::call_guard<py::gil_scoped_release>())
+        .def("read",
+             static_cast<std::shared_ptr<dlslime::NVLinkFuture> (dlslime::NVLinkEndpoint::*)(
+                 std::vector<dlslime::assign_tuple_t>&, void*)>(&dlslime::NVLinkEndpoint::read),
              py::arg("assign"),
              py::arg("stream") = nullptr,
              py::call_guard<py::gil_scoped_release>());
@@ -270,38 +297,53 @@ PYBIND11_MODULE(_slime_c, m)
              &dlslime::AscendDirectEndpoint::init,
              py::arg("host"),
              py::arg("port"),
-             py::call_guard<py::gil_scoped_release>(),
-             "Initialize AscendDirectEndpoint with host and port")
-        .def("register_memory_region",
-             &dlslime::AscendDirectEndpoint::register_memory_region,
-             py::arg("mr_key"),
-             py::arg("addr"),
-             py::arg("offset"),
-             py::arg("length"),
-             py::call_guard<py::gil_scoped_release>(),
-             "Register local memory region")
-        .def("register_remote_memory_region",
-             &dlslime::AscendDirectEndpoint::register_remote_memory_region,
-             py::arg("remote_mr_key"),
-             py::arg("name"),
-             py::arg("mr_info"),
-             py::call_guard<py::gil_scoped_release>(),
-             "Register remote memory region (metadata)")
-        .def("endpoint_info",
-             &dlslime::AscendDirectEndpoint::endpoint_info,
-             py::call_guard<py::gil_scoped_release>(),
-             "Get endpoint info as JSON for exchange")
+             py::call_guard<py::gil_scoped_release>())
+        .def(
+            "register_memory_region",
+            [](dlslime::AscendDirectEndpoint& self, uintptr_t addr, size_t offset, size_t length, py::object name_obj) {
+                std::optional<std::string> name = std::nullopt;
+                if (!name_obj.is_none()) {
+                    name = name_obj.cast<std::string>();
+                }
+                return self.register_memory_region(addr, offset, length, name);
+            },
+            py::arg("addr"),
+            py::arg("offset"),
+            py::arg("length"),
+            py::arg("name") = py::none(),
+            py::call_guard<py::gil_scoped_release>())
+        .def(
+            "register_remote_memory_region",
+            [](dlslime::AscendDirectEndpoint& self, const json& mr_info, py::object name_obj) {
+                std::optional<std::string> name = std::nullopt;
+                if (!name_obj.is_none()) {
+                    name = name_obj.cast<std::string>();
+                }
+                return self.register_remote_memory_region(mr_info, name);
+            },
+            py::arg("mr_info"),
+            py::arg("name") = py::none(),
+            py::call_guard<py::gil_scoped_release>())
+        .def("get_mr_handle", &dlslime::AscendDirectEndpoint::get_mr_handle, py::arg("name"))
+        .def("get_remote_mr_handle", &dlslime::AscendDirectEndpoint::get_remote_mr_handle, py::arg("name"))
+        .def("endpoint_info", &dlslime::AscendDirectEndpoint::endpoint_info, py::call_guard<py::gil_scoped_release>())
+        .def("mr_info", &dlslime::AscendDirectEndpoint::mr_info, py::call_guard<py::gil_scoped_release>())
         .def("connect",
              &dlslime::AscendDirectEndpoint::connect,
              py::arg("remote_info"),
-             py::call_guard<py::gil_scoped_release>(),
-             "Connect to remote endpoint")
+             py::call_guard<py::gil_scoped_release>())
         .def("read",
-             &dlslime::AscendDirectEndpoint::read,
+             static_cast<std::shared_ptr<dlslime::AscendFuture> (dlslime::AscendDirectEndpoint::*)(
+                 std::vector<dlslime::named_assign_tuple_t>&, void*)>(&dlslime::AscendDirectEndpoint::read),
              py::arg("assign"),
              py::arg("stream") = nullptr,
-             py::call_guard<py::gil_scoped_release>(),
-             "Read data from remote endpoint");
+             py::call_guard<py::gil_scoped_release>())
+        .def("read",
+             static_cast<std::shared_ptr<dlslime::AscendFuture> (dlslime::AscendDirectEndpoint::*)(
+                 std::vector<dlslime::assign_tuple_t>&, void*)>(&dlslime::AscendDirectEndpoint::read),
+             py::arg("assign"),
+             py::arg("stream") = nullptr,
+             py::call_guard<py::gil_scoped_release>());
 #endif
 
     // Ops moved to NanoCCL - Python bindings should be in NanoCCL's Python module

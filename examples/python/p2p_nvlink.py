@@ -19,8 +19,6 @@ def run_benchmark():
 
     ep = _slime_c.NVLinkEndpoint()
 
-    mr_key = "buffer"
-
     if rank == 0:
         tensor = torch.zeros([16], device=device, dtype=torch.uint8)
         role = "Initiator"
@@ -30,9 +28,9 @@ def run_benchmark():
 
     ep.register_memory_region(
         tensor.data_ptr(),
-        tensor.data_ptr(),
         int(tensor.storage_offset()),
         tensor.numel() * tensor.itemsize,
+        "buffer",
     )
 
     local_info = ep.endpoint_info()
@@ -41,7 +39,7 @@ def run_benchmark():
 
     dist.all_gather_object(gather_list, local_info)
 
-    target_rank = 1 - rank  # 简单的 0<->1 映射
+    target_rank = 1 - rank
     remote_info = gather_list[target_rank]
 
     print(f"[Rank {rank}] Connecting to Rank {target_rank}...")
@@ -50,10 +48,8 @@ def run_benchmark():
     dist.barrier()
 
     if rank == 0:
-
-        remote_data_ptr = int(list(remote_info["mr_info"].keys())[0])
         ep.read(
-            [(tensor.data_ptr(), remote_data_ptr, 8, 0, 8)],
+            [("buffer", "buffer", 8, 0, 8)],
             None,
         )
 
@@ -64,11 +60,10 @@ def run_benchmark():
         assert torch.all(tensor[:8] == 1), f"First half check failed: {tensor[:8]}"
         assert torch.all(tensor[8:] == 0), f"Second half check failed: {tensor[8:]}"
 
-        print("run rdma rc write example successful")
+        print("run nvlink p2p read example successful")
 
     dist.barrier()
 
-    # 清理
     del ep
     dist.destroy_process_group()
 

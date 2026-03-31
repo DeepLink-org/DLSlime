@@ -253,7 +253,20 @@ RDMAEndpoint::~RDMAEndpoint()
 
 void RDMAEndpoint::connect(const json& remote_endpoint_info)
 {
-    // User MRs: manual registration via get_mr_info + register_remote_memory_region
+    // Auto-register remote user MRs from exchanged endpoint info.
+    // Sort by original handle to guarantee remote handles match source-side handles.
+    if (remote_endpoint_info.contains("mr_info") && !remote_endpoint_info["mr_info"].empty()) {
+        std::vector<std::pair<std::string, json>> sorted_mrs;
+        for (auto& [name, mr_data] : remote_endpoint_info["mr_info"].items()) {
+            sorted_mrs.emplace_back(name, mr_data);
+        }
+        std::sort(sorted_mrs.begin(), sorted_mrs.end(), [](const auto& a, const auto& b) {
+            return a.second.value("handle", 0) < b.second.value("handle", 0);
+        });
+        for (auto& [name, mr_data] : sorted_mrs) {
+            registerOrAccessRemoteMemoryRegion(name, mr_data);
+        }
+    }
 
     // Connect IO Endpoint
     if (remote_endpoint_info.contains("io_info")) {
@@ -362,10 +375,10 @@ void RDMAEndpoint::shutdown()
 // Memory Management
 // ============================================================
 
-// Deprecated: mr_key is ignored in favor of internal handle generation.
 int32_t RDMAEndpoint::registerOrAccessMemoryRegion(uintptr_t mr_key, uintptr_t ptr, uintptr_t offset, size_t length)
 {
-    return local_pool_->registerMemoryRegion(ptr + offset, length);
+    std::string auto_name = "mr_" + std::to_string(mr_key);
+    return local_pool_->registerMemoryRegion(ptr + offset, length, auto_name);
 }
 
 int32_t

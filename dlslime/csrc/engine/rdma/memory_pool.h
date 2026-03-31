@@ -55,13 +55,13 @@ public:
         }
         mrs_.clear();
 
-        for (auto* mr : id_to_mr_) {
+        for (auto* mr : handle_to_mr_) {
             if (mr)
                 ibv_dereg_mr(mr);
         }
-        id_to_mr_.clear();
+        handle_to_mr_.clear();
         ptr_to_handle_.clear();
-        name_to_id_.clear();
+        name_to_handle_.clear();
 
         if (pd_ && owns_pd_)
             ibv_dealloc_pd(pd_);
@@ -81,8 +81,8 @@ public:
     // Fast path: get MR by handle
     inline struct ibv_mr* get_mr_fast(int32_t handle)
     {
-        if (handle >= 0 && handle < id_to_mr_.size()) {
-            return id_to_mr_[handle];
+        if (handle >= 0 && handle < handle_to_mr_.size()) {
+            return handle_to_mr_[handle];
         }
         return nullptr;
     }
@@ -104,8 +104,8 @@ public:
             std::unique_lock<std::mutex> lock(name_mutex_);
             if (ptr_to_handle_.count(mr_key)) {
                 int32_t handle = ptr_to_handle_[mr_key];
-                if (handle >= 0 && handle < id_to_mr_.size()) {
-                    return id_to_mr_[handle];
+                if (handle >= 0 && handle < handle_to_mr_.size()) {
+                    return handle_to_mr_[handle];
                 }
             }
         }
@@ -130,9 +130,9 @@ private:
 
     // New: Name -> Handle
     std::mutex                               name_mutex_;  // Maps
-    std::unordered_map<std::string, int32_t> name_to_id_;
+    std::unordered_map<std::string, int32_t> name_to_handle_;
     std::unordered_map<uintptr_t, int32_t>   ptr_to_handle_;
 
-    std::vector<struct ibv_mr*> id_to_mr_;
+    std::vector<struct ibv_mr*> handle_to_mr_;
 };
 }  // namespace dlslime
