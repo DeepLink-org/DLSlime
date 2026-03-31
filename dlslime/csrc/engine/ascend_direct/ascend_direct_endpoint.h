@@ -12,9 +12,9 @@
 #include "ascend_future.h"
 #include "ascend_local_memory_pool.h"
 #include "ascend_remote_memory_pool.h"
+#include "dlslime/csrc/common/json.hpp"
 #include "dlslime/csrc/engine/assignment.h"
 #include "dlslime/csrc/logging.h"
-#include "nanocommon/json.hpp"
 
 namespace dlslime {
 

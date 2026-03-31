@@ -5,7 +5,7 @@
 #include <unordered_map>
 
 #include "adxl/adxl_types.h"
-#include "nanocommon/json.hpp"
+#include "dlslime/csrc/common/json.hpp"
 
 namespace dlslime {
 using json = nlohmann::json;
@@ -16,11 +16,11 @@ using json = nlohmann::json;
  * Encapsulates metadata about a registered LOCAL memory region on Ascend NPU.
  */
 struct ascend_local_mr_t {
-    uint64_t        mr_key;      // Memory region key (for user reference)
-    uintptr_t       addr;        // Base address of memory region
-    uint64_t        offset;      // Offset within the region
-    size_t          length;      // Length of the memory region in bytes
-    adxl::MemHandle handle;      // AdxlEngine memory handle
+    uint64_t        mr_key;  // Memory region key (for user reference)
+    uintptr_t       addr;    // Base address of memory region
+    uint64_t        offset;  // Offset within the region
+    size_t          length;  // Length of the memory region in bytes
+    adxl::MemHandle handle;  // AdxlEngine memory handle
 
     /**
      * @brief Serialize memory region info to JSON for remote exchange
@@ -51,7 +51,7 @@ struct ascend_local_mr_t {
  */
 class AscendLocalMemoryPool {
 public:
-    AscendLocalMemoryPool() = default;
+    AscendLocalMemoryPool()  = default;
     ~AscendLocalMemoryPool() = default;
 
     /**

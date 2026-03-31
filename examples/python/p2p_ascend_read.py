@@ -17,6 +17,7 @@ Usage:
 import argparse
 
 import torch
+import xxhash
 import zmq
 from dlslime import _slime_c
 
@@ -70,6 +71,9 @@ def run_p2p_test():
     print(
         f"[{role}] AscendDirectEndpoint initialized on {args.localhost}:{args.local_port+1}"
     )
+
+    # Create test tensor on NPU
+    mr_key = xxhash.xxh64_intdigest("buffer")
 
     if args.is_target:
         # Target: has ones that initiator will read
@@ -131,7 +135,7 @@ def run_p2p_test():
     print(f"[{role}] Connected!")
 
     # Register remote memory region
-    remote_mr_key = "remote_buffer"
+    remote_mr_key = xxhash.xxh64_intdigest("remote_buffer")
     remote_mr_info = {
         "addr": remote_info["data_ptr"],
         "offset": 0,

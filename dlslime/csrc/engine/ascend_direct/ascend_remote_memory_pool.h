@@ -4,7 +4,7 @@
 #include <memory>
 #include <unordered_map>
 
-#include "nanocommon/json.hpp"
+#include "dlslime/csrc/common/json.hpp"
 
 namespace dlslime {
 using json = nlohmann::json;
@@ -17,10 +17,10 @@ using json = nlohmann::json;
  * by the remote peer's AdxlEngine instance.
  */
 struct ascend_remote_mr_t {
-    uint64_t  mr_key;      // Memory region key (for user reference)
-    uintptr_t addr;        // Base address of remote memory region
-    uint64_t  offset;      // Offset within the region
-    size_t    length;      // Length of the memory region in bytes
+    uint64_t  mr_key;  // Memory region key (for user reference)
+    uintptr_t addr;    // Base address of remote memory region
+    uint64_t  offset;  // Offset within the region
+    size_t    length;  // Length of the memory region in bytes
 
     /**
      * @brief Serialize memory region info to JSON
@@ -69,7 +69,7 @@ struct ascend_remote_mr_t {
  */
 class AscendRemoteMemoryPool {
 public:
-    AscendRemoteMemoryPool() = default;
+    AscendRemoteMemoryPool()  = default;
     ~AscendRemoteMemoryPool() = default;
 
     /**
