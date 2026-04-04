@@ -29,6 +29,7 @@ if (BUILD_INTRA_OPS)
         INTRA_OPS_SRC
         intra_ll/all_to_all/all_to_all_intra_ll.cu
         intra_ll/all_to_all/all_to_all_intra_ll_buffer.cpp
+        intra_ll/all_to_all/alltoall_buffer.cpp
     )
     list(APPEND OPS_SRC ${INTRA_OPS_SRC})
     set(

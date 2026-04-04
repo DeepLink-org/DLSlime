@@ -104,6 +104,152 @@ __global__ __launch_bounds__(1024, 1) void all_to_all_intra_ll_kernel(int8_t*  x
     }
 }
 
+template <int kNumWarps>
+__global__ void __launch_bounds__(kNumWarps * 32, 1)
+intranode_alltoall_kernel(const void* x,
+                          void**      buffer_ptr,
+                          void**      signal_ptr,
+                          int         local_rank,
+                          int         world_size,
+                          int         batch_size,
+                          int         num_heads,
+                          int         hidden_dim,
+                          int         itemsize,
+                          int*        local_semaphore,
+                          bool        is_transpose,
+                          const int*  mask = nullptr)
+{
+    const int tid     = threadIdx.x;
+    const int bid     = blockIdx.x;
+    const int warp_id = tid / 32;
+    const int lane_id = tid % 32;
+
+    const int dst_rank            = bid % world_size;
+    const int num_blocks_for_rank = gridDim.x / world_size;
+    const int group_idx           = bid / world_size;
+
+    const int tokens_per_block_avg = (batch_size + num_blocks_for_rank - 1) / num_blocks_for_rank;
+    const int start_token_idx      = group_idx * tokens_per_block_avg;
+    const int end_token_idx =
+        (start_token_idx + tokens_per_block_avg < batch_size) ? (start_token_idx + tokens_per_block_avg) : batch_size;
+
+    using vec_t                 = int4;
+    const uint32_t bytes_per_token = num_heads * hidden_dim * itemsize;
+    const int      ints_per_token  = bytes_per_token / sizeof(int4);
+
+    const bool  use_target_major_input = is_transpose || mask == nullptr;
+    const int4* src_base               = reinterpret_cast<const int4*>(x);
+    if (use_target_major_input) {
+        src_base += static_cast<uint64_t>(dst_rank) * batch_size * ints_per_token;
+    }
+
+    int8_t* dst_buffer_byte_base = reinterpret_cast<int8_t*>(buffer_ptr[dst_rank]);
+    dst_buffer_byte_base += static_cast<uint64_t>(local_rank) * batch_size * bytes_per_token;
+    int4* dst_base = reinterpret_cast<int4*>(dst_buffer_byte_base);
+
+    if (start_token_idx < batch_size) {
+        for (int token_i = start_token_idx; token_i < end_token_idx; ++token_i) {
+            if (mask != nullptr && __ldg(&mask[dst_rank * batch_size + token_i]) == 0) {
+                continue;
+            }
+
+            int token_offset  = token_i * ints_per_token;
+            int ints_per_warp = (ints_per_token + kNumWarps - 1) / kNumWarps;
+            int my_warp_offset = warp_id * ints_per_warp;
+            int my_warp_len    = ints_per_token - my_warp_offset;
+            if (my_warp_len > ints_per_warp)
+                my_warp_len = ints_per_warp;
+            if (my_warp_len < 0)
+                my_warp_len = 0;
+
+            if (my_warp_len > 0) {
+                const int4* warp_src = src_base + token_offset + my_warp_offset;
+                int4*       warp_dst = dst_base + token_offset + my_warp_offset;
+                UNROLLED_WARP_COPY(
+                    4, lane_id, my_warp_len, warp_dst, warp_src, deep_ep::ld_nc_global, deep_ep::st_na_global);
+            }
+        }
+    }
+
+    __syncthreads();
+
+    if (tid == 0) {
+        __threadfence_block();
+        int finished_cnt = atomicAdd(&local_semaphore[dst_rank], 1);
+        if (finished_cnt == num_blocks_for_rank - 1) {
+            __threadfence_block();
+
+            volatile int* target_signal =
+                reinterpret_cast<volatile int*>(reinterpret_cast<int*>(signal_ptr[dst_rank]) + local_rank);
+            *target_signal = 1;
+
+            int*          my_signal_base     = reinterpret_cast<int*>(signal_ptr[local_rank]);
+            volatile int* my_signal_from_dst = reinterpret_cast<volatile int*>(my_signal_base + dst_rank);
+            while (*my_signal_from_dst == 0) {
+            }
+            *my_signal_from_dst = 0;
+            __threadfence_block();
+        }
+    }
+}
+
+void intranode_alltoall(torch::Tensor                x,
+                        void**                       buffer_ptr,
+                        void**                       signal_ptr,
+                        int                          batch_size,
+                        int                          n_heads,
+                        int                          hidden_dim,
+                        int                          rank,
+                        int                          world_size,
+                        int*                         device_semaphore_ptr,
+                        bool                         is_transpose,
+                        c10::optional<torch::Tensor> mask)
+{
+    constexpr int num_warps = 16;
+
+    TORCH_CHECK(x.is_cuda(), "x must be a CUDA tensor");
+    TORCH_CHECK(x.is_contiguous(), "x must be contiguous");
+
+    size_t row_bytes = n_heads * hidden_dim * x.element_size();
+    TORCH_CHECK(row_bytes % 16 == 0, "Data size per token must be divisible by 16 bytes");
+
+    cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+    auto         kernel = intranode_alltoall_kernel<num_warps>;
+
+    int blocks_per_rank = 16;
+    if (blocks_per_rank > batch_size) {
+        blocks_per_rank = std::max(1, batch_size);
+    }
+
+    int grid_size = blocks_per_rank * world_size;
+    int block_dim = num_warps * 32;
+
+    const int* mask_ptr = nullptr;
+    if (mask.has_value()) {
+        mask_ptr = mask.value().data_ptr<int>();
+    }
+
+    cudaMemsetAsync(device_semaphore_ptr, 0, world_size * sizeof(int), stream);
+    kernel<<<grid_size, block_dim, 0, stream>>>(
+        x.data_ptr(),
+        buffer_ptr,
+        signal_ptr,
+        rank,
+        world_size,
+        batch_size,
+        n_heads,
+        hidden_dim,
+        x.element_size(),
+        device_semaphore_ptr,
+        is_transpose,
+        mask_ptr);
+
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        TORCH_CHECK(false, "Kernel Launch Error: ", cudaGetErrorString(err));
+    }
+}
+
 void all_to_all_intra_ll(torch::Tensor                x,
                          int8_t**                     ipc_buffer_ptr,
                          int**                        ipc_signal_ptr,

@@ -45,6 +45,7 @@
 
 #ifdef BUILD_INTRA_OPS
 #include "ops/intra_ll/all_to_all/all_to_all_intra_ll_buffer.h"
+#include "ops/intra_ll/all_to_all/alltoall_buffer.h"
 #endif
 
 #ifdef BUILD_INTER_OPS
@@ -284,6 +285,30 @@ PYBIND11_MODULE(_slime_c, m)
              py::arg("mask") = py::none(),
              py::arg("offsets") = py::none(),
              "AllGather with optional mask and offsets");
+
+    py::enum_<dlslime::KernelImpl>(m, "KernelImpl")
+        .value("Basic", dlslime::KernelImpl::Basic)
+        .value("TMA", dlslime::KernelImpl::TMA)
+        .export_values();
+
+    py::class_<dlslime::AllToAllBuffer>(m, "AllToAllBuffer")
+        .def(py::init<int32_t, int32_t, int32_t, int64_t>(),
+             py::arg("rank"),
+             py::arg("world_size"),
+             py::arg("max_batch_size"),
+             py::arg("buffer_size_bytes"))
+        .def("allocate", &dlslime::AllToAllBuffer::allocate)
+        .def("get_local_buffer", &dlslime::AllToAllBuffer::get_local_buffer)
+        .def_property_readonly("local_buffer", &dlslime::AllToAllBuffer::get_local_buffer)
+        .def("get_ipc_handle_info", &dlslime::AllToAllBuffer::get_ipc_handle_info)
+        .def("connect_full_mesh", &dlslime::AllToAllBuffer::connect_full_mesh, py::arg("all_handles"))
+        .def("reset_semaphore", &dlslime::AllToAllBuffer::reset_semaphore)
+        .def("all_to_all",
+             &dlslime::AllToAllBuffer::all_to_all,
+             py::arg("x"),
+             py::arg("impl") = dlslime::KernelImpl::Basic,
+             py::arg("is_transpose") = true,
+             py::arg("mask") = py::none());
 #endif
 
 #ifdef BUILD_INTER_OPS

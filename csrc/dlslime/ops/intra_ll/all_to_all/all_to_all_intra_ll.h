@@ -18,4 +18,16 @@ void all_to_all_intra_ll(torch::Tensor                buffer_ori,
                          c10::optional<torch::Tensor> mask,
                          c10::optional<torch::Tensor> offsets);
 
+void intranode_alltoall(torch::Tensor                x,
+                        void**                       buffer_ptr,
+                        void**                       signal_ptr,
+                        int                          batch_size,
+                        int                          n_heads,
+                        int                          hidden_dim,
+                        int                          rank,
+                        int                          world_size,
+                        int*                         device_semaphore_ptr,
+                        bool                         is_transpose,
+                        c10::optional<torch::Tensor> mask = c10::nullopt);
+
 }  // namespace dlslime
