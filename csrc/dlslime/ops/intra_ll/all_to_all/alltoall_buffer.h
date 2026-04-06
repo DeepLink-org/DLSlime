@@ -36,10 +36,14 @@ public:
     torch::Tensor all_to_all(torch::Tensor                x,
                              KernelImpl                  impl         = KernelImpl::Basic,
                              bool                        is_transpose = true,
-                             c10::optional<torch::Tensor> mask         = c10::nullopt);
+                             c10::optional<torch::Tensor> mask         = c10::nullopt,
+                             c10::optional<torch::Tensor> offsets      = c10::nullopt);
 
 private:
-    torch::Tensor dispatch_basic(torch::Tensor x, bool is_transpose, c10::optional<torch::Tensor> mask);
+    torch::Tensor dispatch_basic(torch::Tensor                x,
+                                 bool                         is_transpose,
+                                 c10::optional<torch::Tensor> mask,
+                                 c10::optional<torch::Tensor> offsets);
     void          free_resources();
 
 private:

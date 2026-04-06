@@ -308,7 +308,8 @@ PYBIND11_MODULE(_slime_c, m)
              py::arg("x"),
              py::arg("impl") = dlslime::KernelImpl::Basic,
              py::arg("is_transpose") = true,
-             py::arg("mask") = py::none());
+             py::arg("mask") = py::none(),
+             py::arg("offsets") = py::none());
 #endif
 
 #ifdef BUILD_INTER_OPS

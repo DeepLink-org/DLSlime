@@ -112,12 +112,14 @@ intranode_alltoall_kernel(const void* x,
                           int         local_rank,
                           int         world_size,
                           int         batch_size,
+                          int         max_batch_size,
                           int         num_heads,
                           int         hidden_dim,
                           int         itemsize,
                           int*        local_semaphore,
                           bool        is_transpose,
-                          const int*  mask = nullptr)
+                          const int*  mask    = nullptr,
+                          const int*  offsets = nullptr)
 {
     const int tid     = threadIdx.x;
     const int bid     = blockIdx.x;
@@ -137,19 +139,26 @@ intranode_alltoall_kernel(const void* x,
     const uint32_t bytes_per_token = num_heads * hidden_dim * itemsize;
     const int      ints_per_token  = bytes_per_token / sizeof(int4);
 
-    const bool  use_target_major_input = is_transpose || mask == nullptr;
+    const bool  use_offsets            = offsets != nullptr;
+    const bool  use_target_major_input = is_transpose || (!use_offsets && mask == nullptr);
     const int4* src_base               = reinterpret_cast<const int4*>(x);
     if (use_target_major_input) {
         src_base += static_cast<uint64_t>(dst_rank) * batch_size * ints_per_token;
     }
 
     int8_t* dst_buffer_byte_base = reinterpret_cast<int8_t*>(buffer_ptr[dst_rank]);
-    dst_buffer_byte_base += static_cast<uint64_t>(local_rank) * batch_size * bytes_per_token;
+    if (use_offsets) {
+        dst_buffer_byte_base += static_cast<uint64_t>(offsets[local_rank]) * bytes_per_token;
+    }
+    else {
+        dst_buffer_byte_base += static_cast<uint64_t>(local_rank) * batch_size * bytes_per_token;
+    }
     int4* dst_base = reinterpret_cast<int4*>(dst_buffer_byte_base);
 
     if (start_token_idx < batch_size) {
         for (int token_i = start_token_idx; token_i < end_token_idx; ++token_i) {
-            if (mask != nullptr && __ldg(&mask[dst_rank * batch_size + token_i]) == 0) {
+            const int mask_stride = use_offsets ? max_batch_size : batch_size;
+            if (mask != nullptr && __ldg(&mask[dst_rank * mask_stride + token_i]) == 0) {
                 continue;
             }
 
@@ -197,18 +206,22 @@ void intranode_alltoall(torch::Tensor                x,
                         void**                       buffer_ptr,
                         void**                       signal_ptr,
                         int                          batch_size,
+                        int                          max_batch_size,
                         int                          n_heads,
                         int                          hidden_dim,
                         int                          rank,
                         int                          world_size,
                         int*                         device_semaphore_ptr,
                         bool                         is_transpose,
-                        c10::optional<torch::Tensor> mask)
+                        c10::optional<torch::Tensor> mask,
+                        c10::optional<torch::Tensor> offsets)
 {
     constexpr int num_warps = 16;
 
     TORCH_CHECK(x.is_cuda(), "x must be a CUDA tensor");
     TORCH_CHECK(x.is_contiguous(), "x must be contiguous");
+    TORCH_CHECK(!(offsets.has_value() && is_transpose),
+                "hao_basic offsets only support non-transpose all-to-all");
 
     size_t row_bytes = n_heads * hidden_dim * x.element_size();
     TORCH_CHECK(row_bytes % 16 == 0, "Data size per token must be divisible by 16 bytes");
@@ -228,6 +241,10 @@ void intranode_alltoall(torch::Tensor                x,
     if (mask.has_value()) {
         mask_ptr = mask.value().data_ptr<int>();
     }
+    const int* offsets_ptr = nullptr;
+    if (offsets.has_value()) {
+        offsets_ptr = offsets.value().data_ptr<int>();
+    }
 
     cudaMemsetAsync(device_semaphore_ptr, 0, world_size * sizeof(int), stream);
     kernel<<<grid_size, block_dim, 0, stream>>>(
@@ -237,12 +254,14 @@ void intranode_alltoall(torch::Tensor                x,
         rank,
         world_size,
         batch_size,
+        max_batch_size,
         n_heads,
         hidden_dim,
         x.element_size(),
         device_semaphore_ptr,
         is_transpose,
-        mask_ptr);
+        mask_ptr,
+        offsets_ptr);
 
     cudaError_t err = cudaGetLastError();
     if (err != cudaSuccess) {
