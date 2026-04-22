@@ -12,33 +12,20 @@ Event-driven architecture using Redis Streams:
 import json
 import threading
 import time
-from concurrent.futures import as_completed, ThreadPoolExecutor
 from typing import Any, Dict, List, Optional, Set
 
 try:
+    import httpx
     import redis
-    import requests
 except ImportError as e:
     raise ImportError(
-        "PeerAgent requires 'requests' and 'redis' packages. "
-        "Install them with: pip install requests redis"
+        "PeerAgent requires 'httpx' and 'redis' packages. "
+        "Install them with: pip install httpx redis"
     ) from e
 
+from nanoctrl import NanoCtrlClient
+
 from dlslime import available_nic, RDMAContext, RDMAEndpoint, RDMAMemoryPool
-
-
-def create_redis_prefix(server_url: str) -> str:
-    """Create Redis key prefix from NanoCtrl server URL for data isolation."""
-    # Remove protocol and sanitize (e.g., http://10.102.97.179:3000 -> nano_10_102_97_179_3000)
-    sanitized = (
-        server_url.replace("http://", "")
-        .replace("https://", "")
-        .replace(":", "_")
-        .replace("/", "_")
-        .replace(".", "_")
-        .replace("-", "_")
-    )
-    return f"nano_{sanitized}"
 
 
 class StreamMailbox:
@@ -60,6 +47,13 @@ class StreamMailbox:
 
     def start(self) -> None:
         """Start the stream listener thread."""
+        # Delete any stale stream messages from a previous run before listening.
+        prefix = (
+            f"{self._agent.redis_key_prefix}:" if self._agent.redis_key_prefix else ""
+        )
+        stream_key = f"{prefix}stream:{self._agent.alias}"
+        self._agent.redis_client.delete(stream_key)
+
         self._thread = threading.Thread(target=self._listen_loop, daemon=True)
         self._thread.start()
         print(
@@ -81,8 +75,7 @@ class StreamMailbox:
         )
         stream_key = f"{prefix}stream:{self._agent.alias}"
 
-        # Start from beginning (0-0 = all messages in stream)
-        # Safe because cleanup removes stream on shutdown
+        # Start from the beginning of the (now-freshly-cleared) stream.
         last_id = "0-0"
 
         print(
@@ -164,9 +157,25 @@ class StreamMailbox:
         Attempt symmetric rendezvous with peer.
         Idempotent: safe to call multiple times.
         """
-        # Skip if already connected
+        # Skip if already connected or a connection attempt is in progress.
         if self._agent.is_peer_connected(peer):
             return
+        with self._agent._connecting_peers_lock:
+            if peer in self._agent._connecting_peers:
+                return
+            self._agent._connecting_peers.add(peer)
+
+        try:
+            self._try_connect_peer_inner(peer)
+        finally:
+            # Always release the in-flight guard. A rendezvous attempt may return
+            # early when the peer has not published its QP info yet; later
+            # connect_peer / qp_ready messages must be allowed to retry.
+            with self._agent._connecting_peers_lock:
+                self._agent._connecting_peers.discard(peer)
+
+    def _try_connect_peer_inner(self, peer: str) -> None:
+        """Core rendezvous logic (called with connecting-guard held)."""
 
         # A. Create local endpoint and get QP info
         endpoint = self._agent.ensure_local_endpoint_created(peer)
@@ -261,6 +270,9 @@ class PeerAgent:
         # Build Redis key prefix from scope parameter
         self.redis_key_prefix = scope or ""
 
+        # NanoCtrl HTTP client
+        self._client = NanoCtrlClient(server_url, scope=self.redis_key_prefix or None)
+
         import socket
 
         hostname = socket.gethostname()
@@ -285,6 +297,10 @@ class PeerAgent:
         self._connected_peers: Set[str] = set()
         self._connected_peers_lock = threading.Lock()
 
+        # Prevents duplicate in-flight connect attempts for the same peer.
+        self._connecting_peers: Set[str] = set()
+        self._connecting_peers_lock = threading.Lock()
+
         # MR info cache (persistent, no TTL - MR info is immutable after registration)
         # Architecture: Redis (source of truth) → PeerAgent (cache) → endpoint
         # Zero overhead in hot path after warm-up
@@ -306,12 +322,21 @@ class PeerAgent:
         # Register with control plane
         self._register()
 
+        # Purge stale QP exchange keys from previous crashed runs of the same alias.
+        # Otherwise we may connect to dead QP metadata and fail on first WR.
+        self._cleanup_stale_exchange_keys()
+        self._cleanup_stale_mr_keys()
+
         # Start StreamMailbox (event-driven connection management)
         self._mailbox = StreamMailbox(self, stream_block_ms=100)
         self._mailbox.start()
 
         # Start cleanup event listener
         self._start_cleanup_listener()
+
+        # Start heartbeat thread (keeps agent alive in NanoCtrl)
+        self._heartbeat_thread: Optional[threading.Thread] = None
+        self._start_heartbeat()
 
         time.sleep(0.1)
 
@@ -324,36 +349,19 @@ class PeerAgent:
 
         for attempt in range(max_retries):
             try:
-                # Build request - omit alias if None (NanoCtrl will generate)
-                request_data = {
-                    "device": self.device,
-                    "ib_port": self.ib_port,
-                    "link_type": self.link_type,
-                    "address": self.address,
-                    "name_prefix": self.name_prefix,
-                }
-                if self.alias is not None:
-                    request_data["alias"] = self.alias
-                if self.redis_key_prefix:
-                    request_data["scope"] = self.redis_key_prefix
-
-                response = requests.post(
-                    f"{self.server_url}/start_peer_agent",
-                    json=request_data,
-                    timeout=10,
+                result = self._client.register_peer(
+                    alias=self.alias,
+                    device=self.device,
+                    ib_port=self.ib_port,
+                    link_type=self.link_type,
+                    address=self.address,
+                    name_prefix=self.name_prefix,
                 )
-                response.raise_for_status()
-                result = response.json()
 
                 # Extract allocated name from response
                 if "name" in result:
                     self.alias = result["name"]
-                    if request_data.get("alias"):
-                        print(f"PeerAgent: Registered with provided name: {self.alias}")
-                    else:
-                        print(
-                            f"PeerAgent: Registered with allocated name: {self.alias}"
-                        )
+                    print(f"PeerAgent: Registered with name: {self.alias}")
                 else:
                     raise RuntimeError("NanoCtrl did not return agent name")
 
@@ -367,9 +375,9 @@ class PeerAgent:
                         )
                 return
             except (
-                requests.exceptions.ConnectionError,
-                requests.exceptions.Timeout,
-                requests.exceptions.HTTPError,
+                httpx.ConnectError,
+                httpx.TimeoutException,
+                httpx.HTTPStatusError,
             ) as e:
                 if attempt < max_retries - 1:
                     wait_time = retry_delay * (2**attempt)
@@ -385,9 +393,11 @@ class PeerAgent:
 
     def _start_cleanup_listener(self) -> None:
         """Listen for cleanup events from peers (NanoCtrl pushes to inbox)."""
+        # Flush any stale events left by a previous run so we don't act on them.
+        inbox_key = f"{self.redis_key_prefix}:inbox:{self.alias}"
+        self.redis_client.delete(inbox_key)
 
         def event_loop():
-            inbox_key = f"{self.redis_key_prefix}:inbox:{self.alias}"
             while not self._stop_event.is_set():
                 try:
                     result = self.redis_client.blpop(inbox_key, timeout=1)
@@ -399,6 +409,13 @@ class PeerAgent:
                             print(f"PeerAgent {self.alias}: Cleanup from peer {peer}")
                             with self._endpoints_lock:
                                 if peer in self._endpoints:
+                                    # Force-complete any blocked RDMA waits before
+                                    # dropping the endpoint reference. Otherwise a
+                                    # thread blocked in imm_recv()/wait() can hang
+                                    # forever after the remote peer exits.
+                                    endpoint = self._endpoints[peer]
+                                    if hasattr(endpoint, "shutdown"):
+                                        endpoint.shutdown()
                                     with self._connected_peers_lock:
                                         self._connected_peers.discard(peer)
                                     del self._endpoints[peer]
@@ -413,6 +430,72 @@ class PeerAgent:
 
         self._event_thread = threading.Thread(target=event_loop, daemon=True)
         self._event_thread.start()
+
+    def _cleanup_stale_exchange_keys(self) -> None:
+        """Delete stale Redis exchange keys involving this alias.
+
+        These keys carry QP metadata. If a previous run crashed before shutdown,
+        stale exchange data may point to dead QPs, leading to retry exceeded errors
+        on the first RDMA WR after a seemingly successful logical handshake.
+        """
+        if not self.alias:
+            return
+
+        prefix = f"{self.redis_key_prefix}:" if self.redis_key_prefix else ""
+        patterns = [
+            f"{prefix}exchange:{self.alias}:*",
+            f"{prefix}exchange:*:{self.alias}",
+        ]
+        try:
+            keys_to_delete: list[str] = []
+            for pattern in patterns:
+                keys_to_delete.extend(
+                    list(self.redis_client.scan_iter(match=pattern, count=200))
+                )
+            if keys_to_delete:
+                self.redis_client.delete(*keys_to_delete)
+        except Exception as e:
+            print(f"PeerAgent {self.alias}: Exchange cleanup warning: {e}")
+
+    def _cleanup_stale_mr_keys(self) -> None:
+        """Delete stale Redis MR keys registered by a previous run of this alias.
+
+        RPC mailboxes are process-local buffers. If a previous process crashed
+        before shutdown, peers may discover the old addr/rkey from Redis and
+        attempt RDMA writes into dead memory, which surfaces as local/remote
+        access errors on the first RPC.
+        """
+        if not self.alias:
+            return
+
+        prefix = f"{self.redis_key_prefix}:" if self.redis_key_prefix else ""
+        pattern = f"{prefix}mr:{self.alias}:*"
+        try:
+            keys_to_delete = list(self.redis_client.scan_iter(match=pattern, count=200))
+            if keys_to_delete:
+                self.redis_client.delete(*keys_to_delete)
+        except Exception as e:
+            print(f"PeerAgent {self.alias}: MR cleanup warning: {e}")
+
+    def _start_heartbeat(self, interval: float = 15.0) -> None:
+        """Periodically POST /heartbeat to refresh agent TTL in NanoCtrl."""
+
+        def heartbeat_loop():
+            while not self._stop_event.is_set():
+                try:
+                    resp = self._client.heartbeat_peer(self.alias)
+                    if resp.get("status") == "not_found":
+                        print(
+                            f"PeerAgent {self.alias}: Heartbeat returned not_found, "
+                            f"re-registering..."
+                        )
+                        self._register()
+                except Exception as e:
+                    print(f"PeerAgent {self.alias}: Heartbeat failed: {e}")
+                self._stop_event.wait(interval)
+
+        self._heartbeat_thread = threading.Thread(target=heartbeat_loop, daemon=True)
+        self._heartbeat_thread.start()
 
     def ensure_local_endpoint_created(self, peer_alias: str) -> RDMAEndpoint:
         """
@@ -464,28 +547,18 @@ class PeerAgent:
             spec["symmetric"] = True
         if self.redis_key_prefix:
             spec["scope"] = self.redis_key_prefix
-        response = requests.post(
-            f"{self.server_url}/v1/desired_topology/{self.alias}",
-            json=spec,
-            timeout=5,
+        result = self._client.set_desired_topology(
+            self.alias,
+            target_peers=target_peers,
+            min_bw=min_bw,
+            symmetric=symmetric,
         )
-        response.raise_for_status()
-        result = response.json()
         if result.get("status") != "ok":
             raise RuntimeError(f"set_desired_topology failed: {result}")
 
     def query(self) -> Dict[str, Dict[str, Any]]:
         """Query all registered peer agents."""
-        query_data = {}
-        if self.redis_key_prefix:
-            query_data["scope"] = self.redis_key_prefix
-        response = requests.post(
-            f"{self.server_url}/query",
-            json=query_data,
-            timeout=5,
-        )
-        response.raise_for_status()
-        agents = response.json()
+        agents = self._client.query_peers()
         return {agent["name"]: agent for agent in agents}
 
     def register_memory_region(
@@ -603,6 +676,9 @@ class PeerAgent:
         if self._event_thread:
             self._event_thread.join(timeout=1)
 
+        if self._heartbeat_thread:
+            self._heartbeat_thread.join(timeout=1)
+
         # Clean up exchange keys to prevent stale QP info
         prefix = f"{self.redis_key_prefix}:" if self.redis_key_prefix else ""
         with self._endpoints_lock:
@@ -642,15 +718,7 @@ class PeerAgent:
             print(f"PeerAgent {self.alias}: MR cleanup warning: {e}")
 
         try:
-            cleanup_data = {"agent_name": self.alias}
-            if self.redis_key_prefix:
-                cleanup_data["scope"] = self.redis_key_prefix
-            response = requests.post(
-                f"{self.server_url}/cleanup",
-                json=cleanup_data,
-                timeout=5,
-            )
-            response.raise_for_status()
+            self._client.cleanup_peer(self.alias)
             print(f"PeerAgent {self.alias}: Cleanup OK")
         except Exception as e:
             print(f"PeerAgent {self.alias}: Cleanup API warning: {e}")

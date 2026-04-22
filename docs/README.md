@@ -24,6 +24,8 @@ docs/
 │   ├── control_plane.md        # Control plane design
 │   └── share_memory.md         # Shared memory management
 │
+├── benchmark-rpc.md            # SlimeRPC vs Ray RPC benchmark guide
+│
 ├── huawei_ascend/               # Huawei Ascend integration
 │   └── README.md               # Ascend platform guide
 │
@@ -49,6 +51,10 @@ docs/
 
 - [Implementation Summary](implementation/summary.md) - Overview of implementation
 - [Shared Memory Pool](implementation/shared-memory-pool.md) - Memory pool implementation details
+
+### Benchmarking
+
+- [SlimeRPC Benchmark](benchmark-rpc.md) - Run and interpret the SlimeRPC vs Ray RPC benchmark
 
 ### Control Plane
 

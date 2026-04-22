@@ -153,6 +153,9 @@ The `FLAG` can be
 
 ## Benchmark
 
+For the SlimeRPC vs Ray Python RPC microbenchmark, see
+[docs/benchmark-rpc.md](docs/benchmark-rpc.md).
+
 ### GDRDMA P2P Read/Write
 
 - Platform: NVIDIA ConnectX-7 HHHL Adapter Card; 200GbE (default mode) / NDR200 IB; Dual-port QSFP112; PCIe 5.0 x16 with x16 PCIe extension option; RoCE v2.
