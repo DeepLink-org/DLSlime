@@ -28,7 +28,7 @@ requires-python = ">=3.8"
 version = "0.0.3.rc1"
 dependencies = [
   "pydantic>=2.0",
-  # "pyzmq>=25.0",
+  "pyzmq>=25.0",
   "redis>=4.0",
   "httpx>=0.24",
   "nanoctrl>=0.0.1",
