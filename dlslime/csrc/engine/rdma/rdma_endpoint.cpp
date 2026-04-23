@@ -509,7 +509,9 @@ RDMAEndpoint::dispatchTask(OpCode op_code, const std::vector<assign_tuple_t>& as
 
             assign.callback_ = [this, ctx, qpi, is_final_slot](int32_t status, int32_t imm) {
                 if (status != RDMAAssign::SUCCESS) {
-                    ctx->completion_status.store(status, std::memory_order_release);
+                    int32_t expected = RDMAAssign::SUCCESS;
+                    ctx->completion_status.compare_exchange_strong(
+                        expected, status, std::memory_order_release, std::memory_order_relaxed);
                 }
                 uint32_t old_mask = ctx->finished_qp_mask.fetch_or(1 << qpi, std::memory_order_acq_rel);
                 uint32_t new_mask = old_mask | (1 << qpi);
