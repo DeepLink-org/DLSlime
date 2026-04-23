@@ -27,9 +27,13 @@ def method(fn=None, *, streaming=False, raw=False):
     Args:
         streaming: If ``True``, the method receives chunked data via
                    ``Channel.recv_chunked()``.
-        raw:       If ``True``, skip auto-serialization.  The function
-                   receives ``(ptr, nbytes)`` and should write the
-                   reply directly into ``channel.ptr``.
+        raw:       If ``True``, skip auto-serialization. The decorated
+                   method is invoked with the service instance plus
+                   ``(channel, ptr, nbytes)`` for the request payload.
+                   In raw mode, the method is responsible for producing
+                   the reply directly via the provided ``channel``
+                   buffer instead of returning a value for automatic
+                   serialization.
     """
 
     def decorator(f):
