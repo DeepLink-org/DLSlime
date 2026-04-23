@@ -8,7 +8,7 @@ from .buffer import GrowableBuffer
 from .channel import Channel
 from .registry import MethodRegistry
 
-MR_NAME = "rpc:mailbox"
+MR_PREFIX = "rpc:mailbox"
 
 # Global channel cache keyed by (agent_id, peer_alias).
 _channel_cache: dict[tuple[int, str], Channel] = {}
@@ -20,9 +20,9 @@ def _get_or_create_channel(agent, peer_alias: str) -> Channel:
 
     Channel creation:
       1. Get the RDMA endpoint that PeerAgent already set up.
-      2. Allocate a send buffer (per-peer) and a recv buffer (shared name).
-      3. Publish our recv buffer as MR ``"rpc:mailbox"`` to Redis.
-      4. Discover the peer's ``"rpc:mailbox"`` MR from Redis.
+      2. Allocate a send buffer (per-peer) and a recv buffer (per-channel name).
+      3. Publish our recv buffer as MR ``rpc:mailbox:<local>:<peer>`` to Redis.
+      4. Discover the peer's ``rpc:mailbox:<peer>:<local>`` MR from Redis.
     """
     key = (id(agent), peer_alias)
     with _cache_lock:
@@ -31,17 +31,23 @@ def _get_or_create_channel(agent, peer_alias: str) -> Channel:
 
     endpoint = agent.get_endpoint(peer_alias)
     buf_size = getattr(agent, "_rpc_buffer_size", 32_000_000)
+    local_alias = getattr(agent, "alias", None)
+    if not local_alias:
+        raise RuntimeError("RPC channel creation requires agent.alias to be set")
+
+    local_mr_name = _mailbox_mr_name(local_alias, peer_alias)
+    remote_mr_name = _mailbox_mr_name(peer_alias, local_alias)
 
     send_buf = GrowableBuffer(
         buf_size, endpoint=endpoint, name=f"rpc:send:{peer_alias}"
     )
-    recv_buf = GrowableBuffer(buf_size, pool=agent._memory_pool, name=MR_NAME)
+    recv_buf = GrowableBuffer(buf_size, pool=agent._memory_pool, name=local_mr_name)
 
     # Publish our recv buffer so the peer can target-address it.
-    agent.register_memory_region(MR_NAME, recv_buf.ptr, 0, recv_buf.capacity)
+    agent.register_memory_region(local_mr_name, recv_buf.ptr, 0, recv_buf.capacity)
 
     # Discover peer's recv buffer via Redis MR exchange.
-    remote_mr = _wait_for_mr(agent, peer_alias, MR_NAME)
+    remote_mr = _wait_for_mr(agent, peer_alias, remote_mr_name)
     remote_handler = endpoint.register_remote_memory_region(
         f"rpc:remote:{peer_alias}", remote_mr
     )
@@ -50,6 +56,10 @@ def _get_or_create_channel(agent, peer_alias: str) -> Channel:
     with _cache_lock:
         _channel_cache[key] = ch
     return ch
+
+
+def _mailbox_mr_name(local_alias: str, peer_alias: str) -> str:
+    return f"{MR_PREFIX}:{local_alias}:{peer_alias}"
 
 
 def _wait_for_mr(agent, peer_alias: str, mr_name: str, timeout: float = 30.0):

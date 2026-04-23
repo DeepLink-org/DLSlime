@@ -9,6 +9,11 @@ from .registry import MethodRegistry
 logger = logging.getLogger("slime.rpc")
 
 
+def _log_disconnect(message: str) -> None:
+    logger.info(message)
+    print(message)
+
+
 def serve(
     agent,
     service_instance,
@@ -50,7 +55,9 @@ def serve(
         try:
             tag, ptr, nbytes, _keepalive = channel.recv_message()
         except ConnectionError:
-            logger.info(f"SlimeRPC serve: peer disconnected, stopping serve loop.")
+            _log_disconnect(
+                "SlimeRPC serve: peer disconnected while waiting for request."
+            )
             return
         base_tag = tag & ~FLAG_MASK
 
@@ -87,7 +94,9 @@ def serve(
                     n = method_info.serialize_result(result, channel.ptr, channel.size)
                 channel.send(base_tag | REPLY_BIT, n)
             except ConnectionError:
-                logger.info("SlimeRPC serve: peer disconnected while sending reply.")
+                _log_disconnect(
+                    "SlimeRPC serve: peer disconnected while sending reply."
+                )
                 return
 
 
@@ -121,7 +130,9 @@ def serve_once(
     try:
         tag, ptr, nbytes, _keepalive = channel.recv_message()
     except ConnectionError:
-        logger.info("SlimeRPC serve_once: peer disconnected.")
+        _log_disconnect(
+            "SlimeRPC serve_once: peer disconnected while waiting for request."
+        )
         return
 
     base_tag = tag & ~FLAG_MASK
@@ -152,5 +163,7 @@ def serve_once(
                 n = method_info.serialize_result(result, channel.ptr, channel.size)
             channel.send(base_tag | REPLY_BIT, n)
         except ConnectionError:
-            logger.info("SlimeRPC serve_once: peer disconnected while sending reply.")
+            _log_disconnect(
+                "SlimeRPC serve_once: peer disconnected while sending reply."
+            )
             return

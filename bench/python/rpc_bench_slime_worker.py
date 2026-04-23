@@ -9,6 +9,7 @@ Usage:
 
 import argparse
 import ctypes
+import traceback
 
 from dlslime import PeerAgent
 from dlslime.rpc import method, serve
@@ -44,8 +45,15 @@ def main():
 
     try:
         serve(worker, EchoService(), "bench-driver")
+        print(
+            "Worker serve loop exited normally (peer disconnected or channel closed)."
+        )
     except KeyboardInterrupt:
         pass
+    except Exception:
+        print("Worker serve loop crashed:")
+        traceback.print_exc()
+        raise
     finally:
         worker.shutdown()
 

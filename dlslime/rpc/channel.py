@@ -72,7 +72,8 @@ class Channel:
 
     def send(self, tag: int, nbytes: int):
         """Blocking send [tag|payload] to remote mailbox."""
-        self._post_write(tag, nbytes).wait()
+        future = self._post_write(tag, nbytes)
+        future.wait()
 
     def send_async(self, tag: int, nbytes: int):
         """Non-blocking send.  Returns ``SlimeReadWriteFuture``."""

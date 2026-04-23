@@ -481,7 +481,10 @@ class PeerAgent:
         """Periodically POST /heartbeat to refresh agent TTL in NanoCtrl."""
 
         def heartbeat_loop():
-            while not self._stop_event.is_set():
+            # Registration already sets a fresh TTL, so the first heartbeat does
+            # not need to race the startup path. Waiting one interval avoids a
+            # spurious immediate "not_found" response right after register.
+            while not self._stop_event.wait(interval):
                 try:
                     resp = self._client.heartbeat_peer(self.alias)
                     if resp.get("status") == "not_found":
@@ -492,7 +495,6 @@ class PeerAgent:
                         self._register()
                 except Exception as e:
                     print(f"PeerAgent {self.alias}: Heartbeat failed: {e}")
-                self._stop_event.wait(interval)
 
         self._heartbeat_thread = threading.Thread(target=heartbeat_loop, daemon=True)
         self._heartbeat_thread.start()
