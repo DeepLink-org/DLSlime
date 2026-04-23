@@ -170,14 +170,10 @@ class Channel:
         Returns:
             ``(base_tag, assembled_bytes)``
         """
-        parts: list[bytes] = []
-        while True:
-            tag, ptr, nbytes = self.recv()
-            parts.append(bytes((ctypes.c_char * nbytes).from_address(ptr)))
-            if tag & LAST_BIT:
-                base_tag = tag & ~FLAG_MASK
-                return base_tag, b"".join(parts)
-            # else it's a CHUNK_BIT — keep reading
+        tag, ptr, nbytes = self._recv_non_ack()
+        if not (tag & CHUNK_BIT):
+            raise RuntimeError(f"Expected chunked message, got tag={tag:#x}")
+        return self._recv_chunked_from_first(tag, ptr, nbytes)
 
     def _recv_chunked_from_first(
         self, tag: int, ptr: int, nbytes: int
