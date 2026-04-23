@@ -11,13 +11,14 @@ struct SendContext;
 struct RecvContext;
 struct ReadWriteContext;
 struct ImmRecvContext;
+struct EndpointOpState;
 
 /**
  * @brief Base class for RDMA futures, inherits from DeviceFuture
  *
  * Provides consistent interface with other device types (Ascend, NVLink)
  */
-class RDMAFuture : public DeviceFuture {
+class RDMAFuture: public DeviceFuture {
 public:
     virtual ~RDMAFuture() = default;
 
@@ -31,44 +32,44 @@ class ReadWriteFuture;
 
 class SendFuture: public RDMAFuture {
 public:
-    explicit SendFuture(SendContext* ctx);
+    explicit SendFuture(std::shared_ptr<EndpointOpState> op_state);
 
     int32_t wait() const override;
 
 private:
-    SendContext* ctx_;
+    std::shared_ptr<EndpointOpState> op_state_;
 };
 
 class RecvFuture: public RDMAFuture {
 public:
-    explicit RecvFuture(RecvContext* ctx);
+    explicit RecvFuture(std::shared_ptr<EndpointOpState> op_state);
 
     int32_t wait() const override;
 
 private:
-    RecvContext* ctx_;
+    std::shared_ptr<EndpointOpState> op_state_;
 };
 
 class ReadWriteFuture: public RDMAFuture {
 public:
-    explicit ReadWriteFuture(ReadWriteContext* ctx);
+    explicit ReadWriteFuture(std::shared_ptr<EndpointOpState> op_state);
 
     int32_t wait() const override;
 
 private:
-    ReadWriteContext* ctx_;
+    std::shared_ptr<EndpointOpState> op_state_;
 };
 
 class ImmRecvFuture: public RDMAFuture {
 public:
-    explicit ImmRecvFuture(ImmRecvContext* ctx);
+    explicit ImmRecvFuture(std::shared_ptr<EndpointOpState> op_state);
 
     int32_t wait() const override;
 
     int32_t immData() const;
 
 private:
-    ImmRecvContext* ctx_;
+    std::shared_ptr<EndpointOpState> op_state_;
 };
 
 }  // namespace dlslime

@@ -7,67 +7,79 @@
 
 namespace dlslime {
 
-SendFuture::SendFuture(SendContext* ctx): ctx_(ctx)
+namespace {
+
+void wait_on_op_state(const std::shared_ptr<EndpointOpState>& op_state)
 {
-    if (!ctx_) {
+    if (!op_state) {
+        throw std::runtime_error("ImmFuture created with null context");
+    }
+    if (op_state->signal) {
+        op_state->signal->wait_comm_done_cpu(op_state->expected_mask);
+    }
+}
+
+}  // namespace
+
+SendFuture::SendFuture(std::shared_ptr<EndpointOpState> op_state): op_state_(std::move(op_state))
+{
+    if (!op_state_) {
         throw std::runtime_error("ImmFuture created with null context");
     }
 }
 
 int32_t SendFuture::wait() const
 {
-    if (ctx_->signal) {
-        ctx_->signal->wait_comm_done_cpu(ctx_->expected_mask);
+    wait_on_op_state(op_state_);
+    if (op_state_->completion_status.load(std::memory_order_acquire) != RDMAAssign::SUCCESS) {
+        throw std::runtime_error("RDMA send completion failed");
     }
     return 0;
 }
 
-RecvFuture::RecvFuture(RecvContext* ctx): ctx_(std::move(ctx))
+RecvFuture::RecvFuture(std::shared_ptr<EndpointOpState> op_state): op_state_(std::move(op_state))
 {
-    if (!ctx_) {
+    if (!op_state_) {
         throw std::runtime_error("ImmFuture created with null context");
     }
 }
 
 int32_t RecvFuture::wait() const
 {
-    if (ctx_->signal) {
-        ctx_->signal->wait_comm_done_cpu(ctx_->expected_mask);
+    wait_on_op_state(op_state_);
+    if (op_state_->completion_status.load(std::memory_order_acquire) != RDMAAssign::SUCCESS) {
+        throw std::runtime_error("RDMA recv completion failed");
     }
     return 0;
 }
 
-ReadWriteFuture::ReadWriteFuture(ReadWriteContext* ctx): ctx_(std::move(ctx))
+ReadWriteFuture::ReadWriteFuture(std::shared_ptr<EndpointOpState> op_state): op_state_(std::move(op_state))
 {
-    if (!ctx_) {
+    if (!op_state_) {
         throw std::runtime_error("ImmFuture created with null context");
     }
 }
 
 int32_t ReadWriteFuture::wait() const
 {
-    if (ctx_->signal) {
-        ctx_->signal->wait_comm_done_cpu(ctx_->expected_mask);
-    }
-    if (ctx_->completion_status.load() != RDMAAssign::SUCCESS) {
+    wait_on_op_state(op_state_);
+    if (op_state_->completion_status.load(std::memory_order_acquire) != RDMAAssign::SUCCESS) {
         throw std::runtime_error("RDMA read/write completion failed");
     }
     return 0;
 }
 
-ImmRecvFuture::ImmRecvFuture(ImmRecvContext* ctx): ctx_(std::move(ctx))
+ImmRecvFuture::ImmRecvFuture(std::shared_ptr<EndpointOpState> op_state): op_state_(std::move(op_state))
 {
-    if (!ctx_) {
+    if (!op_state_) {
         throw std::runtime_error("ImmFuture created with null context");
     }
 }
 
 int32_t ImmRecvFuture::wait() const
 {
-    if (ctx_->signal) {
-        ctx_->signal->wait_comm_done_cpu(ctx_->expected_mask);
-    }
-    if (ctx_->completion_status.load() != RDMAAssign::SUCCESS) {
+    wait_on_op_state(op_state_);
+    if (op_state_->completion_status.load(std::memory_order_acquire) != RDMAAssign::SUCCESS) {
         throw std::runtime_error("RDMA imm recv completion failed");
     }
     return 0;
@@ -75,7 +87,7 @@ int32_t ImmRecvFuture::wait() const
 
 int32_t ImmRecvFuture::immData() const
 {
-    return ctx_->assigns_[0].imm_data_;
+    return op_state_->imm_data.load(std::memory_order_acquire);
 }
 
 }  // namespace dlslime

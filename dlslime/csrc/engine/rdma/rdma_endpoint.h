@@ -38,6 +38,15 @@ class RDMAWorker;
 constexpr int IO_BURST_SIZE = 32;
 constexpr int BURST_SIZE    = 128;
 
+struct EndpointOpState {
+    std::shared_ptr<dlslime::device::DeviceSignal> signal;
+    uint64_t                                       op_id{0};
+    uint32_t                                       expected_mask{0};
+    std::atomic<uint64_t>                          completion_mask{0};
+    std::atomic<int32_t>                           completion_status{RDMAAssign::SUCCESS};
+    std::atomic<int32_t>                           imm_data{0};
+};
+
 // ============================================================
 // Context Structures for IO Operations
 // ============================================================
@@ -54,7 +63,7 @@ enum class IOContextState {
 struct ReadWriteContext {
     int32_t slot_id;
 
-    std::shared_ptr<dlslime::device::DeviceSignal> signal;
+    std::shared_ptr<EndpointOpState> op_state;
 
     std::vector<RDMAAssign> assigns_;
 
@@ -67,19 +76,22 @@ struct ReadWriteContext {
     uint32_t  expected_mask;
 
     std::atomic<uint32_t> finished_qp_mask{0};
-    std::atomic<int32_t>  completion_status{0};
+    std::atomic<uint64_t> generation{0};
+    std::atomic<bool>     in_use{false};
 
     IOContextState state_ = IOContextState::FREE;
 };
 
 struct ImmRecvContext {
-    int32_t                                        slot_id;
-    std::shared_ptr<dlslime::device::DeviceSignal> signal;
-    std::vector<RDMAAssign>                        assigns_;
+    int32_t                          slot_id;
+    std::shared_ptr<EndpointOpState> op_state;
+    std::vector<RDMAAssign>          assigns_;
 
-    uint32_t             expected_mask;
-    std::atomic<int32_t> completion_status{0};
-    IOContextState       state_ = IOContextState::FREE;
+    uint32_t              expected_mask;
+    std::atomic<uint32_t> finished_qp_mask{0};
+    std::atomic<uint64_t> generation{0};
+    std::atomic<bool>     in_use{false};
+    IOContextState        state_ = IOContextState::FREE;
 };
 
 // ============================================================
@@ -138,15 +150,20 @@ struct alignas(64) SendContext {
 
     SendContextState state_;
 
-    std::shared_ptr<dlslime::device::DeviceSignal> signal;
+    std::shared_ptr<EndpointOpState> op_state;
 
-    uint64_t expected_mask = 0;
+    uint64_t              expected_mask = 0;
+    std::atomic<uint64_t> finished_mask{0};
+    std::atomic<uint64_t> generation{0};
+    std::atomic<bool>     in_use{false};
 
     void reset()
     {
         expected_mask = 0;
-        state_        = SendContextState::WAIT_GPU_READY;
-        signal->reset_all();
+        finished_mask.store(0, std::memory_order_release);
+        op_state.reset();
+        meta_arrived_flag_.val.store(0, std::memory_order_release);
+        state_ = SendContextState::WAIT_GPU_READY;
     }
 };
 
@@ -164,15 +181,19 @@ struct alignas(64) RecvContext {
 
     RecvContextState state_;
 
-    std::shared_ptr<dlslime::device::DeviceSignal> signal;
+    std::shared_ptr<EndpointOpState> op_state;
 
-    uint64_t expected_mask = 0;
+    uint64_t              expected_mask = 0;
+    std::atomic<uint64_t> finished_mask{0};
+    std::atomic<uint64_t> generation{0};
+    std::atomic<bool>     in_use{false};
 
     void reset()
     {
         expected_mask = 0;
-        state_        = RecvContextState::INIT_SEND_META;
-        signal->reset_all();
+        finished_mask.store(0, std::memory_order_release);
+        op_state.reset();
+        state_ = RecvContextState::INIT_SEND_META;
     }
 };
 
@@ -253,8 +274,11 @@ private:
     // ============================================================
     void dummyReset(ImmRecvContext* ctx);
 
-    int32_t
-    dispatchTask(OpCode op_code, const std::vector<assign_tuple_t>&, int32_t imm_data = 0, void* stream = nullptr);
+    int32_t dispatchTask(OpCode op_code,
+                         const std::vector<assign_tuple_t>&,
+                         std::shared_ptr<EndpointOpState> op_state,
+                         int32_t                          imm_data = 0,
+                         void*                            stream   = nullptr);
 
     int32_t readWriteProcess();
     int32_t immRecvProcess();
@@ -288,9 +312,6 @@ private:
     ReadWriteContext* read_write_ctx_pool_;
     ImmRecvContext*   imm_recv_ctx_pool_;
 
-    std::vector<std::shared_ptr<ReadWriteFuture>> read_write_future_pool_;
-    std::vector<std::shared_ptr<ImmRecvFuture>>   imm_recv_future_pool_;
-
     jring_t* read_write_buffer_ring_;
     jring_t* imm_recv_buffer_ring_;
 
@@ -298,9 +319,7 @@ private:
 
     std::atomic<uint64_t> rw_slot_id_{0};
     std::atomic<uint64_t> io_recv_slot_id_{0};
-
-    // Track how many Recvs we have actually posted to HW
-    std::atomic<uint64_t> posted_recv_cnt_{0};
+    std::atomic<uint64_t> next_op_id_{1};
 
     std::atomic<int32_t> token_bucket_[64];
 
@@ -323,9 +342,6 @@ private:
     // Context Pools to avoid dynamic allocation
     SendContext* send_ctx_pool_;
     RecvContext* recv_ctx_pool_;
-
-    std::vector<std::shared_ptr<SendFuture>> send_future_pool_;
-    std::vector<std::shared_ptr<RecvFuture>> recv_future_pool_;
 
     std::deque<SendContext*> pending_send_queue_;
     std::deque<RecvContext*> pending_recv_queue_;
