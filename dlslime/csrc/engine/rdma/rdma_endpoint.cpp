@@ -410,7 +410,11 @@ void RDMAEndpoint::dummyReset(ImmRecvContext* ctx)
         ctx->assigns_[qpi].batch_[0].source_offset = 0;
 
         ctx->assigns_[qpi].callback_ = [ctx, qpi](int32_t status, int32_t imm) {
-            ctx->completion_status.store(status, std::memory_order_release);
+            if (status != RDMAAssign::SUCCESS) {
+                int32_t expected = RDMAAssign::SUCCESS;
+                ctx->completion_status.compare_exchange_strong(
+                    expected, status, std::memory_order_release, std::memory_order_relaxed);
+            }
             ctx->assigns_[qpi].imm_data_ = (status == RDMAAssign::SUCCESS) ? imm : 0;
             ctx->signal->set_comm_done(qpi);
         };
