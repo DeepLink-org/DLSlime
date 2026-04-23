@@ -394,7 +394,8 @@ class PeerAgent:
     def _start_cleanup_listener(self) -> None:
         """Listen for cleanup events from peers (NanoCtrl pushes to inbox)."""
         # Flush any stale events left by a previous run so we don't act on them.
-        inbox_key = f"{self.redis_key_prefix}:inbox:{self.alias}"
+        prefix = f"{self.redis_key_prefix}:" if self.redis_key_prefix else ""
+        inbox_key = f"{prefix}inbox:{self.alias}"
         self.redis_client.delete(inbox_key)
 
         def event_loop():
