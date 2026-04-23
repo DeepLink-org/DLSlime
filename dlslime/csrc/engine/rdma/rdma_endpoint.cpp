@@ -410,8 +410,13 @@ void RDMAEndpoint::dummyReset(ImmRecvContext* ctx)
         ctx->assigns_[qpi].batch_[0].source_offset = 0;
 
         ctx->assigns_[qpi].callback_ = [ctx, qpi](int32_t status, int32_t imm) {
+            if (status != RDMAAssign::SUCCESS) {
+                int32_t expected = RDMAAssign::SUCCESS;
+                ctx->completion_status.compare_exchange_strong(
+                    expected, status, std::memory_order_release, std::memory_order_relaxed);
+            }
+            ctx->assigns_[qpi].imm_data_ = (status == RDMAAssign::SUCCESS) ? imm : 0;
             ctx->signal->set_comm_done(qpi);
-            ctx->assigns_[qpi].imm_data_ = imm;
         };
 
         ctx->assigns_[qpi].is_inline_ = false;
@@ -436,6 +441,7 @@ RDMAEndpoint::dispatchTask(OpCode op_code, const std::vector<assign_tuple_t>& as
         ctx->slot_id           = slot;
         ctx->expected_mask     = (1 << num_qp_) - 1;
         ctx->finished_qp_mask.store(0);
+        ctx->completion_status.store(RDMAAssign::SUCCESS, std::memory_order_release);
 
         last_slot = (int32_t)slot;
 
@@ -502,6 +508,11 @@ RDMAEndpoint::dispatchTask(OpCode op_code, const std::vector<assign_tuple_t>& as
             assign.is_inline_ = false;
 
             assign.callback_ = [this, ctx, qpi, is_final_slot](int32_t status, int32_t imm) {
+                if (status != RDMAAssign::SUCCESS) {
+                    int32_t expected = RDMAAssign::SUCCESS;
+                    ctx->completion_status.compare_exchange_strong(
+                        expected, status, std::memory_order_release, std::memory_order_relaxed);
+                }
                 uint32_t old_mask = ctx->finished_qp_mask.fetch_or(1 << qpi, std::memory_order_acq_rel);
                 uint32_t new_mask = old_mask | (1 << qpi);
 
@@ -697,6 +708,7 @@ int32_t RDMAEndpoint::immRecvProcess()
 
         ctx->slot_id       = slot;
         ctx->expected_mask = (1 << num_qp_) - 1;
+        ctx->completion_status.store(RDMAAssign::SUCCESS, std::memory_order_release);
 
         ctx->signal->reset_all();
 

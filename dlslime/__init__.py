@@ -10,14 +10,14 @@ except ImportError as e:
 
     def start_peer_agent(*args, **kwargs):
         raise ImportError(
-            "PeerAgent requires 'requests' and 'redis' packages. "
-            "Install them with: pip install requests redis"
+            "PeerAgent requires 'httpx' and 'redis' packages. "
+            "Install them with: pip install httpx redis"
         ) from _peer_agent_import_error
 
     def PeerAgent(*args, **kwargs):
         raise ImportError(
-            "PeerAgent requires 'requests' and 'redis' packages. "
-            "Install them with: pip install requests redis"
+            "PeerAgent requires 'httpx' and 'redis' packages. "
+            "Install them with: pip install httpx redis"
         ) from _peer_agent_import_error
 
 

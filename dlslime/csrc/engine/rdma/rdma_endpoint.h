@@ -67,6 +67,7 @@ struct ReadWriteContext {
     uint32_t  expected_mask;
 
     std::atomic<uint32_t> finished_qp_mask{0};
+    std::atomic<int32_t>  completion_status{0};
 
     IOContextState state_ = IOContextState::FREE;
 };
@@ -76,8 +77,9 @@ struct ImmRecvContext {
     std::shared_ptr<dlslime::device::DeviceSignal> signal;
     std::vector<RDMAAssign>                        assigns_;
 
-    uint32_t       expected_mask;
-    IOContextState state_ = IOContextState::FREE;
+    uint32_t             expected_mask;
+    std::atomic<int32_t> completion_status{0};
+    IOContextState       state_ = IOContextState::FREE;
 };
 
 // ============================================================

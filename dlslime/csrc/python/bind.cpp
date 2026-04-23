@@ -214,8 +214,8 @@ PYBIND11_MODULE(_slime_c, m)
              &dlslime::RDMAEndpoint::immRecv,
              py::arg("stream") = nullptr,
              py::call_guard<py::gil_scoped_release>())
-
-        .def("process", &dlslime::RDMAEndpoint::process, py::call_guard<py::gil_scoped_release>());
+        .def("process", &dlslime::RDMAEndpoint::process, py::call_guard<py::gil_scoped_release>())
+        .def("shutdown", &dlslime::RDMAEndpoint::shutdown, py::call_guard<py::gil_scoped_release>());
 
     // =========================================================================
     // RDMA Worker (Scheduler)

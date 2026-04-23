@@ -49,6 +49,9 @@ int32_t ReadWriteFuture::wait() const
     if (ctx_->signal) {
         ctx_->signal->wait_comm_done_cpu(ctx_->expected_mask);
     }
+    if (ctx_->completion_status.load() != RDMAAssign::SUCCESS) {
+        throw std::runtime_error("RDMA read/write completion failed");
+    }
     return 0;
 }
 
@@ -63,6 +66,9 @@ int32_t ImmRecvFuture::wait() const
 {
     if (ctx_->signal) {
         ctx_->signal->wait_comm_done_cpu(ctx_->expected_mask);
+    }
+    if (ctx_->completion_status.load() != RDMAAssign::SUCCESS) {
+        throw std::runtime_error("RDMA imm recv completion failed");
     }
     return 0;
 }
