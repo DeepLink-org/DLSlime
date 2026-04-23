@@ -155,7 +155,7 @@ class Channel:
             chunk = mv[offset : offset + chunk_size]
             n = len(chunk)
             self.ensure_send_capacity(n)
-            ctypes.memmove(self.ptr, bytes(chunk), n)
+            ctypes.memmove(self.ptr, chunk, n)
             is_last = offset + chunk_size >= len(mv)
             chunk_tag = tag | CHUNK_BIT
             if is_last:
