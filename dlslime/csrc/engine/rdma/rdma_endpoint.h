@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <deque>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -77,9 +78,23 @@ struct ImmRecvContext {
     std::shared_ptr<dlslime::device::DeviceSignal> signal;
     std::vector<RDMAAssign>                        assigns_;
 
-    uint32_t             expected_mask;
-    std::atomic<int32_t> completion_status{0};
-    IOContextState       state_ = IOContextState::FREE;
+    uint32_t              expected_mask;
+    std::atomic<uint32_t> finished_qp_mask{0};
+    std::atomic<int32_t>  completion_status{0};
+    std::atomic<int32_t>  imm_data{0};
+    IOContextState        state_ = IOContextState::FREE;
+};
+
+struct ImmRecvOpState {
+    std::shared_ptr<dlslime::device::DeviceSignal> signal;
+    uint32_t                                       expected_mask{0};
+    std::atomic<int32_t>                           completion_status{RDMAAssign::SUCCESS};
+    std::atomic<int32_t>                           imm_data{0};
+};
+
+struct ImmRecvEvent {
+    int32_t status{RDMAAssign::SUCCESS};
+    int32_t imm_data{0};
 };
 
 // ============================================================
@@ -252,6 +267,10 @@ private:
     // Private Methods - IO Operations
     // ============================================================
     void dummyReset(ImmRecvContext* ctx);
+    void postImmRecvSlot(ImmRecvContext* ctx);
+    void postImmRecvWindow();
+    void completeImmRecvOp(const std::shared_ptr<ImmRecvOpState>& op_state, const ImmRecvEvent& event);
+    void enqueueImmRecvCompletion(ImmRecvContext* ctx);
 
     int32_t
     dispatchTask(OpCode op_code, const std::vector<assign_tuple_t>&, int32_t imm_data = 0, void* stream = nullptr);
@@ -289,7 +308,6 @@ private:
     ImmRecvContext*   imm_recv_ctx_pool_;
 
     std::vector<std::shared_ptr<ReadWriteFuture>> read_write_future_pool_;
-    std::vector<std::shared_ptr<ImmRecvFuture>>   imm_recv_future_pool_;
 
     jring_t* read_write_buffer_ring_;
     jring_t* imm_recv_buffer_ring_;
@@ -299,10 +317,11 @@ private:
     std::atomic<uint64_t> rw_slot_id_{0};
     std::atomic<uint64_t> io_recv_slot_id_{0};
 
-    // Track how many Recvs we have actually posted to HW
-    std::atomic<uint64_t> posted_recv_cnt_{0};
-
-    std::atomic<int32_t> token_bucket_[64];
+    std::atomic<int32_t>                        token_bucket_[64];
+    std::mutex                                  imm_recv_mutex_;
+    std::deque<std::shared_ptr<ImmRecvOpState>> pending_imm_recv_ops_;
+    std::deque<ImmRecvEvent>                    completed_imm_recv_events_;
+    std::deque<ImmRecvContext*>                 pending_imm_recv_refill_;
 
     // Scratchpad buffers
     void*    io_burst_buf_[IO_BURST_SIZE];

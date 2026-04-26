@@ -11,13 +11,14 @@ struct SendContext;
 struct RecvContext;
 struct ReadWriteContext;
 struct ImmRecvContext;
+struct ImmRecvOpState;
 
 /**
  * @brief Base class for RDMA futures, inherits from DeviceFuture
  *
  * Provides consistent interface with other device types (Ascend, NVLink)
  */
-class RDMAFuture : public DeviceFuture {
+class RDMAFuture: public DeviceFuture {
 public:
     virtual ~RDMAFuture() = default;
 
@@ -61,14 +62,14 @@ private:
 
 class ImmRecvFuture: public RDMAFuture {
 public:
-    explicit ImmRecvFuture(ImmRecvContext* ctx);
+    explicit ImmRecvFuture(std::shared_ptr<ImmRecvOpState> op_state);
 
     int32_t wait() const override;
 
     int32_t immData() const;
 
 private:
-    ImmRecvContext* ctx_;
+    std::shared_ptr<ImmRecvOpState> op_state_;
 };
 
 }  // namespace dlslime
