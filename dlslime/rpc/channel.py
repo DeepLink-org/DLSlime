@@ -8,9 +8,13 @@ Wire format per message:
 """
 
 import ctypes
+import logging
 
 from dlslime import _slime_c
+from dlslime.logging import get_logger
 from .buffer import GrowableBuffer
+
+logger = get_logger("rpc")
 
 TAG_SIZE = 4  # u32 tag header
 
@@ -112,6 +116,17 @@ class Channel:
         future = self._ep.imm_recv()
         future.wait()
         total = future.imm_data()
+        if logger.isEnabledFor(logging.DEBUG) and hasattr(
+            future, "time_trace_elapsed_ns"
+        ):
+            elapsed_ns = future.time_trace_elapsed_ns()
+            logger.debug(
+                "RDMA imm_recv completed: total=%dB elapsed=%.3fus start_ns=%d end_ns=%d",
+                total,
+                elapsed_ns / 1000.0,
+                future.time_trace_start_ns(),
+                future.time_trace_end_ns(),
+            )
         if total < TAG_SIZE:
             raise ConnectionError(
                 f"RDMA channel closed (received {total}-byte completion, "

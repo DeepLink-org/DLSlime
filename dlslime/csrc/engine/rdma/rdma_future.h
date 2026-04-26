@@ -12,6 +12,7 @@ struct RecvContext;
 struct ReadWriteContext;
 struct ImmRecvContext;
 struct EndpointOpState;
+struct ImmRecvOpState;
 
 /**
  * @brief Base class for RDMA futures, inherits from DeviceFuture
@@ -62,14 +63,18 @@ private:
 
 class ImmRecvFuture: public RDMAFuture {
 public:
-    explicit ImmRecvFuture(std::shared_ptr<EndpointOpState> op_state);
+    explicit ImmRecvFuture(std::shared_ptr<ImmRecvOpState> op_state);
 
     int32_t wait() const override;
 
-    int32_t immData() const;
+    int32_t  immData() const;
+    bool     timeTraceEnabled() const;
+    uint64_t timeTraceStartNs() const;
+    uint64_t timeTraceEndNs() const;
+    uint64_t timeTraceElapsedNs() const;
 
 private:
-    std::shared_ptr<EndpointOpState> op_state_;
+    std::shared_ptr<ImmRecvOpState> op_state_;
 };
 
 }  // namespace dlslime

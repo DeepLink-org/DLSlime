@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <deque>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -83,15 +84,37 @@ struct ReadWriteContext {
 };
 
 struct ImmRecvContext {
-    int32_t                          slot_id;
-    std::shared_ptr<EndpointOpState> op_state;
-    std::vector<RDMAAssign>          assigns_;
+    int32_t                 slot_id;
+    std::vector<RDMAAssign> assigns_;
 
+    // Transport-owned receive slot. These contexts are kept posted on the
+    // hardware RQ and recycled after completion; user futures must not retain
+    // pointers to them because the slot can be refilled and reused.
     uint32_t              expected_mask;
     std::atomic<uint32_t> finished_qp_mask{0};
-    std::atomic<uint64_t> generation{0};
-    std::atomic<bool>     in_use{false};
+    std::atomic<int32_t>  completion_status{0};
+    std::atomic<int32_t>  imm_data{0};
     IOContextState        state_ = IOContextState::FREE;
+};
+
+struct ImmRecvOpState {
+    // User-owned state for one immRecv() call. A completion event is copied
+    // here when it is matched to this operation, so wait()/immData() remain
+    // stable even after the transport slot is reposted.
+    std::shared_ptr<dlslime::device::DeviceSignal> signal;
+    uint32_t                                       expected_mask{0};
+    std::atomic<int32_t>                           completion_status{RDMAAssign::SUCCESS};
+    std::atomic<int32_t>                           imm_data{0};
+    std::atomic<uint64_t>                          trace_start_ns{0};
+    std::atomic<uint64_t>                          trace_end_ns{0};
+};
+
+struct ImmRecvEvent {
+    // Small value object that bridges transport completions and user receives.
+    // It may be queued briefly if a WRITE_WITH_IMM arrives before immRecv().
+    int32_t  status{RDMAAssign::SUCCESS};
+    int32_t  imm_data{0};
+    uint64_t trace_end_ns{0};
 };
 
 // ============================================================
@@ -273,6 +296,10 @@ private:
     // Private Methods - IO Operations
     // ============================================================
     void dummyReset(ImmRecvContext* ctx);
+    void postImmRecvSlot(ImmRecvContext* ctx);
+    void postImmRecvWindow();
+    void completeImmRecvOp(const std::shared_ptr<ImmRecvOpState>& op_state, const ImmRecvEvent& event);
+    void enqueueImmRecvCompletion(ImmRecvContext* ctx);
 
     int32_t dispatchTask(OpCode op_code,
                          const std::vector<assign_tuple_t>&,
@@ -322,6 +349,14 @@ private:
     std::atomic<uint64_t> next_op_id_{1};
 
     std::atomic<int32_t> token_bucket_[64];
+    std::mutex           imm_recv_mutex_;
+    // Matching queues for the decoupled imm-recv path:
+    // - pending_imm_recv_ops_: user immRecv() calls waiting for a completion
+    // - completed_imm_recv_events_: completions that arrived before immRecv()
+    // - pending_imm_recv_refill_: transport slots ready to be reposted
+    std::deque<std::shared_ptr<ImmRecvOpState>> pending_imm_recv_ops_;
+    std::deque<ImmRecvEvent>                    completed_imm_recv_events_;
+    std::deque<ImmRecvContext*>                 pending_imm_recv_refill_;
 
     // Scratchpad buffers
     void*    io_burst_buf_[IO_BURST_SIZE];

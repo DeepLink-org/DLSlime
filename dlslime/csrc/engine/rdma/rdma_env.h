@@ -25,4 +25,5 @@ inline const int SLIME_AGG_QP_NUM           = get_env<int>("SLIME_AGG_QP_NUM", 1
 inline const int SLIME_BYPASS_DEVICE_SIGNAL = get_env<int>("SLIME_BYPASS_DEVICE_SIGNAL", 1);
 inline const int SLIME_MAX_MSG_FIFO_DEPTH   = get_env<int>("SLIME_MAX_MSG_FIFO_DEPTH", 1024);
 inline const int SLIME_MAX_IO_FIFO_DEPTH    = get_env<int>("SLIME_MAX_IO_FIFO_DEPTH", 2048);
+inline const int SLIME_WITH_TIME_TRACE      = get_env<int>("SLIME_WITH_TIME_TRACE", get_env<int>("WITH_TIME_TRACE", 1));
 }  // namespace dlslime

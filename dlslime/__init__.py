@@ -1,6 +1,8 @@
 from ._slime_c import *
 import os
 
+from .logging import get_logger, set_log_level
+
 try:
     from .peer_agent import PeerAgent, start_peer_agent
 except ImportError as e:
