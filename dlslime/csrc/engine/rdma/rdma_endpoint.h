@@ -14,6 +14,7 @@
 #include "dlslime/csrc/device/device_api.h"
 #include "dlslime/csrc/device/signal.h"
 #include "dlslime/csrc/engine/assignment.h"
+#include "dlslime/csrc/utils.h"
 #include "memory_pool.h"
 #include "rdma_assignment.h"
 #include "rdma_channel.h"
@@ -86,6 +87,9 @@ struct ImmRecvContext {
     std::atomic<int32_t>  completion_status{0};
     std::atomic<int32_t>  imm_data{0};
     IOContextState        state_ = IOContextState::FREE;
+
+    // Intrusive pointer for lock-free MPSC refill stack.
+    std::atomic<ImmRecvContext*> next_refill_{nullptr};
 };
 
 struct ImmRecvOpState {
@@ -283,6 +287,10 @@ private:
     void completeImmRecvOp(const std::shared_ptr<ImmRecvOpState>& op_state, const ImmRecvEvent& event);
     void enqueueImmRecvCompletion(ImmRecvContext* ctx);
 
+    /// Lock-free MPSC helpers for the refill stack.
+    void            pushRefill(ImmRecvContext* ctx);
+    ImmRecvContext* popAllRefill();
+
     int32_t
     dispatchTask(OpCode op_code, const std::vector<assign_tuple_t>&, int32_t imm_data = 0, void* stream = nullptr);
 
@@ -329,14 +337,16 @@ private:
     std::atomic<uint64_t> io_recv_slot_id_{0};
 
     std::atomic<int32_t> token_bucket_[64];
-    std::mutex           imm_recv_mutex_;
-    // Matching queues for the decoupled imm-recv path:
-    // - pending_imm_recv_ops_: user immRecv() calls waiting for a completion
-    // - completed_imm_recv_events_: completions that arrived before immRecv()
-    // - pending_imm_recv_refill_: transport slots ready to be reposted
+
+    // Matching queues for the decoupled imm-recv path.
+    // Protected by imm_recv_match_lock_ (spinlock, short critical sections).
+    SpinLock                                    imm_recv_match_lock_;
     std::deque<std::shared_ptr<ImmRecvOpState>> pending_imm_recv_ops_;
     std::deque<ImmRecvEvent>                    completed_imm_recv_events_;
-    std::deque<ImmRecvContext*>                 pending_imm_recv_refill_;
+
+    // Lock-free MPSC refill stack. CQ callback threads push via pushRefill(),
+    // the progress thread drains via popAllRefill(). No lock needed.
+    std::atomic<ImmRecvContext*> refill_head_{nullptr};
 
     // Scratchpad buffers
     void*    io_burst_buf_[IO_BURST_SIZE];

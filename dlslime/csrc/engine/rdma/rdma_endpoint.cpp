@@ -460,6 +460,23 @@ void RDMAEndpoint::postImmRecvWindow()
     }
 }
 
+void RDMAEndpoint::pushRefill(ImmRecvContext* ctx)
+{
+    // Lock-free MPSC push: CQ callback threads push completed slots.
+    ImmRecvContext* old_head = refill_head_.load(std::memory_order_relaxed);
+    do {
+        ctx->next_refill_.store(old_head, std::memory_order_relaxed);
+    } while (!refill_head_.compare_exchange_weak(
+        old_head, ctx, std::memory_order_release, std::memory_order_relaxed));
+}
+
+ImmRecvContext* RDMAEndpoint::popAllRefill()
+{
+    // Atomically grab the entire refill chain. Only the progress thread calls
+    // this, so a single exchange is sufficient (no ABA concern).
+    return refill_head_.exchange(nullptr, std::memory_order_acquire);
+}
+
 void RDMAEndpoint::completeImmRecvOp(const std::shared_ptr<ImmRecvOpState>& op_state, const ImmRecvEvent& event)
 {
     if (!op_state) {
@@ -490,7 +507,7 @@ void RDMAEndpoint::enqueueImmRecvCompletion(ImmRecvContext* ctx)
 
     std::shared_ptr<ImmRecvOpState> op_state;
     {
-        std::lock_guard<std::mutex> guard(imm_recv_mutex_);
+        std::lock_guard<SpinLock> guard(imm_recv_match_lock_);
         if (!pending_imm_recv_ops_.empty()) {
             op_state = std::move(pending_imm_recv_ops_.front());
             pending_imm_recv_ops_.pop_front();
@@ -501,8 +518,10 @@ void RDMAEndpoint::enqueueImmRecvCompletion(ImmRecvContext* ctx)
             // than blocking indefinitely.
             completed_imm_recv_events_.push_back(event);
         }
-        pending_imm_recv_refill_.push_back(ctx);
     }
+
+    // Lock-free push to refill stack — outside any lock.
+    pushRefill(ctx);
 
     if (op_state) {
         completeImmRecvOp(op_state, event);
@@ -734,7 +753,7 @@ std::shared_ptr<ImmRecvFuture> RDMAEndpoint::immRecv(void* stream)
 
     std::optional<ImmRecvEvent> ready_event;
     {
-        std::lock_guard<std::mutex> guard(imm_recv_mutex_);
+        std::lock_guard<SpinLock> guard(imm_recv_match_lock_);
         if (!completed_imm_recv_events_.empty()) {
             ready_event = completed_imm_recv_events_.front();
             completed_imm_recv_events_.pop_front();
@@ -802,19 +821,14 @@ int32_t RDMAEndpoint::immRecvProcess()
 {
     int32_t work_done = 0;
 
-    // Repost completed transport slots. Keeping refill out of the CQ callback
-    // avoids mutating RDMAAssign while its callback is still executing.
-    while (true) {
-        ImmRecvContext* ctx = nullptr;
-        {
-            std::lock_guard<std::mutex> guard(imm_recv_mutex_);
-            if (pending_imm_recv_refill_.empty()) {
-                break;
-            }
-            ctx = pending_imm_recv_refill_.front();
-            pending_imm_recv_refill_.pop_front();
-        }
-        postImmRecvSlot(ctx);
+    // Atomically drain the entire lock-free refill stack in one exchange,
+    // then batch-repost all completed transport slots without any locking.
+    ImmRecvContext* batch = popAllRefill();
+    while (batch) {
+        ImmRecvContext* next = batch->next_refill_.load(std::memory_order_relaxed);
+        batch->next_refill_.store(nullptr, std::memory_order_relaxed);
+        postImmRecvSlot(batch);
+        batch = next;
         work_done++;
     }
 
@@ -1020,7 +1034,7 @@ int32_t RDMAEndpoint::process()
 void RDMAEndpoint::cancelAll()
 {
     {
-        std::lock_guard<std::mutex> guard(imm_recv_mutex_);
+        std::lock_guard<SpinLock> guard(imm_recv_match_lock_);
         for (auto& op_state : pending_imm_recv_ops_) {
             if (op_state) {
                 op_state->completion_status.store(RDMAAssign::FAILED, std::memory_order_release);
@@ -1031,8 +1045,10 @@ void RDMAEndpoint::cancelAll()
         }
         pending_imm_recv_ops_.clear();
         completed_imm_recv_events_.clear();
-        pending_imm_recv_refill_.clear();
     }
+
+    // Drain the lock-free refill stack.
+    popAllRefill();
 
     for (int i = 0; i < SLIME_MAX_IO_FIFO_DEPTH; ++i) {
         if (read_write_ctx_pool_) {

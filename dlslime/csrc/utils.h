@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <stdexcept>
@@ -8,6 +9,24 @@
 #include "dlslime/csrc/common/jring.h"
 
 namespace dlslime {
+
+// ============================================================
+// SpinLock — lightweight alternative to std::mutex for short
+// critical sections (e.g. the imm-recv matching path).
+// ============================================================
+
+class SpinLock {
+    std::atomic_flag flag_ = ATOMIC_FLAG_INIT;
+
+public:
+    void lock() noexcept
+    {
+        while (flag_.test_and_set(std::memory_order_acquire)) {
+            // Spin. On x86 this compiles to a PAUSE-based loop.
+        }
+    }
+    void unlock() noexcept { flag_.clear(std::memory_order_release); }
+};
 
 inline jring_t* createRing(const char* name, size_t count)
 {
