@@ -78,6 +78,9 @@ struct ImmRecvContext {
     std::shared_ptr<dlslime::device::DeviceSignal> signal;
     std::vector<RDMAAssign>                        assigns_;
 
+    // Transport-owned receive slot. These contexts are kept posted on the
+    // hardware RQ and recycled after completion; user futures must not retain
+    // pointers to them because the slot can be refilled and reused.
     uint32_t              expected_mask;
     std::atomic<uint32_t> finished_qp_mask{0};
     std::atomic<int32_t>  completion_status{0};
@@ -86,6 +89,9 @@ struct ImmRecvContext {
 };
 
 struct ImmRecvOpState {
+    // User-owned state for one immRecv() call. A completion event is copied
+    // here when it is matched to this operation, so wait()/immData() remain
+    // stable even after the transport slot is reposted.
     std::shared_ptr<dlslime::device::DeviceSignal> signal;
     uint32_t                                       expected_mask{0};
     std::atomic<int32_t>                           completion_status{RDMAAssign::SUCCESS};
@@ -93,6 +99,8 @@ struct ImmRecvOpState {
 };
 
 struct ImmRecvEvent {
+    // Small value object that bridges transport completions and user receives.
+    // It may be queued briefly if a WRITE_WITH_IMM arrives before immRecv().
     int32_t status{RDMAAssign::SUCCESS};
     int32_t imm_data{0};
 };
@@ -317,8 +325,12 @@ private:
     std::atomic<uint64_t> rw_slot_id_{0};
     std::atomic<uint64_t> io_recv_slot_id_{0};
 
-    std::atomic<int32_t>                        token_bucket_[64];
-    std::mutex                                  imm_recv_mutex_;
+    std::atomic<int32_t> token_bucket_[64];
+    std::mutex           imm_recv_mutex_;
+    // Matching queues for the decoupled imm-recv path:
+    // - pending_imm_recv_ops_: user immRecv() calls waiting for a completion
+    // - completed_imm_recv_events_: completions that arrived before immRecv()
+    // - pending_imm_recv_refill_: transport slots ready to be reposted
     std::deque<std::shared_ptr<ImmRecvOpState>> pending_imm_recv_ops_;
     std::deque<ImmRecvEvent>                    completed_imm_recv_events_;
     std::deque<ImmRecvContext*>                 pending_imm_recv_refill_;

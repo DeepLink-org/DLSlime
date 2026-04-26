@@ -450,6 +450,9 @@ void RDMAEndpoint::postImmRecvSlot(ImmRecvContext* ctx)
 
 void RDMAEndpoint::postImmRecvWindow()
 {
+    // Fill the IO receive queues independently of user immRecv() calls. This
+    // is the RNR-avoidance window: WRITE_WITH_IMM should find a posted receive
+    // even if the application has not yet asked for the next message.
     for (int i = 0; i < SLIME_MAX_IO_FIFO_DEPTH; ++i) {
         ImmRecvContext* ctx = &imm_recv_ctx_pool_[i];
         ctx->slot_id        = i;
@@ -473,6 +476,9 @@ void RDMAEndpoint::completeImmRecvOp(const std::shared_ptr<ImmRecvOpState>& op_s
 
 void RDMAEndpoint::enqueueImmRecvCompletion(ImmRecvContext* ctx)
 {
+    // CQ callbacks run on the polling thread. Copy the reusable transport
+    // slot's result into a small event, match it to a user op if possible, and
+    // let the endpoint progress loop repost the slot outside the callback.
     ImmRecvEvent event{
         ctx->completion_status.load(std::memory_order_acquire),
         ctx->imm_data.load(std::memory_order_acquire),
@@ -704,6 +710,9 @@ std::shared_ptr<ImmRecvFuture> RDMAEndpoint::immRecv(void* stream)
 {
     io_recv_slot_id_.fetch_add(1, std::memory_order_relaxed);
 
+    // One user-level receive operation. It may complete immediately from a
+    // queued event, or wait in pending_imm_recv_ops_ until a future CQ event
+    // arrives. It does not own a hardware receive slot.
     auto op_state               = std::make_shared<ImmRecvOpState>();
     op_state->signal            = dlslime::device::createSignal(false);
     op_state->expected_mask     = (1u << num_qp_) - 1;
@@ -782,6 +791,8 @@ int32_t RDMAEndpoint::immRecvProcess()
 {
     int32_t work_done = 0;
 
+    // Repost completed transport slots. Keeping refill out of the CQ callback
+    // avoids mutating RDMAAssign while its callback is still executing.
     while (true) {
         ImmRecvContext* ctx = nullptr;
         {
