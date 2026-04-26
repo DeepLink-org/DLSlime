@@ -1,5 +1,7 @@
 #pragma once
 
+#include <chrono>
+#include <cstdint>
 #include <stdexcept>
 #include <string>
 
@@ -33,6 +35,13 @@ inline void freeRing(jring_t* ring)
     if (ring) {
         free(ring);
     }
+}
+
+inline uint64_t monotonic_time_ns()
+{
+    return static_cast<uint64_t>(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch())
+            .count());
 }
 
 }  // namespace dlslime
