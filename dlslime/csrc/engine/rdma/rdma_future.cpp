@@ -68,7 +68,7 @@ int32_t ImmRecvFuture::wait() const
     if (op_state_->signal) {
         op_state_->signal->wait_comm_done_cpu(op_state_->expected_mask);
     }
-    return 0;
+    return static_cast<int32_t>(op_state_->completion_status.load(std::memory_order_acquire));
 }
 
 int32_t ImmRecvFuture::immData() const
