@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <deque>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -13,6 +14,7 @@
 #include "dlslime/csrc/device/device_api.h"
 #include "dlslime/csrc/device/signal.h"
 #include "dlslime/csrc/engine/assignment.h"
+#include "dlslime/csrc/utils.h"
 #include "memory_pool.h"
 #include "rdma_assignment.h"
 #include "rdma_channel.h"
@@ -77,9 +79,37 @@ struct ImmRecvContext {
     std::shared_ptr<dlslime::device::DeviceSignal> signal;
     std::vector<RDMAAssign>                        assigns_;
 
-    uint32_t             expected_mask;
-    std::atomic<int32_t> completion_status{0};
-    IOContextState       state_ = IOContextState::FREE;
+    // Transport-owned receive slot. These contexts are kept posted on the
+    // hardware RQ and recycled after completion; user futures must not retain
+    // pointers to them because the slot can be refilled and reused.
+    uint32_t              expected_mask;
+    std::atomic<uint32_t> finished_qp_mask{0};
+    std::atomic<int32_t>  completion_status{0};
+    std::atomic<int32_t>  imm_data{0};
+    IOContextState        state_ = IOContextState::FREE;
+
+    // Intrusive pointer for lock-free MPSC refill stack.
+    std::atomic<ImmRecvContext*> next_refill_{nullptr};
+};
+
+struct ImmRecvOpState {
+    // User-owned state for one immRecv() call. A completion event is copied
+    // here when it is matched to this operation, so wait()/immData() remain
+    // stable even after the transport slot is reposted.
+    std::shared_ptr<dlslime::device::DeviceSignal> signal;
+    uint32_t                                       expected_mask{0};
+    std::atomic<int32_t>                           completion_status{RDMAAssign::SUCCESS};
+    std::atomic<int32_t>                           imm_data{0};
+    std::atomic<uint64_t>                          trace_start_ns{0};
+    std::atomic<uint64_t>                          trace_end_ns{0};
+};
+
+struct ImmRecvEvent {
+    // Small value object that bridges transport completions and user receives.
+    // It may be queued briefly if a WRITE_WITH_IMM arrives before immRecv().
+    int32_t  status{RDMAAssign::SUCCESS};
+    int32_t  imm_data{0};
+    uint64_t trace_end_ns{0};
 };
 
 // ============================================================
@@ -252,6 +282,14 @@ private:
     // Private Methods - IO Operations
     // ============================================================
     void dummyReset(ImmRecvContext* ctx);
+    void postImmRecvSlot(ImmRecvContext* ctx);
+    void postImmRecvWindow();
+    void completeImmRecvOp(const std::shared_ptr<ImmRecvOpState>& op_state, const ImmRecvEvent& event);
+    void enqueueImmRecvCompletion(ImmRecvContext* ctx);
+
+    /// Lock-free MPSC helpers for the refill stack.
+    void            pushRefill(ImmRecvContext* ctx);
+    ImmRecvContext* popAllRefill();
 
     int32_t
     dispatchTask(OpCode op_code, const std::vector<assign_tuple_t>&, int32_t imm_data = 0, void* stream = nullptr);
@@ -289,7 +327,6 @@ private:
     ImmRecvContext*   imm_recv_ctx_pool_;
 
     std::vector<std::shared_ptr<ReadWriteFuture>> read_write_future_pool_;
-    std::vector<std::shared_ptr<ImmRecvFuture>>   imm_recv_future_pool_;
 
     jring_t* read_write_buffer_ring_;
     jring_t* imm_recv_buffer_ring_;
@@ -299,10 +336,17 @@ private:
     std::atomic<uint64_t> rw_slot_id_{0};
     std::atomic<uint64_t> io_recv_slot_id_{0};
 
-    // Track how many Recvs we have actually posted to HW
-    std::atomic<uint64_t> posted_recv_cnt_{0};
-
     std::atomic<int32_t> token_bucket_[64];
+
+    // Matching queues for the decoupled imm-recv path.
+    // Protected by imm_recv_match_lock_ (spinlock, short critical sections).
+    SpinLock                                    imm_recv_match_lock_;
+    std::deque<std::shared_ptr<ImmRecvOpState>> pending_imm_recv_ops_;
+    std::deque<ImmRecvEvent>                    completed_imm_recv_events_;
+
+    // Lock-free MPSC refill stack. CQ callback threads push via pushRefill(),
+    // the progress thread drains via popAllRefill(). No lock needed.
+    std::atomic<ImmRecvContext*> refill_head_{nullptr};
 
     // Scratchpad buffers
     void*    io_burst_buf_[IO_BURST_SIZE];

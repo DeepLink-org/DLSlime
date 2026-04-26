@@ -1,12 +1,12 @@
 """serve() — worker-side event loop that dispatches incoming RPC calls."""
 
 import ctypes
-import logging
 
+from dlslime.logging import get_logger
 from .channel import Channel, FLAG_MASK, REPLY_BIT
 from .registry import MethodRegistry
 
-logger = logging.getLogger("slime.rpc")
+logger = get_logger("rpc")
 
 
 def _log_disconnect(message: str) -> None:

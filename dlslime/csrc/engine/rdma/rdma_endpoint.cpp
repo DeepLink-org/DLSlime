@@ -11,6 +11,7 @@
 #include <cstring>
 #include <memory>
 #include <new>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -123,7 +124,6 @@ void RDMAEndpoint::init(std::shared_ptr<RDMAWorker> worker)
 
     for (size_t i = 0; i < SLIME_MAX_IO_FIFO_DEPTH; ++i) {
         read_write_future_pool_.push_back(std::make_shared<ReadWriteFuture>(&(read_write_ctx_pool_[i])));
-        imm_recv_future_pool_.push_back(std::make_shared<ImmRecvFuture>(&(imm_recv_ctx_pool_[i])));
     }
 
     void* io_dummy_mem = nullptr;
@@ -271,6 +271,7 @@ void RDMAEndpoint::connect(const json& remote_endpoint_info)
     // Connect IO Endpoint
     if (remote_endpoint_info.contains("io_info")) {
         io_data_channel_->connect(remote_endpoint_info["io_info"]["data_channel_info"]);
+        postImmRecvWindow();
     }
     else {
         SLIME_LOG_WARN("UnifiedConnect: Missing 'io_info' in remote info");
@@ -409,19 +410,121 @@ void RDMAEndpoint::dummyReset(ImmRecvContext* ctx)
         ctx->assigns_[qpi].batch_[0].target_offset = 0;
         ctx->assigns_[qpi].batch_[0].source_offset = 0;
 
-        ctx->assigns_[qpi].callback_ = [ctx, qpi](int32_t status, int32_t imm) {
+        ctx->assigns_[qpi].callback_ = [this, ctx, qpi](int32_t status, int32_t imm) {
             if (status != RDMAAssign::SUCCESS) {
                 int32_t expected = RDMAAssign::SUCCESS;
                 ctx->completion_status.compare_exchange_strong(
                     expected, status, std::memory_order_release, std::memory_order_relaxed);
             }
-            ctx->assigns_[qpi].imm_data_ = (status == RDMAAssign::SUCCESS) ? imm : 0;
-            ctx->signal->set_comm_done(qpi);
+            else if (qpi == 0) {
+                ctx->imm_data.store(imm, std::memory_order_release);
+            }
+
+            uint32_t old_mask = ctx->finished_qp_mask.fetch_or(1u << qpi, std::memory_order_acq_rel);
+            uint32_t new_mask = old_mask | (1u << qpi);
+            if (new_mask == ctx->expected_mask) {
+                enqueueImmRecvCompletion(ctx);
+            }
         };
 
         ctx->assigns_[qpi].is_inline_ = false;
 
         ctx->assigns_[qpi].imm_data_ = 0;
+    }
+}
+
+void RDMAEndpoint::postImmRecvSlot(ImmRecvContext* ctx)
+{
+    ctx->expected_mask = (1u << num_qp_) - 1;
+    ctx->finished_qp_mask.store(0, std::memory_order_release);
+    ctx->completion_status.store(RDMAAssign::SUCCESS, std::memory_order_release);
+    ctx->imm_data.store(0, std::memory_order_release);
+
+    dummyReset(ctx);
+
+    for (size_t qpi = 0; qpi < num_qp_; ++qpi) {
+        io_data_channel_->post_recv_batch(qpi, &(ctx->assigns_[qpi]), meta_pool_);
+    }
+    ctx->state_ = IOContextState::POSTED;
+}
+
+void RDMAEndpoint::postImmRecvWindow()
+{
+    // Fill the IO receive queues independently of user immRecv() calls. This
+    // is the RNR-avoidance window: WRITE_WITH_IMM should find a posted receive
+    // even if the application has not yet asked for the next message.
+    for (int i = 0; i < SLIME_MAX_IO_FIFO_DEPTH; ++i) {
+        ImmRecvContext* ctx = &imm_recv_ctx_pool_[i];
+        ctx->slot_id        = i;
+        postImmRecvSlot(ctx);
+    }
+}
+
+void RDMAEndpoint::pushRefill(ImmRecvContext* ctx)
+{
+    // Lock-free MPSC push: CQ callback threads push completed slots.
+    ImmRecvContext* old_head = refill_head_.load(std::memory_order_relaxed);
+    do {
+        ctx->next_refill_.store(old_head, std::memory_order_relaxed);
+    } while (!refill_head_.compare_exchange_weak(
+        old_head, ctx, std::memory_order_release, std::memory_order_relaxed));
+}
+
+ImmRecvContext* RDMAEndpoint::popAllRefill()
+{
+    // Atomically grab the entire refill chain. Only the progress thread calls
+    // this, so a single exchange is sufficient (no ABA concern).
+    return refill_head_.exchange(nullptr, std::memory_order_acquire);
+}
+
+void RDMAEndpoint::completeImmRecvOp(const std::shared_ptr<ImmRecvOpState>& op_state, const ImmRecvEvent& event)
+{
+    if (!op_state) {
+        return;
+    }
+    op_state->completion_status.store(event.status, std::memory_order_release);
+    op_state->imm_data.store(event.imm_data, std::memory_order_release);
+    if (SLIME_WITH_TIME_TRACE) {
+        op_state->trace_end_ns.store(event.trace_end_ns, std::memory_order_release);
+    }
+    if (op_state->signal) {
+        for (size_t qpi = 0; qpi < num_qp_; ++qpi) {
+            op_state->signal->set_comm_done(qpi);
+        }
+    }
+}
+
+void RDMAEndpoint::enqueueImmRecvCompletion(ImmRecvContext* ctx)
+{
+    // CQ callbacks run on the polling thread. Copy the reusable transport
+    // slot's result into a small event, match it to a user op if possible, and
+    // let the endpoint progress loop repost the slot outside the callback.
+    ImmRecvEvent event{
+        ctx->completion_status.load(std::memory_order_acquire),
+        ctx->imm_data.load(std::memory_order_acquire),
+        SLIME_WITH_TIME_TRACE ? monotonic_time_ns() : 0,
+    };
+
+    std::shared_ptr<ImmRecvOpState> op_state;
+    {
+        std::lock_guard<SpinLock> guard(imm_recv_match_lock_);
+        if (!pending_imm_recv_ops_.empty()) {
+            op_state = std::move(pending_imm_recv_ops_.front());
+            pending_imm_recv_ops_.pop_front();
+        }
+        else {
+            // Queue all events (SUCCESS, FAILED, FLUSH) so that a future
+            // immRecv() caller observes the actual completion status rather
+            // than blocking indefinitely.
+            completed_imm_recv_events_.push_back(event);
+        }
+    }
+
+    // Lock-free push to refill stack — outside any lock.
+    pushRefill(ctx);
+
+    if (op_state) {
+        completeImmRecvOp(op_state, event);
     }
 }
 
@@ -631,12 +734,40 @@ RDMAEndpoint::writeWithImm(const std::vector<assign_tuple_t>& assign, int32_t im
 
 std::shared_ptr<ImmRecvFuture> RDMAEndpoint::immRecv(void* stream)
 {
-    uint64_t        slot = io_recv_slot_id_.fetch_add(1, std::memory_order_relaxed) % SLIME_MAX_IO_FIFO_DEPTH;
-    ImmRecvContext* ctx  = &imm_recv_ctx_pool_[slot];
+    io_recv_slot_id_.fetch_add(1, std::memory_order_relaxed);
 
-    ctx->signal->bind_stream(stream);
+    // One user-level receive operation. It may complete immediately from a
+    // queued event, or wait in pending_imm_recv_ops_ until a future CQ event
+    // arrives. It does not own a hardware receive slot.
+    auto op_state               = std::make_shared<ImmRecvOpState>();
+    op_state->signal            = dlslime::device::createSignal(false);
+    op_state->expected_mask     = (1u << num_qp_) - 1;
+    op_state->completion_status = RDMAAssign::SUCCESS;
+    op_state->imm_data          = 0;
+    if (SLIME_WITH_TIME_TRACE) {
+        op_state->trace_start_ns.store(monotonic_time_ns(), std::memory_order_release);
+        op_state->trace_end_ns.store(0, std::memory_order_release);
+    }
+    op_state->signal->reset_all();
+    op_state->signal->bind_stream(stream);
 
-    return imm_recv_future_pool_[slot];
+    std::optional<ImmRecvEvent> ready_event;
+    {
+        std::lock_guard<SpinLock> guard(imm_recv_match_lock_);
+        if (!completed_imm_recv_events_.empty()) {
+            ready_event = completed_imm_recv_events_.front();
+            completed_imm_recv_events_.pop_front();
+        }
+        else {
+            pending_imm_recv_ops_.push_back(op_state);
+        }
+    }
+
+    if (ready_event) {
+        completeImmRecvOp(op_state, *ready_event);
+    }
+
+    return std::make_shared<ImmRecvFuture>(op_state);
 }
 
 // ============================================================
@@ -690,41 +821,15 @@ int32_t RDMAEndpoint::immRecvProcess()
 {
     int32_t work_done = 0;
 
-    const uint64_t PRE_POST_WINDOW = 32;
-
-    uint64_t user_req_cnt = io_recv_slot_id_.load(std::memory_order_relaxed);
-    uint64_t posted_cnt   = posted_recv_cnt_.load(std::memory_order_relaxed);
-
-    uint64_t target_post = user_req_cnt + PRE_POST_WINDOW;
-
-    while (posted_cnt < target_post) {
-        uint64_t slot = posted_cnt % SLIME_MAX_IO_FIFO_DEPTH;
-
-        if (posted_cnt > user_req_cnt + SLIME_MAX_IO_FIFO_DEPTH) {
-            break;
-        }
-
-        ImmRecvContext* ctx = &imm_recv_ctx_pool_[slot];
-
-        ctx->slot_id       = slot;
-        ctx->expected_mask = (1 << num_qp_) - 1;
-        ctx->completion_status.store(RDMAAssign::SUCCESS, std::memory_order_release);
-
-        ctx->signal->reset_all();
-
-        dummyReset(ctx);
-
-        for (size_t qpi = 0; qpi < num_qp_; ++qpi) {
-            io_data_channel_->post_recv_batch(qpi, &(ctx->assigns_[qpi]), meta_pool_);
-        }
-        ctx->state_ = IOContextState::POSTED;
-
-        posted_cnt++;
+    // Atomically drain the entire lock-free refill stack in one exchange,
+    // then batch-repost all completed transport slots without any locking.
+    ImmRecvContext* batch = popAllRefill();
+    while (batch) {
+        ImmRecvContext* next = batch->next_refill_.load(std::memory_order_relaxed);
+        batch->next_refill_.store(nullptr, std::memory_order_relaxed);
+        postImmRecvSlot(batch);
+        batch = next;
         work_done++;
-    }
-
-    if (work_done > 0) {
-        posted_recv_cnt_.store(posted_cnt, std::memory_order_relaxed);
     }
 
     return work_done;
@@ -928,6 +1033,23 @@ int32_t RDMAEndpoint::process()
 
 void RDMAEndpoint::cancelAll()
 {
+    {
+        std::lock_guard<SpinLock> guard(imm_recv_match_lock_);
+        for (auto& op_state : pending_imm_recv_ops_) {
+            if (op_state) {
+                op_state->completion_status.store(RDMAAssign::FAILED, std::memory_order_release);
+                if (op_state->signal) {
+                    op_state->signal->force_complete();
+                }
+            }
+        }
+        pending_imm_recv_ops_.clear();
+        completed_imm_recv_events_.clear();
+    }
+
+    // Drain the lock-free refill stack.
+    popAllRefill();
+
     for (int i = 0; i < SLIME_MAX_IO_FIFO_DEPTH; ++i) {
         if (read_write_ctx_pool_) {
             read_write_ctx_pool_[i].signal->force_complete();
