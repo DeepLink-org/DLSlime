@@ -507,7 +507,7 @@ void RDMAEndpoint::enqueueImmRecvCompletion(ImmRecvContext* ctx)
             op_state = std::move(pending_imm_recv_ops_.front());
             pending_imm_recv_ops_.pop_front();
         }
-        else if (event.status == RDMAAssign::SUCCESS) {
+        else {
             completed_imm_recv_events_.push_back(event);
         }
         pending_imm_recv_refill_.push_back(ctx);
