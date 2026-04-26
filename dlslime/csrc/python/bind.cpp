@@ -119,7 +119,13 @@ PYBIND11_MODULE(_slime_c, m)
         .def("wait", &dlslime::ReadWriteFuture::wait, py::call_guard<py::gil_scoped_release>());
     py::class_<dlslime::ImmRecvFuture, std::shared_ptr<dlslime::ImmRecvFuture>>(m, "SlimeImmRecvFuture")
         .def("wait", &dlslime::ImmRecvFuture::wait, py::call_guard<py::gil_scoped_release>())
-        .def("imm_data", &dlslime::ImmRecvFuture::immData, py::call_guard<py::gil_scoped_release>());
+        .def("imm_data", &dlslime::ImmRecvFuture::immData, py::call_guard<py::gil_scoped_release>())
+        .def("time_trace_enabled", &dlslime::ImmRecvFuture::timeTraceEnabled, py::call_guard<py::gil_scoped_release>())
+        .def("time_trace_start_ns", &dlslime::ImmRecvFuture::timeTraceStartNs, py::call_guard<py::gil_scoped_release>())
+        .def("time_trace_end_ns", &dlslime::ImmRecvFuture::timeTraceEndNs, py::call_guard<py::gil_scoped_release>())
+        .def("time_trace_elapsed_ns",
+             &dlslime::ImmRecvFuture::timeTraceElapsedNs,
+             py::call_guard<py::gil_scoped_release>());
     py::class_<dlslime::RDMAMemoryPool, std::shared_ptr<dlslime::RDMAMemoryPool>>(m, "RDMAMemoryPool")
         .def(py::init<std::shared_ptr<dlslime::RDMAContext>>(), py::arg("context"))
         .def(

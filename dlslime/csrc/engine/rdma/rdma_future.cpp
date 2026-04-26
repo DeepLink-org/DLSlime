@@ -4,6 +4,7 @@
 
 #include "dlslime/csrc/device/signal.h"
 #include "rdma_endpoint.h"
+#include "rdma_env.h"
 
 namespace dlslime {
 
@@ -73,6 +74,31 @@ int32_t ImmRecvFuture::wait() const
 int32_t ImmRecvFuture::immData() const
 {
     return op_state_->imm_data.load(std::memory_order_acquire);
+}
+
+bool ImmRecvFuture::timeTraceEnabled() const
+{
+    return SLIME_WITH_TIME_TRACE != 0;
+}
+
+uint64_t ImmRecvFuture::timeTraceStartNs() const
+{
+    return op_state_->trace_start_ns.load(std::memory_order_acquire);
+}
+
+uint64_t ImmRecvFuture::timeTraceEndNs() const
+{
+    return op_state_->trace_end_ns.load(std::memory_order_acquire);
+}
+
+uint64_t ImmRecvFuture::timeTraceElapsedNs() const
+{
+    uint64_t start_ns = timeTraceStartNs();
+    uint64_t end_ns   = timeTraceEndNs();
+    if (start_ns == 0 || end_ns <= start_ns) {
+        return 0;
+    }
+    return end_ns - start_ns;
 }
 
 }  // namespace dlslime

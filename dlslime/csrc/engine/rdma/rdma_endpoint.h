@@ -96,13 +96,16 @@ struct ImmRecvOpState {
     uint32_t                                       expected_mask{0};
     std::atomic<int32_t>                           completion_status{RDMAAssign::SUCCESS};
     std::atomic<int32_t>                           imm_data{0};
+    std::atomic<uint64_t>                          trace_start_ns{0};
+    std::atomic<uint64_t>                          trace_end_ns{0};
 };
 
 struct ImmRecvEvent {
     // Small value object that bridges transport completions and user receives.
     // It may be queued briefly if a WRITE_WITH_IMM arrives before immRecv().
-    int32_t status{RDMAAssign::SUCCESS};
-    int32_t imm_data{0};
+    int32_t  status{RDMAAssign::SUCCESS};
+    int32_t  imm_data{0};
+    uint64_t trace_end_ns{0};
 };
 
 // ============================================================

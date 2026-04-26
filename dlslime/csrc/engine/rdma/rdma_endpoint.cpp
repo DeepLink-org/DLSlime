@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -34,6 +35,17 @@
 #include "rdma_worker_pool.h"
 
 namespace dlslime {
+
+namespace {
+
+uint64_t monotonic_time_ns()
+{
+    return static_cast<uint64_t>(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch())
+            .count());
+}
+
+}  // namespace
 
 // ============================================================
 // Constructor & Setup
@@ -467,6 +479,9 @@ void RDMAEndpoint::completeImmRecvOp(const std::shared_ptr<ImmRecvOpState>& op_s
     }
     op_state->completion_status.store(event.status, std::memory_order_release);
     op_state->imm_data.store(event.imm_data, std::memory_order_release);
+    if (SLIME_WITH_TIME_TRACE) {
+        op_state->trace_end_ns.store(event.trace_end_ns, std::memory_order_release);
+    }
     if (op_state->signal) {
         for (size_t qpi = 0; qpi < num_qp_; ++qpi) {
             op_state->signal->set_comm_done(qpi);
@@ -482,6 +497,7 @@ void RDMAEndpoint::enqueueImmRecvCompletion(ImmRecvContext* ctx)
     ImmRecvEvent event{
         ctx->completion_status.load(std::memory_order_acquire),
         ctx->imm_data.load(std::memory_order_acquire),
+        SLIME_WITH_TIME_TRACE ? monotonic_time_ns() : 0,
     };
 
     std::shared_ptr<ImmRecvOpState> op_state;
@@ -718,6 +734,10 @@ std::shared_ptr<ImmRecvFuture> RDMAEndpoint::immRecv(void* stream)
     op_state->expected_mask     = (1u << num_qp_) - 1;
     op_state->completion_status = RDMAAssign::SUCCESS;
     op_state->imm_data          = 0;
+    if (SLIME_WITH_TIME_TRACE) {
+        op_state->trace_start_ns.store(monotonic_time_ns(), std::memory_order_release);
+        op_state->trace_end_ns.store(0, std::memory_order_release);
+    }
     op_state->signal->reset_all();
     op_state->signal->bind_stream(stream);
 
