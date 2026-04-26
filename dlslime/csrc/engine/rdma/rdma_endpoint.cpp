@@ -508,6 +508,9 @@ void RDMAEndpoint::enqueueImmRecvCompletion(ImmRecvContext* ctx)
             pending_imm_recv_ops_.pop_front();
         }
         else {
+            // Queue all events (SUCCESS, FAILED, FLUSH) so that a future
+            // immRecv() caller observes the actual completion status rather
+            // than blocking indefinitely.
             completed_imm_recv_events_.push_back(event);
         }
         pending_imm_recv_refill_.push_back(ctx);
