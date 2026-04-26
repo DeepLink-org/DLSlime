@@ -59,7 +59,7 @@ int32_t ReadWriteFuture::wait() const
 ImmRecvFuture::ImmRecvFuture(std::shared_ptr<ImmRecvOpState> op_state): op_state_(std::move(op_state))
 {
     if (!op_state_) {
-        throw std::runtime_error("ImmFuture created with null context");
+        throw std::runtime_error("ImmRecvFuture created with null ImmRecvOpState");
     }
 }
 
