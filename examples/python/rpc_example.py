@@ -37,7 +37,6 @@ class CalcService:
 
 
 def main(ctrl_url: str):
-    # --- worker agent ---
     worker = PeerAgent(alias="worker:0", server_url=ctrl_url)
     worker.set_desired_topology(["driver:0"], symmetric=True)
 
