@@ -3,8 +3,8 @@
 Public API::
 
     from dlslime.rpc import (
-        method, serve, serve_once, proxy, wait_all, Channel,
-        WIRE_VERSION, RpcError, RemoteRpcError, RpcTimeoutError,
+        method, serve, serve_once, proxy, wait_all,
+        RpcError, RemoteRpcError, RpcTimeoutError, SoftRnrMonitor,
     )
 
     # Define
@@ -18,25 +18,31 @@ Public API::
     # Caller side
     w = proxy(agent, "worker:0", MyService)
     result = w.add(1, 2).wait(timeout=30.0)
+
+Internals kept importable (for typing / advanced use) but NOT in
+``__all__``:
+    - ``Channel``, ``WIRE_VERSION`` -- users never construct a Channel
+      directly; the C++ session reads it. Import from
+      ``dlslime.rpc.channel`` if you need the type.
+    - ``read_rnr_counter`` -- low-level sysfs reader; ``SoftRnrMonitor``
+      is the normal interface. Import from ``dlslime.rpc.rnr`` if you
+      need the one-shot helper.
 """
 
-from .channel import Channel, WIRE_VERSION
+from .channel import Channel, WIRE_VERSION  # noqa: F401
 from .errors import RemoteRpcError, RpcError, RpcTimeoutError
 from .proxy import proxy, wait_all
 from .registry import method
-from .rnr import read_rnr_counter, SoftRnrMonitor
+from .rnr import read_rnr_counter, SoftRnrMonitor  # noqa: F401
 from .service import serve, serve_once
 
 __all__ = [
-    "Channel",
     "RemoteRpcError",
     "RpcError",
     "RpcTimeoutError",
     "SoftRnrMonitor",
-    "WIRE_VERSION",
     "method",
     "proxy",
-    "read_rnr_counter",
     "serve",
     "serve_once",
     "wait_all",
