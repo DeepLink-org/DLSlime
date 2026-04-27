@@ -39,6 +39,11 @@
 #include "dlslime/csrc/engine/rdma/rdma_worker.h"
 #endif
 
+#ifdef BUILD_RPC
+#include "dlslime/csrc/rpc/rpc_constants.h"
+#include "dlslime/csrc/rpc/rpc_session.h"
+#endif
+
 // Ops moved to NanoCCL - these includes are commented out
 // #if defined(BUILD_INTRA_OPS) || defined(BUILD_INTER_OPS)
 // #include <torch/torch.h>
@@ -73,6 +78,12 @@ namespace py = pybind11;
 #define BUILD_NVLINK_ENABLED false
 #endif
 
+#ifdef BUILD_RPC
+#define BUILD_RPC_ENABLED true
+#else
+#define BUILD_RPC_ENABLED false
+#endif
+
 // Ops moved to NanoCCL
 #define BUILD_INTRA_OPS_ENABLED false
 #define BUILD_INTER_OPS_ENABLED false
@@ -85,6 +96,7 @@ PYBIND11_MODULE(_slime_c, m)
     EXPOSE_BUILD_FLAG(m, BUILD_NVLINK);
     EXPOSE_BUILD_FLAG(m, BUILD_INTRA_OPS);
     EXPOSE_BUILD_FLAG(m, BUILD_INTER_OPS);
+    EXPOSE_BUILD_FLAG(m, BUILD_RPC);
 
     py::enum_<dlslime::OpCode>(m, "OpCode")
         .value("READ", dlslime::OpCode::READ)
@@ -237,6 +249,123 @@ PYBIND11_MODULE(_slime_c, m)
 
     m.def("available_nic", &dlslime::available_nic);
     m.def("socket_id", &dlslime::socketId);
+
+#ifdef BUILD_RPC
+    // =========================================================================
+    // SlimeRPC C++ session bindings
+    // =========================================================================
+    // Wire-format constants exposed for cross-checking with Python.
+    auto rpc_mod                   = m.def_submodule("rpc", "SlimeRPC C++ backend");
+    rpc_mod.attr("WIRE_VERSION")   = dlslime::rpc::WIRE_VERSION;
+    rpc_mod.attr("HEADER_SIZE")    = dlslime::rpc::HEADER_SIZE;
+    rpc_mod.attr("EXC_BIT")        = dlslime::rpc::EXC_BIT;
+    rpc_mod.attr("ACK_BIT")        = dlslime::rpc::ACK_BIT;
+    rpc_mod.attr("REPLY_BIT")      = dlslime::rpc::REPLY_BIT;
+    rpc_mod.attr("CHUNK_BIT")      = dlslime::rpc::CHUNK_BIT;
+    rpc_mod.attr("LAST_BIT")       = dlslime::rpc::LAST_BIT;
+    rpc_mod.attr("FLAG_MASK")      = dlslime::rpc::FLAG_MASK;
+    rpc_mod.attr("MAX_SLOT_COUNT") = dlslime::rpc::MAX_SLOT_COUNT;
+
+    py::class_<dlslime::rpc::ClientFuture, std::shared_ptr<dlslime::rpc::ClientFuture>>(rpc_mod, "ClientFuture")
+        // GIL is dropped inside wait()/wait_for() themselves; do NOT use
+        // py::call_guard here (it would double-release the GIL).
+        .def("wait", &dlslime::rpc::ClientFuture::wait)
+        .def(
+            "wait_for",
+            [](dlslime::rpc::ClientFuture& self, double timeout_seconds) -> py::object {
+                py::bytes out;
+                int64_t   ms = static_cast<int64_t>(timeout_seconds * 1000.0);
+                if (ms < 0)
+                    ms = 0;
+                bool done = self.wait_for(ms, &out);
+                if (!done) {
+                    return py::none();
+                }
+                return out;
+            },
+            py::arg("timeout_seconds"))
+        .def("done", &dlslime::rpc::ClientFuture::done)
+        .def("has_exception", &dlslime::rpc::ClientFuture::has_exception)
+        .def("rethrow_if_failed", &dlslime::rpc::ClientFuture::rethrow_if_failed)
+        .def_property_readonly("is_remote_exception", &dlslime::rpc::ClientFuture::is_remote_exception)
+        .def_property_readonly("request_id", &dlslime::rpc::ClientFuture::request_id)
+        .def_property_readonly("slot_id", &dlslime::rpc::ClientFuture::slot_id);
+
+    // InboundRequest is a value type; expose only readers.
+    //
+    // Tier A zero-copy semantics: payload_ptr/payload_nbytes borrow into
+    // the C++ recv slot. They are valid only until the matching
+    // post_reply has been posted; raw handlers should consume the bytes
+    // before replying. The ``payload`` accessor below builds a fresh
+    // py::bytes by copying once into Python heap (single copy, suitable
+    // for typed/pickled handlers that must outlive the slot).
+    py::class_<dlslime::rpc::InboundRequest>(rpc_mod, "InboundRequest")
+        .def_readonly("raw_tag", &dlslime::rpc::InboundRequest::raw_tag)
+        .def_readonly("base_tag", &dlslime::rpc::InboundRequest::base_tag)
+        .def_readonly("request_id", &dlslime::rpc::InboundRequest::request_id)
+        .def_readonly("slot_id", &dlslime::rpc::InboundRequest::slot_id)
+        // Pointer + length into the recv slot. Borrowed; do NOT free.
+        .def_property_readonly(
+            "payload_ptr",
+            [](const dlslime::rpc::InboundRequest& self) { return reinterpret_cast<uintptr_t>(self.payload_ptr); })
+        .def_property_readonly("payload_nbytes",
+                               [](const dlslime::rpc::InboundRequest& self) { return self.payload_nbytes; })
+        // Lazy bytes accessor for typed handlers. Each call rebuilds.
+        .def_property_readonly("payload", [](const dlslime::rpc::InboundRequest& self) {
+            return py::bytes(self.payload_ptr, self.payload_nbytes);
+        });
+
+    py::class_<dlslime::rpc::RpcSession, std::shared_ptr<dlslime::rpc::RpcSession>>(rpc_mod, "RpcSession")
+        .def(py::init<std::shared_ptr<dlslime::RDMAEndpoint>,
+                      int,
+                      uintptr_t,
+                      int,
+                      uintptr_t,
+                      int,
+                      size_t,
+                      size_t,
+                      bool>(),
+             py::arg("endpoint"),
+             py::arg("local_send_handler"),
+             py::arg("local_send_ptr"),
+             py::arg("local_recv_handler"),
+             py::arg("local_recv_ptr"),
+             py::arg("remote_recv_handler"),
+             py::arg("slot_size"),
+             py::arg("slot_count"),
+             py::arg("start_recv_pump") = true)
+        .def("call", &dlslime::rpc::RpcSession::call, py::arg("tag"), py::arg("payload"))
+        .def("call_inplace", &dlslime::rpc::RpcSession::call_inplace, py::arg("tag"), py::arg("writer"))
+        .def("post_reply",
+             &dlslime::rpc::RpcSession::post_reply,
+             py::arg("tag"),
+             py::arg("request_id"),
+             py::arg("client_slot_id"),
+             py::arg("payload"))
+        .def("post_reply_inplace",
+             &dlslime::rpc::RpcSession::post_reply_inplace,
+             py::arg("tag"),
+             py::arg("request_id"),
+             py::arg("client_slot_id"),
+             py::arg("writer"))
+        .def("poll_request",
+             [](dlslime::rpc::RpcSession& self) -> py::object {
+                 auto req = self.poll_request();
+                 if (!req.has_value()) {
+                     return py::none();
+                 }
+                 return py::cast(std::move(*req));
+             })
+        .def("close", &dlslime::rpc::RpcSession::close, py::call_guard<py::gil_scoped_release>())
+        .def("detach_request", &dlslime::rpc::RpcSession::detach_request, py::arg("request_id"))
+        .def_property_readonly("slot_count", &dlslime::rpc::RpcSession::slot_count)
+        .def_property_readonly("slot_size", &dlslime::rpc::RpcSession::slot_size)
+        .def_property_readonly("payload_capacity", &dlslime::rpc::RpcSession::payload_capacity)
+        .def_property_readonly("closed", &dlslime::rpc::RpcSession::closed)
+        .def_property_readonly("requests_sent", &dlslime::rpc::RpcSession::requests_sent)
+        .def_property_readonly("replies_received", &dlslime::rpc::RpcSession::replies_received)
+        .def_property_readonly("requests_received", &dlslime::rpc::RpcSession::requests_received);
+#endif  // BUILD_RPC
 
 #endif
 

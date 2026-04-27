@@ -16,11 +16,27 @@ from dlslime.rpc import method, serve
 
 
 class EchoService:
-    """Minimal echo service: receives raw bytes and sends them back."""
+    """Minimal echo service: receives raw bytes and sends them back.
 
-    @method(raw=True)
-    def echo(self, channel, ptr, nbytes):
-        return bytes((ctypes.c_char * nbytes).from_address(ptr))
+    Uses ``raw=True, inplace=True`` on the server because that's where
+    zero-copy actually matters: the inplace handler memmoves recv slot
+    → send buffer in one CPU pass, vs the bytes path which costs a
+    16 MB ``bytes(...)`` alloc + a second memcpy in ``post_reply``
+    (~+1.2 ms at 16 MB). The driver side stays on plain bytes —
+    client-side inplace is a wash for this echo workload.
+
+    The two sides can disagree on ``inplace``: the flag is a local API
+    choice (writer callback vs bytes argument), not a wire-level field.
+    """
+
+    @method(raw=True, inplace=True)
+    def echo(self, req_ptr, req_nbytes, resp_ptr, resp_cap):
+        if req_nbytes > resp_cap:
+            raise RuntimeError(
+                f"Reply {req_nbytes} B exceeds slot capacity {resp_cap} B"
+            )
+        ctypes.memmove(resp_ptr, req_ptr, req_nbytes)
+        return req_nbytes
 
 
 def main():
@@ -33,10 +49,23 @@ def main():
         default=256,
         help="RPC channel buffer size in MB (must match driver)",
     )
+    parser.add_argument(
+        "--max-inflight",
+        type=int,
+        default=1,
+        help=(
+            "Number of mailbox slots. Default 1 matches the driver's "
+            "no-pump single-flight setting; raise on both sides to "
+            "enable the pump-backed runtime."
+        ),
+    )
     args = parser.parse_args()
 
     worker = PeerAgent(alias="bench-worker", server_url=args.ctrl, scope=args.scope)
     worker._rpc_buffer_size = args.buf_mb * 1024 * 1024
+    # Bench uses single-flight RPCs; cap max_inflight so we don't pin
+    # buf_mb * SLIME_RPC_MAX_INFLIGHT bytes of CPU memory needlessly.
+    worker._rpc_max_inflight = max(1, int(getattr(args, "max_inflight", 4)))
 
     worker.set_desired_topology(["bench-driver"], symmetric=True)
     print("Worker ready, waiting for driver to connect…")

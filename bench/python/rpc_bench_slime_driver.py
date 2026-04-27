@@ -10,7 +10,6 @@ Usage:
 
 import argparse
 import csv
-import ctypes
 import os
 import time
 
@@ -98,6 +97,16 @@ def main():
             "larger multi-chunk replies are still under investigation."
         ),
     )
+    parser.add_argument(
+        "--max-inflight",
+        type=int,
+        default=1,
+        help=(
+            "Number of mailbox slots. Default 1 picks the no-pump "
+            "single-flight path (lowest latency). Set >1 to enable "
+            "the pump-backed runtime and pipeline inflight calls."
+        ),
+    )
     args = parser.parse_args()
 
     buf_bytes = args.buf_mb * 1024 * 1024
@@ -107,6 +116,7 @@ def main():
 
     driver = PeerAgent(alias="bench-driver", server_url=args.ctrl, scope=args.scope)
     driver._rpc_buffer_size = buf_bytes
+    driver._rpc_max_inflight = max(1, int(getattr(args, "max_inflight", 4)))
 
     driver.set_desired_topology(["bench-worker"], symmetric=True)
     print("Waiting for worker…")

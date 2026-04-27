@@ -5,9 +5,20 @@ find_package(pybind11 REQUIRED PATHS ${pybind11_DIR})
 
 set(PYTHON_SUPPORTED_VERSIONS "3.8" "3.9" "3.10" "3.11" "3.12")
 
+set(_slime_c_sources bind.cpp)
+if (BUILD_RDMA)
+    # SlimeRPC C++ session lives inside _slime_c -- it depends on both
+    # the RDMA engine (for RDMAEndpoint, ImmRecvFuture) AND on pybind11
+    # (for py::buffer / py::bytes on the Python-facing API surface).
+    # Building it as a standalone shared lib would require libpython at
+    # link time which we cannot guarantee at install time, so we just
+    # bake the objects into the python extension.
+    list(APPEND _slime_c_sources ${CMAKE_CURRENT_SOURCE_DIR}/../rpc/rpc_session.cpp)
+endif()
+
 pybind11_add_module(
     _slime_c
-    bind.cpp
+    ${_slime_c_sources}
 )
 
 set(_slime_c_link_libraries "")
@@ -20,6 +31,7 @@ endif()
 
 if (BUILD_RDMA)
     target_compile_definitions(_slime_c PRIVATE BUILD_RDMA)
+    target_compile_definitions(_slime_c PRIVATE BUILD_RPC)
     list(APPEND _slime_c_link_libraries _slime_rdma)
 endif()
 
