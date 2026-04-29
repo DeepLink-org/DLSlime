@@ -58,6 +58,13 @@ enum class IOContextState {
 // Pure transport-execution slot. User-visible completion state lives on the
 // EndpointOpState held in op_state; callbacks capture that shared_ptr so the
 // right operation receives its own completion even after the slot is reused.
+//
+// Lifecycle: the slot is owned by at most one in-flight op at a time. It
+// leaves rw_free_ring_ when a user op acquires it (blocking if the pool is
+// exhausted) and is returned only once ALL of its per-qp callbacks have
+// fired — never by modulo reuse. That invariant is what makes it safe for
+// HW to still hold wr_id pointers into ctx->assigns_ after user code has
+// already dropped its future.
 struct ReadWriteContext {
     int32_t slot_id;
 
@@ -71,13 +78,19 @@ struct ReadWriteContext {
     OpCode    op_code;
 
     // Generation bumped every time the slot is acquired for a new submission.
-    // Late CQ callbacks compare against this to decide whether they are still
-    // the current owner of the slot.
+    // Kept as a diagnostic / invariant check; no longer load-bearing because
+    // the free-slot ring guarantees there is at most one owner at a time.
     std::atomic<uint64_t> generation{0};
 
-    // The operation currently owning this slot. A shared_ptr so late
-    // callbacks can outlive a slot reuse.
+    // The operation currently owning this slot.
     std::shared_ptr<EndpointOpState> op_state;
+
+    // Mask of per-qp callbacks that have fired for the current op on this
+    // slot. Once it reaches slot_qp_expected_ the slot is returned to
+    // rw_free_ring_. expected is written at acquire-time so it reflects
+    // the configured QP count for this op.
+    std::atomic<uint32_t> slot_qp_mask{0};
+    uint32_t              slot_qp_expected{0};
 
     IOContextState state_ = IOContextState::FREE;
 };
@@ -151,6 +164,11 @@ struct alignas(64) PaddedAtomicUint64 {
 };
 
 // Context for Send Operations
+//
+// As with ReadWriteContext, a slot is leased from send_free_ring_ at
+// submission time and returned only after all per-qp data_send callbacks
+// for the owning op have fired. This eliminates modulo-reuse races on
+// slot-local state (meta_arrived_flag_, remote_meta_info_, op_state).
 struct alignas(64) SendContext {
     int64_t slot_id;
 
@@ -166,9 +184,15 @@ struct alignas(64) SendContext {
 
     std::atomic<uint64_t>            generation{0};
     std::shared_ptr<EndpointOpState> op_state;
+
+    std::atomic<uint32_t> slot_qp_mask{0};
+    uint32_t              slot_qp_expected{0};
 };
 
 // Context for Recv Operations
+//
+// Leased from recv_free_ring_ at submission; released after all per-qp
+// data_recv callbacks fire. See SendContext for the rationale.
 struct alignas(64) RecvContext {
     int64_t        slot_id;
     storage_view_t view_;
@@ -184,6 +208,9 @@ struct alignas(64) RecvContext {
 
     std::atomic<uint64_t>            generation{0};
     std::shared_ptr<EndpointOpState> op_state;
+
+    std::atomic<uint32_t> slot_qp_mask{0};
+    uint32_t              slot_qp_expected{0};
 };
 
 // ============================================================
@@ -292,6 +319,18 @@ private:
     // callbacks do not pin completed ops indefinitely.
     void registerInFlight(const std::shared_ptr<EndpointOpState>& op_state);
 
+    // Slot acquire / release helpers. Acquire blocks (spins) if the pool
+    // is exhausted, applying back-pressure at the API boundary instead of
+    // silently stomping a still-in-flight slot. Release pushes the slot
+    // back onto its free ring; it is only called once every per-qp
+    // callback for the owning op has fired.
+    ReadWriteContext* acquireReadWriteSlot();
+    SendContext*      acquireSendSlot();
+    RecvContext*      acquireRecvSlot();
+    void              releaseReadWriteSlot(ReadWriteContext* ctx);
+    void              releaseSendSlot(SendContext* ctx);
+    void              releaseRecvSlot(RecvContext* ctx);
+
     // ============================================================
     // Member Variables - Common
     // ============================================================
@@ -317,6 +356,12 @@ private:
 
     jring_t* read_write_buffer_ring_;
     jring_t* imm_recv_buffer_ring_;
+
+    // Free-slot ring: holds every ReadWriteContext that is idle and safe
+    // to lease. Populated at init. A slot leaves on acquire() and
+    // re-enters only after every per-qp callback for its current op has
+    // fired — never by modulo reuse.
+    jring_t* rw_free_ring_;
 
     std::deque<ReadWriteContext*> pending_rw_queue_;
 
@@ -350,6 +395,12 @@ private:
     // --- jring_t* Lock-free Queues ---
     jring_t* send_buffer_ring_;
     jring_t* recv_buffer_ring_;
+
+    // Free-slot rings for the two-sided message path. Same invariant as
+    // rw_free_ring_: slots are only released back here after every per-qp
+    // data-path callback for the owning op has fired.
+    jring_t* send_free_ring_;
+    jring_t* recv_free_ring_;
 
     // Context Pools to avoid dynamic allocation
     SendContext* send_ctx_pool_;

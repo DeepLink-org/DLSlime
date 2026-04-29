@@ -223,7 +223,14 @@ int64_t RDMAContext::cq_poll_handle()
             if (wc[i].wr_id != 0) {
                 RDMAAssign* assign = reinterpret_cast<RDMAAssign*>(wc[i].wr_id);
                 if (assign->callback_) {
-                    assign->callback_(status_code, wc[i].imm_data);
+                    // Move the callback to this thread's stack before
+                    // invoking so captured shared_ptrs (e.g. the op_state
+                    // held by RDMAEndpoint callbacks) are released as soon
+                    // as the lambda returns. This also prevents the
+                    // op_state -> assigns -> callback -> op_state cycle
+                    // from pinning completed operations in memory.
+                    auto cb = std::move(assign->callback_);
+                    cb(status_code, wc[i].imm_data);
                 }
             }
         }
