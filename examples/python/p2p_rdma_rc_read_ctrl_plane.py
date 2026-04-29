@@ -87,7 +87,6 @@ print("Performing RDMA read...")
 slot = initiator.read(
     [
         (handler, hremote_on_initiator, 0, 8, 8),
-        (handler, hremote_on_initiator, 0, 0, 8),
     ],
     None,
 )
