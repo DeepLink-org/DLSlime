@@ -8,6 +8,14 @@ if(BUILD_RDMA)
     target_link_libraries(dlslime INTERFACE _slime_rdma)
 endif()
 
+# rpc/ has no independent C++ consumers (the session API is all
+# pybind11). It is compiled straight into _slime_c.so by the python
+# subdirectory below. Keep the source files here as a marker so future
+# C++-only consumers can opt in by adding rpc_session.cpp to their
+# target_sources, but DO NOT build a separate shared lib -- it would
+# need libpython at link time and we cannot guarantee the right
+# version is on LD_LIBRARY_PATH at install time.
+
 install(
     TARGETS dlslime
     EXPORT dlslimeTargets

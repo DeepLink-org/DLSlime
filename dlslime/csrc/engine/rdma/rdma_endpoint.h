@@ -14,6 +14,7 @@
 #include "dlslime/csrc/device/device_api.h"
 #include "dlslime/csrc/device/signal.h"
 #include "dlslime/csrc/engine/assignment.h"
+#include "dlslime/csrc/utils.h"
 #include "memory_pool.h"
 #include "rdma_assignment.h"
 #include "rdma_channel.h"
@@ -39,15 +40,6 @@ class RDMAWorker;
 constexpr int IO_BURST_SIZE = 32;
 constexpr int BURST_SIZE    = 128;
 
-struct EndpointOpState {
-    std::shared_ptr<dlslime::device::DeviceSignal> signal;
-    uint64_t                                       op_id{0};
-    uint32_t                                       expected_mask{0};
-    std::atomic<uint64_t>                          completion_mask{0};
-    std::atomic<int32_t>                           completion_status{RDMAAssign::SUCCESS};
-    std::atomic<int32_t>                           imm_data{0};
-};
-
 // ============================================================
 // Context Structures for IO Operations
 // ============================================================
@@ -64,7 +56,7 @@ enum class IOContextState {
 struct ReadWriteContext {
     int32_t slot_id;
 
-    std::shared_ptr<EndpointOpState> op_state;
+    std::shared_ptr<dlslime::device::DeviceSignal> signal;
 
     std::vector<RDMAAssign> assigns_;
 
@@ -77,15 +69,15 @@ struct ReadWriteContext {
     uint32_t  expected_mask;
 
     std::atomic<uint32_t> finished_qp_mask{0};
-    std::atomic<uint64_t> generation{0};
-    std::atomic<bool>     in_use{false};
+    std::atomic<int32_t>  completion_status{0};
 
     IOContextState state_ = IOContextState::FREE;
 };
 
 struct ImmRecvContext {
-    int32_t                 slot_id;
-    std::vector<RDMAAssign> assigns_;
+    int32_t                                        slot_id;
+    std::shared_ptr<dlslime::device::DeviceSignal> signal;
+    std::vector<RDMAAssign>                        assigns_;
 
     // Transport-owned receive slot. These contexts are kept posted on the
     // hardware RQ and recycled after completion; user futures must not retain
@@ -95,6 +87,9 @@ struct ImmRecvContext {
     std::atomic<int32_t>  completion_status{0};
     std::atomic<int32_t>  imm_data{0};
     IOContextState        state_ = IOContextState::FREE;
+
+    // Intrusive pointer for lock-free MPSC refill stack.
+    std::atomic<ImmRecvContext*> next_refill_{nullptr};
 };
 
 struct ImmRecvOpState {
@@ -173,20 +168,15 @@ struct alignas(64) SendContext {
 
     SendContextState state_;
 
-    std::shared_ptr<EndpointOpState> op_state;
+    std::shared_ptr<dlslime::device::DeviceSignal> signal;
 
-    uint64_t              expected_mask = 0;
-    std::atomic<uint64_t> finished_mask{0};
-    std::atomic<uint64_t> generation{0};
-    std::atomic<bool>     in_use{false};
+    uint64_t expected_mask = 0;
 
     void reset()
     {
         expected_mask = 0;
-        finished_mask.store(0, std::memory_order_release);
-        op_state.reset();
-        meta_arrived_flag_.val.store(0, std::memory_order_release);
-        state_ = SendContextState::WAIT_GPU_READY;
+        state_        = SendContextState::WAIT_GPU_READY;
+        signal->reset_all();
     }
 };
 
@@ -204,19 +194,15 @@ struct alignas(64) RecvContext {
 
     RecvContextState state_;
 
-    std::shared_ptr<EndpointOpState> op_state;
+    std::shared_ptr<dlslime::device::DeviceSignal> signal;
 
-    uint64_t              expected_mask = 0;
-    std::atomic<uint64_t> finished_mask{0};
-    std::atomic<uint64_t> generation{0};
-    std::atomic<bool>     in_use{false};
+    uint64_t expected_mask = 0;
 
     void reset()
     {
         expected_mask = 0;
-        finished_mask.store(0, std::memory_order_release);
-        op_state.reset();
-        state_ = RecvContextState::INIT_SEND_META;
+        state_        = RecvContextState::INIT_SEND_META;
+        signal->reset_all();
     }
 };
 
@@ -301,11 +287,12 @@ private:
     void completeImmRecvOp(const std::shared_ptr<ImmRecvOpState>& op_state, const ImmRecvEvent& event);
     void enqueueImmRecvCompletion(ImmRecvContext* ctx);
 
-    int32_t dispatchTask(OpCode op_code,
-                         const std::vector<assign_tuple_t>&,
-                         std::shared_ptr<EndpointOpState> op_state,
-                         int32_t                          imm_data = 0,
-                         void*                            stream   = nullptr);
+    /// Lock-free MPSC helpers for the refill stack.
+    void            pushRefill(ImmRecvContext* ctx);
+    ImmRecvContext* popAllRefill();
+
+    int32_t
+    dispatchTask(OpCode op_code, const std::vector<assign_tuple_t>&, int32_t imm_data = 0, void* stream = nullptr);
 
     int32_t readWriteProcess();
     int32_t immRecvProcess();
@@ -339,6 +326,8 @@ private:
     ReadWriteContext* read_write_ctx_pool_;
     ImmRecvContext*   imm_recv_ctx_pool_;
 
+    std::vector<std::shared_ptr<ReadWriteFuture>> read_write_future_pool_;
+
     jring_t* read_write_buffer_ring_;
     jring_t* imm_recv_buffer_ring_;
 
@@ -346,17 +335,18 @@ private:
 
     std::atomic<uint64_t> rw_slot_id_{0};
     std::atomic<uint64_t> io_recv_slot_id_{0};
-    std::atomic<uint64_t> next_op_id_{1};
 
     std::atomic<int32_t> token_bucket_[64];
-    std::mutex           imm_recv_mutex_;
-    // Matching queues for the decoupled imm-recv path:
-    // - pending_imm_recv_ops_: user immRecv() calls waiting for a completion
-    // - completed_imm_recv_events_: completions that arrived before immRecv()
-    // - pending_imm_recv_refill_: transport slots ready to be reposted
+
+    // Matching queues for the decoupled imm-recv path.
+    // Protected by imm_recv_match_lock_ (spinlock, short critical sections).
+    SpinLock                                    imm_recv_match_lock_;
     std::deque<std::shared_ptr<ImmRecvOpState>> pending_imm_recv_ops_;
     std::deque<ImmRecvEvent>                    completed_imm_recv_events_;
-    std::deque<ImmRecvContext*>                 pending_imm_recv_refill_;
+
+    // Lock-free MPSC refill stack. CQ callback threads push via pushRefill(),
+    // the progress thread drains via popAllRefill(). No lock needed.
+    std::atomic<ImmRecvContext*> refill_head_{nullptr};
 
     // Scratchpad buffers
     void*    io_burst_buf_[IO_BURST_SIZE];
@@ -377,6 +367,9 @@ private:
     // Context Pools to avoid dynamic allocation
     SendContext* send_ctx_pool_;
     RecvContext* recv_ctx_pool_;
+
+    std::vector<std::shared_ptr<SendFuture>> send_future_pool_;
+    std::vector<std::shared_ptr<RecvFuture>> recv_future_pool_;
 
     std::deque<SendContext*> pending_send_queue_;
     std::deque<RecvContext*> pending_recv_queue_;

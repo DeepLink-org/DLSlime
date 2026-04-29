@@ -21,23 +21,51 @@ _RPC_MARKER = "_slime_rpc"
 # ── Decorator ────────────────────────────────────────
 
 
-def method(fn=None, *, streaming=False, raw=False):
+def method(fn=None, *, streaming=False, raw=False, parallel=False, inplace=False):
     """Mark a function as an RPC method.
 
     Args:
         streaming: If ``True``, the method receives chunked data via
-                   ``Channel.recv_chunked()``.
+                   ``Channel.recv_chunked()``. (Disabled in slotted-mailbox
+                   protocol; reserved for future revisions.)
         raw:       If ``True``, skip auto-serialization. The decorated
                    method is invoked with the service instance plus
                    ``(channel, ptr, nbytes)`` for the request payload.
-                   In raw mode, the method is responsible for producing
-                   the reply directly via the provided ``channel``
-                   buffer instead of returning a value for automatic
-                   serialization.
+                   In raw mode, the method should return ``bytes`` /
+                   ``memoryview`` for the reply (or ``None`` for an
+                   empty ack).
+        parallel:  If ``True``, this handler is reentrant and may run
+                   concurrently with other ``parallel=True`` handlers
+                   on the same service instance. The default (``False``)
+                   forces serial execution under a per-service lock,
+                   which is the only safe option for stateful objects
+                   like PyTorch model runners or NCCL workers.
+        inplace:   If ``True`` (requires ``raw=True``), the handler is
+                   invoked as ``(self, req_ptr, req_nbytes, resp_ptr,
+                   resp_cap) -> int`` and writes the reply directly into
+                   the registered send buffer at ``resp_ptr``, returning
+                   the number of bytes written. The C++ session posts
+                   the WR without an intermediate ``bytes`` allocation
+                   or memcpy out of Python heap -- the zero-copy reply
+                   path. Note: while the handler runs, the session's
+                   send-mutex is held, so concurrent senders on the
+                   same session block until the handler returns. Use
+                   only for handlers that finish in O(microseconds).
     """
+    if inplace and not raw:
+        raise ValueError("@method(inplace=True) requires raw=True")
 
     def decorator(f):
-        setattr(f, _RPC_MARKER, {"streaming": streaming, "raw": raw})
+        setattr(
+            f,
+            _RPC_MARKER,
+            {
+                "streaming": streaming,
+                "raw": raw,
+                "parallel": parallel,
+                "inplace": inplace,
+            },
+        )
         return f
 
     if fn is not None:  # @method without parens
@@ -55,11 +83,13 @@ class MethodInfo:
     fn: Callable
     streaming: bool
     raw: bool
+    parallel: bool = False
+    inplace: bool = False
 
     # -- Serialization helpers (used when raw=False) --
 
     def serialize_args(self, args: tuple, ptr: int, size: int) -> int:
-        data = pickle.dumps(args, protocol=pickle.HIGHEST_PROTOCOL)
+        data = self.serialize_args_bytes(args)
         if len(data) > size:
             raise ValueError(
                 f"RPC '{self.name}' args ({len(data)} B) exceed "
@@ -68,12 +98,18 @@ class MethodInfo:
         ctypes.memmove(ptr, data, len(data))
         return len(data)
 
+    def serialize_args_bytes(self, args: tuple) -> bytes:
+        return pickle.dumps(args, protocol=pickle.HIGHEST_PROTOCOL)
+
     def deserialize_args(self, ptr: int, nbytes: int) -> tuple:
         buf = (ctypes.c_char * nbytes).from_address(ptr)
         return pickle.loads(bytes(buf))
 
+    def deserialize_args_bytes(self, data: bytes) -> tuple:
+        return pickle.loads(data)
+
     def serialize_result(self, result: Any, ptr: int, size: int) -> int:
-        data = pickle.dumps(result, protocol=pickle.HIGHEST_PROTOCOL)
+        data = self.serialize_result_bytes(result)
         if len(data) > size:
             raise ValueError(
                 f"RPC '{self.name}' result ({len(data)} B) exceed "
@@ -82,9 +118,15 @@ class MethodInfo:
         ctypes.memmove(ptr, data, len(data))
         return len(data)
 
+    def serialize_result_bytes(self, result: Any) -> bytes:
+        return pickle.dumps(result, protocol=pickle.HIGHEST_PROTOCOL)
+
     def deserialize_result(self, ptr: int, nbytes: int) -> Any:
         buf = (ctypes.c_char * nbytes).from_address(ptr)
         return pickle.loads(bytes(buf))
+
+    def deserialize_result_bytes(self, data: bytes) -> Any:
+        return pickle.loads(data)
 
 
 # ── Registry ─────────────────────────────────────────
@@ -117,6 +159,8 @@ class MethodRegistry:
                 fn=fn,
                 streaming=meta["streaming"],
                 raw=meta["raw"],
+                parallel=meta.get("parallel", False),
+                inplace=meta.get("inplace", False),
             )
             self.by_tag[tag] = info
             self.by_name[name] = info

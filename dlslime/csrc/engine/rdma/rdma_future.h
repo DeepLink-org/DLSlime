@@ -11,7 +11,6 @@ struct SendContext;
 struct RecvContext;
 struct ReadWriteContext;
 struct ImmRecvContext;
-struct EndpointOpState;
 struct ImmRecvOpState;
 
 /**
@@ -33,32 +32,32 @@ class ReadWriteFuture;
 
 class SendFuture: public RDMAFuture {
 public:
-    explicit SendFuture(std::shared_ptr<EndpointOpState> op_state);
+    explicit SendFuture(SendContext* ctx);
 
     int32_t wait() const override;
 
 private:
-    std::shared_ptr<EndpointOpState> op_state_;
+    SendContext* ctx_;
 };
 
 class RecvFuture: public RDMAFuture {
 public:
-    explicit RecvFuture(std::shared_ptr<EndpointOpState> op_state);
+    explicit RecvFuture(RecvContext* ctx);
 
     int32_t wait() const override;
 
 private:
-    std::shared_ptr<EndpointOpState> op_state_;
+    RecvContext* ctx_;
 };
 
 class ReadWriteFuture: public RDMAFuture {
 public:
-    explicit ReadWriteFuture(std::shared_ptr<EndpointOpState> op_state);
+    explicit ReadWriteFuture(ReadWriteContext* ctx);
 
     int32_t wait() const override;
 
 private:
-    std::shared_ptr<EndpointOpState> op_state_;
+    ReadWriteContext* ctx_;
 };
 
 class ImmRecvFuture: public RDMAFuture {

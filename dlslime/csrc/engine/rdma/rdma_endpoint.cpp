@@ -5,7 +5,6 @@
 
 #include <algorithm>
 #include <atomic>
-#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -35,114 +34,6 @@
 #include "rdma_worker_pool.h"
 
 namespace dlslime {
-
-namespace {
-
-std::shared_ptr<EndpointOpState>
-make_op_state(uint64_t op_id, bool bypass_signal, void* stream_handle, uint32_t expected_mask, bool record_gpu_ready)
-{
-    auto op_state           = std::make_shared<EndpointOpState>();
-    op_state->signal        = dlslime::device::createSignal(bypass_signal);
-    op_state->op_id         = op_id;
-    op_state->expected_mask = expected_mask;
-    op_state->completion_mask.store(0, std::memory_order_release);
-    op_state->completion_status.store(RDMAAssign::SUCCESS, std::memory_order_release);
-    op_state->imm_data.store(0, std::memory_order_release);
-    if (op_state->signal) {
-        op_state->signal->reset_all();
-        op_state->signal->bind_stream(stream_handle);
-        if (record_gpu_ready) {
-            op_state->signal->record_gpu_ready();
-        }
-    }
-    return op_state;
-}
-
-uint64_t monotonic_time_ns()
-{
-    return static_cast<uint64_t>(
-        std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch())
-            .count());
-}
-
-template<typename ContextT>
-ContextT* acquire_slot(std::atomic<uint64_t>& counter, ContextT* pool, size_t depth)
-{
-    while (true) {
-        uint64_t start = counter.fetch_add(1, std::memory_order_relaxed);
-        for (size_t i = 0; i < depth; ++i) {
-            ContextT* ctx = &pool[(start + i) % depth];
-            bool      expected{false};
-            if (ctx->in_use.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
-                return ctx;
-            }
-        }
-        machnet_pause();
-    }
-}
-
-template<typename ContextT>
-bool slot_is_active(const ContextT* ctx)
-{
-    return ctx->in_use.load(std::memory_order_acquire) && static_cast<bool>(ctx->op_state)
-           && ctx->generation.load(std::memory_order_acquire) != 0;
-}
-
-template<typename ContextT>
-bool slot_generation_matches(const ContextT* ctx, uint64_t generation)
-{
-    return ctx->generation.load(std::memory_order_acquire) == generation;
-}
-
-void release_slot(ReadWriteContext* ctx)
-{
-    ctx->op_state.reset();
-    ctx->expected_mask = 0;
-    ctx->finished_qp_mask.store(0, std::memory_order_release);
-    ctx->generation.store(0, std::memory_order_release);
-    ctx->state_ = IOContextState::FREE;
-    ctx->in_use.store(false, std::memory_order_release);
-}
-
-void release_slot(SendContext* ctx)
-{
-    ctx->op_state.reset();
-    ctx->expected_mask = 0;
-    ctx->finished_mask.store(0, std::memory_order_release);
-    ctx->meta_arrived_flag_.val.store(0, std::memory_order_release);
-    ctx->generation.store(0, std::memory_order_release);
-    ctx->state_ = SendContextState::WAIT_GPU_READY;
-    ctx->in_use.store(false, std::memory_order_release);
-}
-
-void release_slot(RecvContext* ctx)
-{
-    ctx->op_state.reset();
-    ctx->expected_mask = 0;
-    ctx->finished_mask.store(0, std::memory_order_release);
-    ctx->generation.store(0, std::memory_order_release);
-    ctx->state_ = RecvContextState::INIT_SEND_META;
-    ctx->in_use.store(false, std::memory_order_release);
-}
-
-void drain_ring(jring_t* ring, void** scratch, uint32_t scratch_len)
-{
-    while (jring_dequeue_burst(ring, scratch, scratch_len, nullptr) > 0) {}
-}
-
-void update_op_completion(const std::shared_ptr<EndpointOpState>& op_state, int32_t status)
-{
-    if (!op_state) {
-        return;
-    }
-    if (status != RDMAAssign::SUCCESS) {
-        int32_t expected = RDMAAssign::SUCCESS;
-        op_state->completion_status.compare_exchange_strong(
-            expected, status, std::memory_order_release, std::memory_order_relaxed);
-    }
-}
-
-}  // namespace
 
 // ============================================================
 // Constructor & Setup
@@ -222,11 +113,17 @@ void RDMAEndpoint::init(std::shared_ptr<RDMAWorker> worker)
 
     for (int i = 0; i < SLIME_MAX_IO_FIFO_DEPTH; ++i) {
         new (&read_write_ctx_pool_[i]) ReadWriteContext();
+        read_write_ctx_pool_[i].signal = dlslime::device::createSignal(false);
         read_write_ctx_pool_[i].assigns_.resize(num_qp_);
         read_write_ctx_pool_[i].finished_qp_mask.store(0);
 
         new (&imm_recv_ctx_pool_[i]) ImmRecvContext();
+        imm_recv_ctx_pool_[i].signal = dlslime::device::createSignal(false);
         imm_recv_ctx_pool_[i].assigns_.resize(num_qp_);
+    }
+
+    for (size_t i = 0; i < SLIME_MAX_IO_FIFO_DEPTH; ++i) {
+        read_write_future_pool_.push_back(std::make_shared<ReadWriteFuture>(&(read_write_ctx_pool_[i])));
     }
 
     void* io_dummy_mem = nullptr;
@@ -266,8 +163,15 @@ void RDMAEndpoint::init(std::shared_ptr<RDMAWorker> worker)
     // Initialize Signals
     for (int i = 0; i < SLIME_MAX_MSG_FIFO_DEPTH; ++i) {
         new (&send_ctx_pool_[i]) SendContext();
+        send_ctx_pool_[i].signal = dlslime::device::createSignal(bypass_signal_);
 
         new (&recv_ctx_pool_[i]) RecvContext();
+        recv_ctx_pool_[i].signal = dlslime::device::createSignal(bypass_signal_);
+    }
+
+    for (size_t i = 0; i < SLIME_MAX_MSG_FIFO_DEPTH; ++i) {
+        send_future_pool_.push_back(std::make_shared<SendFuture>(&(send_ctx_pool_[i])));
+        recv_future_pool_.push_back(std::make_shared<RecvFuture>(&(recv_ctx_pool_[i])));
     }
 
     // Register Memory Regions (MR) upfront on meta_pool_
@@ -393,7 +297,7 @@ void RDMAEndpoint::connect(const json& remote_endpoint_info)
             recv_ctx_pool_[i].remote_meta_key_ = remote_meta_handle;
         }
 
-        // Pre-post RECV requests for Meta Channel to avoid RNR on the message path.
+        // Pre-post RECV requests for Meta Channel
         for (int i = 0; i < SLIME_MAX_MSG_FIFO_DEPTH; ++i) {
             SendContext*            send_ctx = &(send_ctx_pool_[i]);
             std::vector<Assignment> batch{Assignment(reinterpret_cast<uintptr_t>(msg_dummy_), 0, 0, sizeof(int64_t))};
@@ -403,7 +307,7 @@ void RDMAEndpoint::connect(const json& remote_endpoint_info)
             meta_channel_->post_recv_batch(0, &(send_ctx->meta_recv_assign_), meta_pool_);
         }
 
-        // Pre-post RECV requests for Data Channel to avoid RNR on the message path.
+        // Pre-post RECV requests for Data Channel
         for (int i = 0; i < SLIME_MAX_MSG_FIFO_DEPTH; ++i) {
             RecvContext* recv_ctx = &(recv_ctx_pool_[i]);
             for (size_t qpi = 0; qpi < num_qp_; ++qpi) {
@@ -412,18 +316,10 @@ void RDMAEndpoint::connect(const json& remote_endpoint_info)
 
                 recv_ctx->data_recv_assigns_[qpi].reset(
                     OpCode::RECV, qpi, batch, [recv_ctx, qpi](int32_t status, int32_t imm) {
-                        auto op_state = recv_ctx->op_state;
-                        if (!op_state) {
-                            if (status != 0) {
-                                SLIME_LOG_DEBUG("Data Recv flushed during pre-post (likely teardown)");
-                            }
-                            return;
+                        if (status == 0) {
+                            recv_ctx->signal->set_comm_done(qpi);
                         }
-                        update_op_completion(op_state, status);
-                        if (op_state->signal) {
-                            op_state->signal->set_comm_done(qpi);
-                        }
-                        if (status != 0) {
+                        else {
                             SLIME_LOG_DEBUG("Data Recv flushed during pre-post (likely teardown)");
                         }
                     });
@@ -564,6 +460,22 @@ void RDMAEndpoint::postImmRecvWindow()
     }
 }
 
+void RDMAEndpoint::pushRefill(ImmRecvContext* ctx)
+{
+    // Lock-free MPSC push: CQ callback threads push completed slots.
+    ImmRecvContext* old_head = refill_head_.load(std::memory_order_relaxed);
+    do {
+        ctx->next_refill_.store(old_head, std::memory_order_relaxed);
+    } while (!refill_head_.compare_exchange_weak(old_head, ctx, std::memory_order_release, std::memory_order_relaxed));
+}
+
+ImmRecvContext* RDMAEndpoint::popAllRefill()
+{
+    // Atomically grab the entire refill chain. Only the progress thread calls
+    // this, so a single exchange is sufficient (no ABA concern).
+    return refill_head_.exchange(nullptr, std::memory_order_acquire);
+}
+
 void RDMAEndpoint::completeImmRecvOp(const std::shared_ptr<ImmRecvOpState>& op_state, const ImmRecvEvent& event)
 {
     if (!op_state) {
@@ -594,27 +506,29 @@ void RDMAEndpoint::enqueueImmRecvCompletion(ImmRecvContext* ctx)
 
     std::shared_ptr<ImmRecvOpState> op_state;
     {
-        std::lock_guard<std::mutex> guard(imm_recv_mutex_);
+        std::lock_guard<SpinLock> guard(imm_recv_match_lock_);
         if (!pending_imm_recv_ops_.empty()) {
             op_state = std::move(pending_imm_recv_ops_.front());
             pending_imm_recv_ops_.pop_front();
         }
-        else if (event.status == RDMAAssign::SUCCESS) {
+        else {
+            // Queue all events (SUCCESS, FAILED, FLUSH) so that a future
+            // immRecv() caller observes the actual completion status rather
+            // than blocking indefinitely.
             completed_imm_recv_events_.push_back(event);
         }
-        pending_imm_recv_refill_.push_back(ctx);
     }
+
+    // Lock-free push to refill stack — outside any lock.
+    pushRefill(ctx);
 
     if (op_state) {
         completeImmRecvOp(op_state, event);
     }
 }
 
-int32_t RDMAEndpoint::dispatchTask(OpCode                             op_code,
-                                   const std::vector<assign_tuple_t>& assign,
-                                   std::shared_ptr<EndpointOpState>   op_state,
-                                   int32_t                            imm_data,
-                                   void*                              stream)
+int32_t
+RDMAEndpoint::dispatchTask(OpCode op_code, const std::vector<assign_tuple_t>& assign, int32_t imm_data, void* stream)
 {
     size_t req_idx    = 0;
     size_t req_offset = 0;
@@ -623,14 +537,15 @@ int32_t RDMAEndpoint::dispatchTask(OpCode                             op_code,
     int32_t last_slot = -1;
 
     while (req_idx < total_reqs) {
-        ReadWriteContext* ctx = acquire_slot(rw_slot_id_, read_write_ctx_pool_, SLIME_MAX_IO_FIFO_DEPTH);
-        ctx->slot_id          = static_cast<int32_t>(ctx - read_write_ctx_pool_);
-        ctx->expected_mask    = (1 << num_qp_) - 1;
-        ctx->finished_qp_mask.store(0);
-        ctx->op_state = op_state;
-        ctx->generation.store(op_state ? op_state->op_id : 0, std::memory_order_release);
 
-        last_slot = ctx->slot_id;
+        uint64_t          slot = rw_slot_id_.fetch_add(1, std::memory_order_relaxed) % SLIME_MAX_IO_FIFO_DEPTH;
+        ReadWriteContext* ctx  = &read_write_ctx_pool_[slot];
+        ctx->slot_id           = slot;
+        ctx->expected_mask     = (1 << num_qp_) - 1;
+        ctx->finished_qp_mask.store(0);
+        ctx->completion_status.store(RDMAAssign::SUCCESS, std::memory_order_release);
+
+        last_slot = (int32_t)slot;
 
         OpCode slot_op_code = op_code;
 
@@ -694,22 +609,19 @@ int32_t RDMAEndpoint::dispatchTask(OpCode                             op_code,
             assign.opcode_    = slot_op_code;
             assign.is_inline_ = false;
 
-            uint64_t slot_generation = ctx->generation.load(std::memory_order_acquire);
-            assign.callback_ = [this, ctx, op_state, slot_generation, qpi, is_final_slot](int32_t status, int32_t imm) {
-                if (!slot_generation_matches(ctx, slot_generation)) {
-                    return;
+            assign.callback_ = [this, ctx, qpi, is_final_slot](int32_t status, int32_t imm) {
+                if (status != RDMAAssign::SUCCESS) {
+                    int32_t expected = RDMAAssign::SUCCESS;
+                    ctx->completion_status.compare_exchange_strong(
+                        expected, status, std::memory_order_release, std::memory_order_relaxed);
                 }
-                update_op_completion(op_state, status);
-                uint32_t old_mask = ctx->finished_qp_mask.fetch_or(1u << qpi, std::memory_order_acq_rel);
-                uint32_t new_mask = old_mask | (1u << qpi);
+                uint32_t old_mask = ctx->finished_qp_mask.fetch_or(1 << qpi, std::memory_order_acq_rel);
+                uint32_t new_mask = old_mask | (1 << qpi);
 
                 token_bucket_[qpi].fetch_add(ctx->assigns_[qpi].batch_.size());
 
-                if (is_final_slot && op_state && op_state->signal) {
-                    op_state->signal->set_comm_done(qpi);
-                }
-                if (new_mask == ctx->expected_mask) {
-                    release_slot(ctx);
+                if (is_final_slot) {
+                    ctx->signal->set_comm_done(qpi);
                 }
             };
 
@@ -717,6 +629,10 @@ int32_t RDMAEndpoint::dispatchTask(OpCode                             op_code,
                 assign.imm_data_ = imm_data;
             }
         }
+
+        ctx->signal->reset_all();
+        ctx->signal->bind_stream(stream);
+        ctx->signal->record_gpu_ready();
 
         while (jring_enqueue_burst(read_write_buffer_ring_, (void**)&ctx, 1, nullptr) == 0) {
             machnet_pause();
@@ -739,23 +655,24 @@ std::shared_ptr<SendFuture> RDMAEndpoint::send(const chunk_tuple_t& chunk, void*
     storage_view_t view{data_ptr, offset, length};
     int32_t        handle = local_pool_->registerMemoryRegion(data_ptr, length);
 
-    uint32_t     target_mask = (1 << num_qp_) - 1;
-    uint64_t     op_id       = next_op_id_.fetch_add(1, std::memory_order_relaxed);
-    auto         op_state    = make_op_state(op_id, bypass_signal_, stream_handle, target_mask, true);
-    SendContext* s_ctx       = acquire_slot(send_slot_id_, send_ctx_pool_, SLIME_MAX_MSG_FIFO_DEPTH);
+    uint32_t target_mask = (1 << num_qp_) - 1;
+    uint64_t slot        = send_slot_id_.fetch_add(1, std::memory_order_release) % SLIME_MAX_MSG_FIFO_DEPTH;
+
+    SendContext* s_ctx = &(send_ctx_pool_[slot]);
 
     s_ctx->reset();
-    s_ctx->slot_id                = static_cast<int64_t>(s_ctx - send_ctx_pool_);
+    s_ctx->slot_id                = slot;
     s_ctx->local_meta_info_.view_ = {data_ptr, offset, length};
     s_ctx->expected_mask          = target_mask;
-    s_ctx->op_state               = op_state;
-    s_ctx->generation.store(op_id, std::memory_order_release);
+
+    s_ctx->signal->bind_stream(stream_handle);
+    s_ctx->signal->record_gpu_ready();
 
     while (jring_enqueue_burst(send_buffer_ring_, (void**)&s_ctx, 1, nullptr) == 0) {
         cpu_relax();
     }
 
-    return std::make_shared<SendFuture>(op_state);
+    return send_future_pool_[slot];
 }
 
 std::shared_ptr<RecvFuture> RDMAEndpoint::recv(const chunk_tuple_t& chunk, void* stream_handle)
@@ -767,17 +684,18 @@ std::shared_ptr<RecvFuture> RDMAEndpoint::recv(const chunk_tuple_t& chunk, void*
     storage_view_t view{data_ptr, offset, length};
     int32_t        handle = local_pool_->registerMemoryRegion(data_ptr, length);
 
-    uint32_t     target_mask = (1 << num_qp_) - 1;
-    uint64_t     op_id       = next_op_id_.fetch_add(1, std::memory_order_relaxed);
-    auto         op_state    = make_op_state(op_id, bypass_signal_, stream_handle, target_mask, true);
-    RecvContext* r_ctx       = acquire_slot(msg_recv_slot_id_, recv_ctx_pool_, SLIME_MAX_MSG_FIFO_DEPTH);
+    uint32_t target_mask = (1 << num_qp_) - 1;
+    uint64_t slot        = msg_recv_slot_id_.fetch_add(1, std::memory_order_release) % SLIME_MAX_MSG_FIFO_DEPTH;
+
+    RecvContext* r_ctx = &(recv_ctx_pool_[slot]);
 
     r_ctx->reset();
-    r_ctx->slot_id       = static_cast<int64_t>(r_ctx - recv_ctx_pool_);
+    r_ctx->slot_id       = slot;
     r_ctx->view_         = {data_ptr, offset, length};
     r_ctx->expected_mask = target_mask;
-    r_ctx->op_state      = op_state;
-    r_ctx->generation.store(op_id, std::memory_order_release);
+
+    r_ctx->signal->bind_stream(stream_handle);
+    r_ctx->signal->record_gpu_ready();
 
     struct ibv_mr* mr              = local_pool_->get_mr_fast(handle);
     r_ctx->local_meta_info_.r_key_ = mr->rkey;
@@ -787,7 +705,7 @@ std::shared_ptr<RecvFuture> RDMAEndpoint::recv(const chunk_tuple_t& chunk, void*
         cpu_relax();
     }
 
-    return std::make_shared<RecvFuture>(op_state);
+    return recv_future_pool_[slot];
 }
 
 // ============================================================
@@ -796,45 +714,21 @@ std::shared_ptr<RecvFuture> RDMAEndpoint::recv(const chunk_tuple_t& chunk, void*
 
 std::shared_ptr<ReadWriteFuture> RDMAEndpoint::read(const std::vector<assign_tuple_t>& assign, void* stream)
 {
-    uint64_t op_id    = next_op_id_.fetch_add(1, std::memory_order_relaxed);
-    auto     op_state = make_op_state(op_id, false, stream, (1 << num_qp_) - 1, true);
-    if (assign.empty()) {
-        if (op_state->signal) {
-            op_state->signal->force_complete();
-        }
-        return std::make_shared<ReadWriteFuture>(op_state);
-    }
-    dispatchTask(OpCode::READ, assign, op_state, 0, stream);
-    return std::make_shared<ReadWriteFuture>(op_state);
+    int32_t slot_id = dispatchTask(OpCode::READ, assign, 0, stream);
+    return read_write_future_pool_[slot_id];
 }
 
 std::shared_ptr<ReadWriteFuture> RDMAEndpoint::write(const std::vector<assign_tuple_t>& assign, void* stream)
 {
-    uint64_t op_id    = next_op_id_.fetch_add(1, std::memory_order_relaxed);
-    auto     op_state = make_op_state(op_id, false, stream, (1 << num_qp_) - 1, true);
-    if (assign.empty()) {
-        if (op_state->signal) {
-            op_state->signal->force_complete();
-        }
-        return std::make_shared<ReadWriteFuture>(op_state);
-    }
-    dispatchTask(OpCode::WRITE, assign, op_state, 0, stream);
-    return std::make_shared<ReadWriteFuture>(op_state);
+    int32_t slot_id = dispatchTask(OpCode::WRITE, assign, 0, stream);
+    return read_write_future_pool_[slot_id];
 }
 
 std::shared_ptr<ReadWriteFuture>
 RDMAEndpoint::writeWithImm(const std::vector<assign_tuple_t>& assign, int32_t imm_data, void* stream)
 {
-    uint64_t op_id    = next_op_id_.fetch_add(1, std::memory_order_relaxed);
-    auto     op_state = make_op_state(op_id, false, stream, (1 << num_qp_) - 1, true);
-    if (assign.empty()) {
-        if (op_state->signal) {
-            op_state->signal->force_complete();
-        }
-        return std::make_shared<ReadWriteFuture>(op_state);
-    }
-    dispatchTask(OpCode::WRITE_WITH_IMM, assign, op_state, imm_data, stream);
-    return std::make_shared<ReadWriteFuture>(op_state);
+    int32_t slot_id = dispatchTask(OpCode::WRITE_WITH_IMM, assign, imm_data, stream);
+    return read_write_future_pool_[slot_id];
 }
 
 std::shared_ptr<ImmRecvFuture> RDMAEndpoint::immRecv(void* stream)
@@ -858,7 +752,7 @@ std::shared_ptr<ImmRecvFuture> RDMAEndpoint::immRecv(void* stream)
 
     std::optional<ImmRecvEvent> ready_event;
     {
-        std::lock_guard<std::mutex> guard(imm_recv_mutex_);
+        std::lock_guard<SpinLock> guard(imm_recv_match_lock_);
         if (!completed_imm_recv_events_.empty()) {
             ready_event = completed_imm_recv_events_.front();
             completed_imm_recv_events_.pop_front();
@@ -894,12 +788,7 @@ int32_t RDMAEndpoint::readWriteProcess()
     while (!pending_rw_queue_.empty()) {
         auto* ctx = pending_rw_queue_.front();
 
-        if (!slot_is_active(ctx)) {
-            pending_rw_queue_.pop_front();
-            continue;
-        }
-
-        if (!ctx->op_state || !ctx->op_state->signal || !ctx->op_state->signal->is_gpu_ready()) {
+        if (!ctx->signal->is_gpu_ready()) {
             break;
         }
 
@@ -931,19 +820,14 @@ int32_t RDMAEndpoint::immRecvProcess()
 {
     int32_t work_done = 0;
 
-    // Repost completed transport slots. Keeping refill out of the CQ callback
-    // avoids mutating RDMAAssign while its callback is still executing.
-    while (true) {
-        ImmRecvContext* ctx = nullptr;
-        {
-            std::lock_guard<std::mutex> guard(imm_recv_mutex_);
-            if (pending_imm_recv_refill_.empty()) {
-                break;
-            }
-            ctx = pending_imm_recv_refill_.front();
-            pending_imm_recv_refill_.pop_front();
-        }
-        postImmRecvSlot(ctx);
+    // Atomically drain the entire lock-free refill stack in one exchange,
+    // then batch-repost all completed transport slots without any locking.
+    ImmRecvContext* batch = popAllRefill();
+    while (batch) {
+        ImmRecvContext* next = batch->next_refill_.load(std::memory_order_relaxed);
+        batch->next_refill_.store(nullptr, std::memory_order_relaxed);
+        postImmRecvSlot(batch);
+        batch = next;
         work_done++;
     }
 
@@ -967,10 +851,6 @@ int32_t RDMAEndpoint::sendProcess()
         }
     }
 
-    while (!pending_send_queue_.empty() && !slot_is_active(pending_send_queue_.front())) {
-        pending_send_queue_.pop_front();
-    }
-
     auto it = pending_send_queue_.begin();
 
     if (it != pending_send_queue_.end()) {
@@ -979,7 +859,7 @@ int32_t RDMAEndpoint::sendProcess()
 
         switch (s_ctx->state_) {
             case SendContextState::WAIT_GPU_READY: {
-                if (s_ctx->op_state && s_ctx->op_state->signal && s_ctx->op_state->signal->is_gpu_ready()) {
+                if (s_ctx->signal->is_gpu_ready()) {
                     s_ctx->state_ = SendContextState::WAIT_META;
                     goto CHECK_META_READY;
                 }
@@ -1010,10 +890,8 @@ int32_t RDMAEndpoint::sendProcess()
 
                     int32_t local_data_handle = local_pool_->get_mr_handle(s_ctx->local_meta_info_.view_.data_ptr);
 
-                    size_t   total_len       = s_ctx->remote_meta_info_.view_.length;
-                    size_t   chunk_size      = (total_len + num_qp_ - 1) / num_qp_;
-                    auto     op_state        = s_ctx->op_state;
-                    uint64_t slot_generation = s_ctx->generation.load(std::memory_order_acquire);
+                    size_t total_len  = s_ctx->remote_meta_info_.view_.length;
+                    size_t chunk_size = (total_len + num_qp_ - 1) / num_qp_;
 
                     for (size_t qpi = 0; qpi < num_qp_; ++qpi) {
                         size_t offset      = qpi * chunk_size;
@@ -1035,23 +913,7 @@ int32_t RDMAEndpoint::sendProcess()
                             OpCode::WRITE_WITH_IMM,
                             qpi,
                             batch,
-                            [s_ctx, op_state, slot_generation, qpi](int32_t stat, int32_t imm_data) {
-                                if (!slot_generation_matches(s_ctx, slot_generation)) {
-                                    return;
-                                }
-                                update_op_completion(op_state, stat);
-                                if (op_state && op_state->signal) {
-                                    op_state->signal->set_comm_done(qpi);
-                                }
-                                uint64_t old_mask =
-                                    op_state ?
-                                        op_state->completion_mask.fetch_or(1ULL << qpi, std::memory_order_acq_rel) :
-                                        0;
-                                uint64_t new_mask = old_mask | (1ULL << qpi);
-                                if (op_state && new_mask == op_state->expected_mask) {
-                                    release_slot(s_ctx);
-                                }
-                            },
+                            [s_ctx, qpi](int32_t stat, int32_t imm_data) { s_ctx->signal->set_comm_done(qpi); },
                             false);
 
                         msg_data_channel_->post_rc_oneside_batch(qpi, &(s_ctx->data_send_assigns_[qpi]), local_pool_);
@@ -1088,10 +950,6 @@ int32_t RDMAEndpoint::recvProcess()
         }
     }
 
-    while (!pending_recv_queue_.empty() && !slot_is_active(pending_recv_queue_.front())) {
-        pending_recv_queue_.pop_front();
-    }
-
     auto it = pending_recv_queue_.begin();
     if (it != pending_recv_queue_.end()) {
         RecvContext* r_ctx          = *it;
@@ -1099,7 +957,7 @@ int32_t RDMAEndpoint::recvProcess()
 
         switch (r_ctx->state_) {
             case RecvContextState::WAIT_GPU_BUF: {
-                if (r_ctx->op_state && r_ctx->op_state->signal && r_ctx->op_state->signal->is_gpu_ready()) {
+                if (r_ctx->signal->is_gpu_ready()) {
                     r_ctx->state_ = RecvContextState::INIT_SEND_META;
                     goto SEND_META;
                 }
@@ -1108,28 +966,15 @@ int32_t RDMAEndpoint::recvProcess()
 
             SEND_META:
             case RecvContextState::INIT_SEND_META: {
-                auto     op_state        = r_ctx->op_state;
-                uint64_t slot_generation = r_ctx->generation.load(std::memory_order_acquire);
                 for (size_t qpi = 0; qpi < num_qp_; ++qpi) {
                     std::vector<Assignment> batch{Assignment(reinterpret_cast<uintptr_t>(msg_dummy_), 0, 0, 8)};
                     r_ctx->data_recv_assigns_[qpi].reset(
-                        OpCode::RECV, qpi, batch, [r_ctx, op_state, slot_generation, qpi](int32_t status, int32_t imm) {
-                            if (!slot_generation_matches(r_ctx, slot_generation)) {
-                                return;
+                        OpCode::RECV, qpi, batch, [r_ctx, qpi](int32_t status, int32_t imm) {
+                            if (status == 0) {
+                                r_ctx->signal->set_comm_done(qpi);
                             }
-                            update_op_completion(op_state, status);
-                            if (op_state && op_state->signal) {
-                                op_state->signal->set_comm_done(qpi);
-                            }
-                            if (status != 0) {
+                            else {
                                 SLIME_LOG_DEBUG("Data Recv flushed during completion (likely teardown)");
-                            }
-                            uint64_t old_mask =
-                                op_state ? op_state->completion_mask.fetch_or(1ULL << qpi, std::memory_order_acq_rel) :
-                                           0;
-                            uint64_t new_mask = old_mask | (1ULL << qpi);
-                            if (op_state && new_mask == op_state->expected_mask) {
-                                release_slot(r_ctx);
                             }
                         });
                     msg_data_channel_->post_recv_batch(qpi, &(r_ctx->data_recv_assigns_[qpi]), meta_pool_);
@@ -1187,16 +1032,8 @@ int32_t RDMAEndpoint::process()
 
 void RDMAEndpoint::cancelAll()
 {
-    pending_rw_queue_.clear();
-    pending_send_queue_.clear();
-    pending_recv_queue_.clear();
-    drain_ring(read_write_buffer_ring_, io_burst_buf_, IO_BURST_SIZE);
-    drain_ring(imm_recv_buffer_ring_, io_burst_buf_, IO_BURST_SIZE);
-    drain_ring(send_buffer_ring_, send_new_burst_buf_, BURST_SIZE);
-    drain_ring(recv_buffer_ring_, recv_new_burst_buf_, BURST_SIZE);
-
     {
-        std::lock_guard<std::mutex> guard(imm_recv_mutex_);
+        std::lock_guard<SpinLock> guard(imm_recv_match_lock_);
         for (auto& op_state : pending_imm_recv_ops_) {
             if (op_state) {
                 op_state->completion_status.store(RDMAAssign::FAILED, std::memory_order_release);
@@ -1207,28 +1044,29 @@ void RDMAEndpoint::cancelAll()
         }
         pending_imm_recv_ops_.clear();
         completed_imm_recv_events_.clear();
-        pending_imm_recv_refill_.clear();
     }
 
+    // Drain the lock-free refill stack.
+    popAllRefill();
+
     for (int i = 0; i < SLIME_MAX_IO_FIFO_DEPTH; ++i) {
-        if (read_write_ctx_pool_ && read_write_ctx_pool_[i].op_state && read_write_ctx_pool_[i].op_state->signal) {
-            read_write_ctx_pool_[i].op_state->completion_status.store(RDMAAssign::FAILED, std::memory_order_release);
-            read_write_ctx_pool_[i].op_state->signal->force_complete();
-            release_slot(&read_write_ctx_pool_[i]);
+        if (read_write_ctx_pool_) {
+            read_write_ctx_pool_[i].signal->force_complete();
+        }
+    }
+    for (int i = 0; i < SLIME_MAX_IO_FIFO_DEPTH; ++i) {
+        if (imm_recv_ctx_pool_) {
+            imm_recv_ctx_pool_[i].signal->force_complete();
         }
     }
     for (int i = 0; i < SLIME_MAX_MSG_FIFO_DEPTH; ++i) {
-        if (send_ctx_pool_ && send_ctx_pool_[i].op_state && send_ctx_pool_[i].op_state->signal) {
-            send_ctx_pool_[i].op_state->completion_status.store(RDMAAssign::FAILED, std::memory_order_release);
-            send_ctx_pool_[i].op_state->signal->force_complete();
-            release_slot(&send_ctx_pool_[i]);
+        if (send_ctx_pool_) {
+            send_ctx_pool_[i].signal->force_complete();
         }
     }
     for (int i = 0; i < SLIME_MAX_MSG_FIFO_DEPTH; ++i) {
-        if (recv_ctx_pool_ && recv_ctx_pool_[i].op_state && recv_ctx_pool_[i].op_state->signal) {
-            recv_ctx_pool_[i].op_state->completion_status.store(RDMAAssign::FAILED, std::memory_order_release);
-            recv_ctx_pool_[i].op_state->signal->force_complete();
-            release_slot(&recv_ctx_pool_[i]);
+        if (recv_ctx_pool_) {
+            recv_ctx_pool_[i].signal->force_complete();
         }
     }
 }

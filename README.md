@@ -71,42 +71,6 @@ torchrun --nproc_per_node=2 p2p_nvlink.py
 
 See: [Huawei README](docs/huawei_ascend/README.md)
 
-> \[!Caution\]
-> DLSlime NVShmem transfer engine and Huawei Ascond Direct mode are in the experimental stage.
-
-### Collective Ops
-
-#### Intra Node
-
-##### AllGather
-
-```shell
-torchrun --nnodes 1 --master-addr 10.130.8.143 --node-rank 0 --nproc-per-node 8 --master-port 6007 example/python/all_gather_ll.py --mode intra
-```
-
-#### Inter Node
-
-##### AllGather
-
-```shell
-# Node 0
-torchrun --nnodes 2 --master-addr 10.130.8.143 --node-rank 0 --nproc-per-node 8 --master-port 6007 example/python/all_gather_ll.py --mode inter
-# Node 1
-torchrun --nnodes 2 --master-addr 10.130.8.143 --node-rank 1 --nproc-per-node 8 --master-port 6007 example/python/all_gather_ll.py --mode inter
-```
-
-##### AllGather Gemm Overlapping
-
-```shell
-# Node 0
-torchrun --nnodes 2 --master-addr 10.130.8.143 --node-rank 0 --nproc-per-node 8 --master-port 6007 example/python/all_gather_gemm_overlap.py
-# Node 1
-torchrun --nnodes 2 --master-addr 10.130.8.143 --node-rank 1 --nproc-per-node 8 --master-port 6007 example/python/all_gather_gemm_overlap.py
-```
-
-> \[!Note\]
-> The intra- and inter- examples example above enables CUDA Graph by default. --eager-mode falls back to eager mode.
-
 ## Install
 
 ### pip install

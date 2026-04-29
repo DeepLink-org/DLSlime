@@ -138,7 +138,7 @@ int32_t RDMAChannel::modify_qp_to_r2r()
         attr.dest_qp_num           = remote_rdma_info_[qpi].qpn;
         attr.rq_psn                = remote_rdma_info_[qpi].psn;
         attr.max_dest_rd_atomic    = SLIME_MAX_DEST_RD_ATOMIC;
-        attr.min_rnr_timer         = 0x16;
+        attr.min_rnr_timer         = 0x20;
         attr.ah_attr.dlid          = remote_rdma_info_[qpi].lid;
         attr.ah_attr.sl            = SLIME_SERVICE_LEVEL;
         attr.ah_attr.src_path_bits = 0;
