@@ -20,6 +20,7 @@
 #include "rdma_channel.h"
 #include "rdma_common.h"
 #include "rdma_context.h"
+#include "rdma_op_state.h"
 #include "remote_memory_pool.h"
 
 namespace dlslime {
@@ -53,10 +54,12 @@ enum class IOContextState {
 };
 
 // --- Read/Write Context (Initiator) ---
+//
+// Pure transport-execution slot. User-visible completion state lives on the
+// EndpointOpState held in op_state; callbacks capture that shared_ptr so the
+// right operation receives its own completion even after the slot is reused.
 struct ReadWriteContext {
     int32_t slot_id;
-
-    std::shared_ptr<dlslime::device::DeviceSignal> signal;
 
     std::vector<RDMAAssign> assigns_;
 
@@ -66,10 +69,15 @@ struct ReadWriteContext {
     uint32_t  rkey;
     int32_t   imm_data;
     OpCode    op_code;
-    uint32_t  expected_mask;
 
-    std::atomic<uint32_t> finished_qp_mask{0};
-    std::atomic<int32_t>  completion_status{0};
+    // Generation bumped every time the slot is acquired for a new submission.
+    // Late CQ callbacks compare against this to decide whether they are still
+    // the current owner of the slot.
+    std::atomic<uint64_t> generation{0};
+
+    // The operation currently owning this slot. A shared_ptr so late
+    // callbacks can outlive a slot reuse.
+    std::shared_ptr<EndpointOpState> op_state;
 
     IOContextState state_ = IOContextState::FREE;
 };
@@ -90,18 +98,6 @@ struct ImmRecvContext {
 
     // Intrusive pointer for lock-free MPSC refill stack.
     std::atomic<ImmRecvContext*> next_refill_{nullptr};
-};
-
-struct ImmRecvOpState {
-    // User-owned state for one immRecv() call. A completion event is copied
-    // here when it is matched to this operation, so wait()/immData() remain
-    // stable even after the transport slot is reposted.
-    std::shared_ptr<dlslime::device::DeviceSignal> signal;
-    uint32_t                                       expected_mask{0};
-    std::atomic<int32_t>                           completion_status{RDMAAssign::SUCCESS};
-    std::atomic<int32_t>                           imm_data{0};
-    std::atomic<uint64_t>                          trace_start_ns{0};
-    std::atomic<uint64_t>                          trace_end_ns{0};
 };
 
 struct ImmRecvEvent {
@@ -168,16 +164,8 @@ struct alignas(64) SendContext {
 
     SendContextState state_;
 
-    std::shared_ptr<dlslime::device::DeviceSignal> signal;
-
-    uint64_t expected_mask = 0;
-
-    void reset()
-    {
-        expected_mask = 0;
-        state_        = SendContextState::WAIT_GPU_READY;
-        signal->reset_all();
-    }
+    std::atomic<uint64_t>            generation{0};
+    std::shared_ptr<EndpointOpState> op_state;
 };
 
 // Context for Recv Operations
@@ -194,16 +182,8 @@ struct alignas(64) RecvContext {
 
     RecvContextState state_;
 
-    std::shared_ptr<dlslime::device::DeviceSignal> signal;
-
-    uint64_t expected_mask = 0;
-
-    void reset()
-    {
-        expected_mask = 0;
-        state_        = RecvContextState::INIT_SEND_META;
-        signal->reset_all();
-    }
+    std::atomic<uint64_t>            generation{0};
+    std::shared_ptr<EndpointOpState> op_state;
 };
 
 // ============================================================
@@ -284,15 +264,18 @@ private:
     void dummyReset(ImmRecvContext* ctx);
     void postImmRecvSlot(ImmRecvContext* ctx);
     void postImmRecvWindow();
-    void completeImmRecvOp(const std::shared_ptr<ImmRecvOpState>& op_state, const ImmRecvEvent& event);
+    void completeImmRecvOp(const std::shared_ptr<EndpointOpState>& op_state, const ImmRecvEvent& event);
     void enqueueImmRecvCompletion(ImmRecvContext* ctx);
 
     /// Lock-free MPSC helpers for the refill stack.
     void            pushRefill(ImmRecvContext* ctx);
     ImmRecvContext* popAllRefill();
 
-    int32_t
-    dispatchTask(OpCode op_code, const std::vector<assign_tuple_t>&, int32_t imm_data = 0, void* stream = nullptr);
+    int32_t dispatchTask(OpCode                             op_code,
+                         const std::vector<assign_tuple_t>& assign,
+                         std::shared_ptr<EndpointOpState>   op_state,
+                         int32_t                            imm_data = 0,
+                         void*                              stream   = nullptr);
 
     int32_t readWriteProcess();
     int32_t immRecvProcess();
@@ -302,6 +285,12 @@ private:
     // ============================================================
     int32_t sendProcess();
     int32_t recvProcess();
+
+    // Tracks every EndpointOpState this endpoint still considers in-flight,
+    // so cancelAll() can force-complete exactly those operations instead of
+    // blasting every pooled slot signal. Weak references so lingering
+    // callbacks do not pin completed ops indefinitely.
+    void registerInFlight(const std::shared_ptr<EndpointOpState>& op_state);
 
     // ============================================================
     // Member Variables - Common
@@ -326,8 +315,6 @@ private:
     ReadWriteContext* read_write_ctx_pool_;
     ImmRecvContext*   imm_recv_ctx_pool_;
 
-    std::vector<std::shared_ptr<ReadWriteFuture>> read_write_future_pool_;
-
     jring_t* read_write_buffer_ring_;
     jring_t* imm_recv_buffer_ring_;
 
@@ -340,9 +327,9 @@ private:
 
     // Matching queues for the decoupled imm-recv path.
     // Protected by imm_recv_match_lock_ (spinlock, short critical sections).
-    SpinLock                                    imm_recv_match_lock_;
-    std::deque<std::shared_ptr<ImmRecvOpState>> pending_imm_recv_ops_;
-    std::deque<ImmRecvEvent>                    completed_imm_recv_events_;
+    SpinLock                                     imm_recv_match_lock_;
+    std::deque<std::shared_ptr<EndpointOpState>> pending_imm_recv_ops_;
+    std::deque<ImmRecvEvent>                     completed_imm_recv_events_;
 
     // Lock-free MPSC refill stack. CQ callback threads push via pushRefill(),
     // the progress thread drains via popAllRefill(). No lock needed.
@@ -368,9 +355,6 @@ private:
     SendContext* send_ctx_pool_;
     RecvContext* recv_ctx_pool_;
 
-    std::vector<std::shared_ptr<SendFuture>> send_future_pool_;
-    std::vector<std::shared_ptr<RecvFuture>> recv_future_pool_;
-
     std::deque<SendContext*> pending_send_queue_;
     std::deque<RecvContext*> pending_recv_queue_;
 
@@ -387,6 +371,12 @@ private:
     int32_t send_ctx_handle_{-1};
 
     int64_t* msg_dummy_;
+
+    // ============================================================
+    // In-flight op registry (for cancelAll())
+    // ============================================================
+    SpinLock                                    in_flight_lock_;
+    std::vector<std::weak_ptr<EndpointOpState>> in_flight_ops_;
 };
 
 }  // namespace dlslime
