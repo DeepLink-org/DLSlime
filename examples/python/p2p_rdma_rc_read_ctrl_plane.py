@@ -57,14 +57,16 @@ target = target_agent.get_endpoint(initiator_name)
 local_tensor = torch.zeros([16], device="cpu", dtype=torch.uint8)
 handler = initiator_agent.register_memory_region(
     "kv",
-    local_tensor.data_ptr() + int(local_tensor.storage_offset()),
+    local_tensor.data_ptr(),
+    int(local_tensor.storage_offset()),
     local_tensor.numel() * local_tensor.itemsize,
 )
 
 remote_tensor = torch.ones([16], device="cpu", dtype=torch.uint8)
 target_agent.register_memory_region(
     "kv",
-    remote_tensor.data_ptr() + int(remote_tensor.storage_offset()),
+    remote_tensor.data_ptr(),
+    int(remote_tensor.storage_offset()),
     remote_tensor.numel() * remote_tensor.itemsize,
 )
 
@@ -82,7 +84,13 @@ hremote_on_initiator = initiator_agent.register_remote_memory_region(
 
 # Perform RDMA read
 print("Performing RDMA read...")
-slot = initiator.read([(handler, hremote_on_initiator, 0, 8, 8)], None)
+slot = initiator.read(
+    [
+        (handler, hremote_on_initiator, 0, 8, 8),
+        (handler, hremote_on_initiator, 0, 0, 8),
+    ],
+    None,
+)
 slot.wait()
 
 # Verify results
