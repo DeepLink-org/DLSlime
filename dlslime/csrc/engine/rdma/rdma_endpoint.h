@@ -45,71 +45,50 @@ constexpr int BURST_SIZE    = 128;
 // Context Structures for IO Operations
 // ============================================================
 
-enum class IOContextState {
-    FREE,
-    PENDING,
-    WAIT_TOKEN,
-    POSTED,
-    DONE
-};
-
 // --- Read/Write Context (Initiator) ---
 //
-// Pure transport-execution slot. User-visible completion state lives on the
-// EndpointOpState held in op_state; callbacks capture that shared_ptr so the
-// right operation receives its own completion even after the slot is reused.
+// Transport dispatch slot for the one-sided (read / write / writeWithImm)
+// path. Strictly a lease-scoped coordinator: a single in-flight op owns
+// the slot from acquire until every per-qp callback has fired.
 //
-// Lifecycle: the slot is owned by at most one in-flight op at a time. It
-// leaves rw_free_ring_ when a user op acquires it (blocking if the pool is
-// exhausted) and is returned only once ALL of its per-qp callbacks have
-// fired — never by modulo reuse. That invariant is what makes it safe for
-// HW to still hold wr_id pointers into ctx->assigns_ after user code has
-// already dropped its future.
+// Responsibilities (slot-level only):
+//   - hold the per-qp RDMAAssign storage that wr_id points into
+//   - track per-qp callback firings (slot_qp_mask)
+//   - carry a back-reference to the current op_state so callbacks can
+//     update it
+// NON-responsibilities (belong to EndpointOpState):
+//   - user-visible completion signal, status, imm_data
+//   - op identity / lifetime
 struct ReadWriteContext {
     int32_t slot_id;
 
     std::vector<RDMAAssign> assigns_;
 
-    uintptr_t local_ptr;
-    uintptr_t remote_ptr;
-    size_t    length;
-    uint32_t  rkey;
-    int32_t   imm_data;
-    OpCode    op_code;
-
-    // Generation bumped every time the slot is acquired for a new submission.
-    // Kept as a diagnostic / invariant check; no longer load-bearing because
-    // the free-slot ring guarantees there is at most one owner at a time.
-    std::atomic<uint64_t> generation{0};
-
-    // The operation currently owning this slot.
+    // The op currently leasing this slot. Reset to nullptr on release.
     std::shared_ptr<EndpointOpState> op_state;
 
-    // Mask of per-qp callbacks that have fired for the current op on this
-    // slot. Once it reaches slot_qp_expected_ the slot is returned to
-    // rw_free_ring_. expected is written at acquire-time so it reflects
-    // the configured QP count for this op.
+    // Per-qp callback-fired mask. The slot is returned to rw_free_ring_
+    // only when this reaches slot_qp_expected, so no wr_id can point
+    // into assigns_ after re-lease.
     std::atomic<uint32_t> slot_qp_mask{0};
     uint32_t              slot_qp_expected{0};
-
-    IOContextState state_ = IOContextState::FREE;
 };
 
 struct ImmRecvContext {
+    // Transport-owned receive slot. These contexts stay posted on the
+    // hardware RQ and recycle through a refill stack; user futures do
+    // NOT reference them (they observe EndpointOpState instead, matched
+    // via pending_imm_recv_ops_ / completed_imm_recv_events_).
     int32_t                                        slot_id;
     std::shared_ptr<dlslime::device::DeviceSignal> signal;
     std::vector<RDMAAssign>                        assigns_;
 
-    // Transport-owned receive slot. These contexts are kept posted on the
-    // hardware RQ and recycled after completion; user futures must not retain
-    // pointers to them because the slot can be refilled and reused.
     uint32_t              expected_mask;
     std::atomic<uint32_t> finished_qp_mask{0};
     std::atomic<int32_t>  completion_status{0};
     std::atomic<int32_t>  imm_data{0};
-    IOContextState        state_ = IOContextState::FREE;
 
-    // Intrusive pointer for lock-free MPSC refill stack.
+    // Intrusive pointer for the lock-free MPSC refill stack.
     std::atomic<ImmRecvContext*> next_refill_{nullptr};
 };
 
@@ -180,9 +159,9 @@ struct alignas(64) SendContext {
     RDMAAssign meta_recv_assign_;
     RDMAAssign data_send_assigns_[64];
 
+    // Per-lease state machine (WAIT_GPU_READY → WAIT_META → …).
     SendContextState state_;
 
-    std::atomic<uint64_t>            generation{0};
     std::shared_ptr<EndpointOpState> op_state;
 
     std::atomic<uint32_t> slot_qp_mask{0};
@@ -204,9 +183,9 @@ struct alignas(64) RecvContext {
 
     uintptr_t remote_meta_key_;
 
+    // Per-lease state machine (WAIT_GPU_BUF → INIT_SEND_META → …).
     RecvContextState state_;
 
-    std::atomic<uint64_t>            generation{0};
     std::shared_ptr<EndpointOpState> op_state;
 
     std::atomic<uint32_t> slot_qp_mask{0};

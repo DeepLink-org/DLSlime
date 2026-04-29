@@ -42,11 +42,10 @@ namespace {
 // unique to this op so the returned future is never coupled to a reused
 // slot's signal state.
 std::shared_ptr<EndpointOpState>
-makeOpState(uint32_t expected_mask, uint64_t op_id, bool bypass_signal, void* stream, bool trace_start = false)
+makeOpState(uint32_t expected_mask, bool bypass_signal, void* stream, bool trace_start = false)
 {
     auto op_state           = std::make_shared<EndpointOpState>();
     op_state->signal        = dlslime::device::createSignal(bypass_signal);
-    op_state->op_id         = op_id;
     op_state->expected_mask = expected_mask;
     op_state->completion_mask.store(0, std::memory_order_relaxed);
     op_state->completion_status.store(RDMAAssign::SUCCESS, std::memory_order_relaxed);
@@ -127,7 +126,10 @@ void RDMAEndpoint::init(std::shared_ptr<RDMAWorker> worker)
     size_t ring_size        = SLIME_MAX_IO_FIFO_DEPTH;
     read_write_buffer_ring_ = createRing("io_rw_ring", ring_size);
     imm_recv_buffer_ring_   = createRing("io_recv_ring", ring_size);
-    rw_free_ring_           = createRing("io_rw_free_ring", ring_size);
+    // jring capacity is size-1 (one slot reserved for the head/tail gap).
+    // Double the nominal depth so the free ring can actually hold every
+    // slot at once.
+    rw_free_ring_ = createRing("io_rw_free_ring", ring_size * 2);
 
     void* raw_rw_ctx = nullptr;
     if (posix_memalign(&raw_rw_ctx, 64, sizeof(ReadWriteContext) * SLIME_MAX_IO_FIFO_DEPTH) != 0) {
@@ -226,10 +228,10 @@ void RDMAEndpoint::init(std::shared_ptr<RDMAWorker> worker)
     send_buffer_ring_    = createRing("send_buf", msg_ring_size);
     recv_buffer_ring_    = createRing("recv_buf", msg_ring_size);
 
-    // Free-slot rings are sized to the pool itself (not doubled) — they
-    // only ever hold pool[i] pointers.
-    send_free_ring_ = createRing("send_free", SLIME_MAX_MSG_FIFO_DEPTH);
-    recv_free_ring_ = createRing("recv_free", SLIME_MAX_MSG_FIFO_DEPTH);
+    // Free-slot rings. jring capacity is size-1, so 2*DEPTH is required
+    // to actually hold DEPTH slot pointers.
+    send_free_ring_ = createRing("send_free", SLIME_MAX_MSG_FIFO_DEPTH * 2);
+    recv_free_ring_ = createRing("recv_free", SLIME_MAX_MSG_FIFO_DEPTH * 2);
     for (int i = 0; i < SLIME_MAX_MSG_FIFO_DEPTH; ++i) {
         SendContext* s_slot = &send_ctx_pool_[i];
         RecvContext* r_slot = &recv_ctx_pool_[i];
@@ -481,10 +483,8 @@ ReadWriteContext* RDMAEndpoint::acquireReadWriteSlot()
         machnet_pause();
     }
     ReadWriteContext* ctx = static_cast<ReadWriteContext*>(landing[0]);
-    ctx->generation.fetch_add(1, std::memory_order_acq_rel);
     ctx->slot_qp_mask.store(0, std::memory_order_relaxed);
     ctx->slot_qp_expected = (1u << num_qp_) - 1;
-    ctx->state_           = IOContextState::FREE;
     return ctx;
 }
 
@@ -495,7 +495,6 @@ SendContext* RDMAEndpoint::acquireSendSlot()
         machnet_pause();
     }
     SendContext* ctx = static_cast<SendContext*>(landing[0]);
-    ctx->generation.fetch_add(1, std::memory_order_acq_rel);
     ctx->slot_qp_mask.store(0, std::memory_order_relaxed);
     ctx->slot_qp_expected = (1u << num_qp_) - 1;
     ctx->state_           = SendContextState::WAIT_GPU_READY;
@@ -510,7 +509,6 @@ RecvContext* RDMAEndpoint::acquireRecvSlot()
         machnet_pause();
     }
     RecvContext* ctx = static_cast<RecvContext*>(landing[0]);
-    ctx->generation.fetch_add(1, std::memory_order_acq_rel);
     ctx->slot_qp_mask.store(0, std::memory_order_relaxed);
     ctx->slot_qp_expected = (1u << num_qp_) - 1;
     ctx->state_           = RecvContextState::WAIT_GPU_BUF;
@@ -593,7 +591,6 @@ void RDMAEndpoint::postImmRecvSlot(ImmRecvContext* ctx)
     for (size_t qpi = 0; qpi < num_qp_; ++qpi) {
         io_data_channel_->post_recv_batch(qpi, &(ctx->assigns_[qpi]), meta_pool_);
     }
-    ctx->state_ = IOContextState::POSTED;
 }
 
 void RDMAEndpoint::postImmRecvWindow()
@@ -839,8 +836,7 @@ std::shared_ptr<SendFuture> RDMAEndpoint::send(const chunk_tuple_t& chunk, void*
     // Build a fresh op_state for this send — unique signal + completion
     // fields. The future the caller receives can never observe another
     // send's completion.
-    auto op_state   = makeOpState(target_mask, 0, bypass_signal_, stream_handle, /*trace_start=*/false);
-    op_state->op_id = s_ctx->generation.load(std::memory_order_acquire);
+    auto op_state = makeOpState(target_mask, bypass_signal_, stream_handle, /*trace_start=*/false);
 
     s_ctx->op_state               = op_state;
     s_ctx->local_meta_info_.view_ = {data_ptr, offset, length};
@@ -871,8 +867,7 @@ std::shared_ptr<RecvFuture> RDMAEndpoint::recv(const chunk_tuple_t& chunk, void*
 
     RecvContext* r_ctx = acquireRecvSlot();
 
-    auto op_state   = makeOpState(target_mask, 0, bypass_signal_, stream_handle, /*trace_start=*/false);
-    op_state->op_id = r_ctx->generation.load(std::memory_order_acquire);
+    auto op_state = makeOpState(target_mask, bypass_signal_, stream_handle, /*trace_start=*/false);
 
     r_ctx->op_state = op_state;
     r_ctx->view_    = {data_ptr, offset, length};
@@ -900,7 +895,7 @@ std::shared_ptr<RecvFuture> RDMAEndpoint::recv(const chunk_tuple_t& chunk, void*
 
 std::shared_ptr<ReadWriteFuture> RDMAEndpoint::read(const std::vector<assign_tuple_t>& assign, void* stream)
 {
-    auto op_state = makeOpState((1u << num_qp_) - 1, 0, false, stream, /*trace_start=*/false);
+    auto op_state = makeOpState((1u << num_qp_) - 1, false, stream, /*trace_start=*/false);
     registerInFlight(op_state);
     dispatchTask(OpCode::READ, assign, op_state, 0, stream);
     return std::make_shared<ReadWriteFuture>(op_state);
@@ -908,7 +903,7 @@ std::shared_ptr<ReadWriteFuture> RDMAEndpoint::read(const std::vector<assign_tup
 
 std::shared_ptr<ReadWriteFuture> RDMAEndpoint::write(const std::vector<assign_tuple_t>& assign, void* stream)
 {
-    auto op_state = makeOpState((1u << num_qp_) - 1, 0, false, stream, /*trace_start=*/false);
+    auto op_state = makeOpState((1u << num_qp_) - 1, false, stream, /*trace_start=*/false);
     registerInFlight(op_state);
     dispatchTask(OpCode::WRITE, assign, op_state, 0, stream);
     return std::make_shared<ReadWriteFuture>(op_state);
@@ -917,7 +912,7 @@ std::shared_ptr<ReadWriteFuture> RDMAEndpoint::write(const std::vector<assign_tu
 std::shared_ptr<ReadWriteFuture>
 RDMAEndpoint::writeWithImm(const std::vector<assign_tuple_t>& assign, int32_t imm_data, void* stream)
 {
-    auto op_state = makeOpState((1u << num_qp_) - 1, 0, false, stream, /*trace_start=*/false);
+    auto op_state = makeOpState((1u << num_qp_) - 1, false, stream, /*trace_start=*/false);
     registerInFlight(op_state);
     dispatchTask(OpCode::WRITE_WITH_IMM, assign, op_state, imm_data, stream);
     return std::make_shared<ReadWriteFuture>(op_state);
@@ -931,7 +926,7 @@ std::shared_ptr<ImmRecvFuture> RDMAEndpoint::immRecv(void* stream)
     // queued event, or wait in pending_imm_recv_ops_ until a future CQ event
     // arrives. It does not own a hardware receive slot; the transport-owned
     // slots stay permanently posted (RNR-avoidance window).
-    auto op_state = makeOpState((1u << num_qp_) - 1, 0, false, stream, /*trace_start=*/SLIME_WITH_TIME_TRACE != 0);
+    auto op_state = makeOpState((1u << num_qp_) - 1, false, stream, /*trace_start=*/SLIME_WITH_TIME_TRACE != 0);
 
     std::optional<ImmRecvEvent> ready_event;
     {
@@ -1000,8 +995,6 @@ int32_t RDMAEndpoint::readWriteProcess()
             token_bucket_[qpi].fetch_sub(ctx->assigns_[qpi].batch_.size(), std::memory_order_release);
             io_data_channel_->post_rc_oneside_batch(qpi, &(ctx->assigns_[qpi]), local_pool_);
         }
-
-        ctx->state_ = IOContextState::POSTED;
     }
     return work_done;
 }
