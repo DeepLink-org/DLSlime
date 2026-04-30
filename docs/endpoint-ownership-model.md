@@ -83,12 +83,27 @@ into a callback installed by a different op.**
 
 ### I3 — Callback lifetime
 
-Transport callbacks capture `shared_ptr<EndpointOpState>`. The
-`RDMAAssign::callback_` storage would normally close a cycle
-(`op_state → assigns → callback_ → op_state`); the CQ poller
-(`rdma_context.cpp`) moves the callback to its own stack before
-invoking it, so the cycle dies the moment the lambda returns. No
-reference counting games are needed to reclaim completed ops.
+Transport callbacks capture `shared_ptr<EndpointOpState>`. This closes a
+cycle (`op_state → assigns → callback_ → op_state`), but the cycle is
+bounded: it breaks the next time the slot is re-leased for a new op
+(because `RDMAAssign::reset()` overwrites `callback_` and releases the
+old lambda's captures) or when the endpoint is destroyed. In the
+meantime the completed op is pinned in memory by its own slot's
+closure, which is acceptable because:
+
+- the total retention is bounded by the pool size (at most `DEPTH`
+  completed op_states in flight);
+- for any real workload the slot is reclaimed and re-leased within
+  microseconds of completion, so retention is negligible;
+- futures observe completion via the signal, which fires before the
+  callback returns — user code is never blocked by retention.
+
+We do NOT try to move the callback out on fire (an earlier attempt
+broke the codebase): many `RDMAAssign`s hold multiple pending WRs
+simultaneously (connect-time pre-post plus a repost in `WAIT_META`
+that shares the same `wr_id`), so the callback must remain callable
+across every CQE for that `wr_id` until the next `reset()` installs
+a replacement.
 
 ### I4 — Op lifetime
 

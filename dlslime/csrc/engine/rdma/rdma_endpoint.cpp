@@ -498,7 +498,15 @@ SendContext* RDMAEndpoint::acquireSendSlot()
     ctx->slot_qp_mask.store(0, std::memory_order_relaxed);
     ctx->slot_qp_expected = (1u << num_qp_) - 1;
     ctx->state_           = SendContextState::WAIT_GPU_READY;
-    ctx->meta_arrived_flag_.val.store(0, std::memory_order_release);
+    // NOTE: do NOT reset meta_arrived_flag_ here. The meta-recv RECV on
+    // the meta channel is driven by the peer independently of our own
+    // acquire; if the peer's meta write (targeting this slot's
+    // remote_meta_info_) has already arrived and fired the flag before
+    // the user called send(), clearing the flag would deadlock
+    // sendProcess in WAIT_META. The flag is consumed (set to 0) by
+    // sendProcess when the state machine advances past WAIT_META, so on
+    // acquire it is either already 0 (nothing pending) or 1 (pre-arrived
+    // for THIS slot) — both are correct inputs to the state machine.
     return ctx;
 }
 
