@@ -8,14 +8,19 @@ free ring until the previous tenant's per-qp callbacks have fired, so
 the test should complete and every read's local buffer should match its
 corresponding remote window byte-for-byte.
 
+Parametrized on ``num_qp`` to exercise the per-qp mask accounting
+(``slot_qp_mask`` / ``EndpointOpState::completion_mask`` /
+``token_bucket_`` refund by captured ``batch_size``). num_qp=1 is the
+trivial case; num_qp>=2 actually exercises the mask arithmetic.
+
 Run directly:
 
-    pytest tests/python/ops/stress_concurrent.py -v
+    pytest tests/python/test_stress_concurrent.py -v
 
 Or drive with a custom depth / op count:
 
     SLIME_MAX_IO_FIFO_DEPTH=32 STRESS_NUM_READS=512 \\
-        pytest tests/python/ops/stress_concurrent.py -v
+        pytest tests/python/test_stress_concurrent.py -v
 """
 
 # Env must be set before `import dlslime` — the C++ layer reads these
@@ -41,16 +46,22 @@ def _pattern(n: int) -> torch.Tensor:
     return (torch.arange(n, dtype=torch.int64) % 256).to(torch.uint8)
 
 
-@pytest.fixture(scope="module")
-def endpoints():
+@pytest.fixture(scope="module", params=[1, 2, 4], ids=lambda q: f"num_qp={q}")
+def endpoints(request):
+    num_qp = request.param
+
     nics = dlslime.available_nic()
     if not nics:
         pytest.skip("no RDMA NICs available")
 
     total = NUM_READS * WINDOW_BYTES
 
-    initiator = dlslime.RDMAEndpoint(device_name=nics[0], ib_port=1, link_type="RoCE")
-    target = dlslime.RDMAEndpoint(device_name=nics[-1], ib_port=1, link_type="RoCE")
+    initiator = dlslime.RDMAEndpoint(
+        device_name=nics[0], ib_port=1, link_type="RoCE", num_qp=num_qp
+    )
+    target = dlslime.RDMAEndpoint(
+        device_name=nics[-1], ib_port=1, link_type="RoCE", num_qp=num_qp
+    )
 
     # Local (destination on initiator) and remote (source on target)
     # buffers. Remote holds a known pattern; local starts zeroed and
@@ -87,6 +98,7 @@ def endpoints():
         "remote_buf": remote_buf,
         "h_local": h_local,
         "h_remote": h_remote,
+        "num_qp": num_qp,
     }
 
     # Explicit teardown so the background worker stops observing these

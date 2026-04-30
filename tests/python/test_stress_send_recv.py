@@ -80,14 +80,20 @@ def _payload(op_idx: int, nbytes: int) -> torch.Tensor:
     return buf
 
 
-@pytest.fixture(scope="module")
-def endpoints():
+@pytest.fixture(scope="module", params=[1, 2, 4], ids=lambda q: f"num_qp={q}")
+def endpoints(request):
+    num_qp = request.param
+
     nics = dlslime.available_nic()
     if not nics:
         pytest.skip("no RDMA NICs available")
 
-    sender = dlslime.RDMAEndpoint(device_name=nics[0], ib_port=1, link_type="RoCE")
-    receiver = dlslime.RDMAEndpoint(device_name=nics[-1], ib_port=1, link_type="RoCE")
+    sender = dlslime.RDMAEndpoint(
+        device_name=nics[0], ib_port=1, link_type="RoCE", num_qp=num_qp
+    )
+    receiver = dlslime.RDMAEndpoint(
+        device_name=nics[-1], ib_port=1, link_type="RoCE", num_qp=num_qp
+    )
 
     sender.connect(receiver.endpoint_info())
     receiver.connect(sender.endpoint_info())
