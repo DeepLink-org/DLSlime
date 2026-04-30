@@ -26,8 +26,8 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=200):
 
     # 2. 创建 IO Endpoint
     # ep1 作为 Initiator (Client), ep2 作为 Target (Server)
-    ep1 = _slime_c.RDMAEndpoint(num_qp=1)
-    ep2 = _slime_c.RDMAEndpoint(num_qp=1)
+    ep1 = _slime_c.RDMAEndpoint(num_qp=num_qp)
+    ep2 = _slime_c.RDMAEndpoint(num_qp=num_qp)
 
     ep1.connect(ep2.endpoint_info())
     ep2.connect(ep1.endpoint_info())
@@ -42,6 +42,37 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=200):
         test_sizes.append(current_size)
         current_size *= 2
 
+    device = torch.device(device_type)
+    max_size = max(test_sizes)
+    send_buffer = torch.empty((max_size,), dtype=torch.uint8, device=device)
+    recv_buffer = torch.empty((max_size,), dtype=torch.uint8, device=device)
+
+    if device_type == "cuda":
+        torch.cuda.synchronize()
+
+    # One-Sided 操作必须显式注册目标内存，并获取 RKey。这里注册最大 buffer 一次，
+    # 每个 size 的测试只使用 buffer 前缀，避免循环中累积注册资源。
+    local_ptr = send_buffer.data_ptr()
+    remote_ptr = recv_buffer.data_ptr()
+
+    local_name = str(local_ptr)
+    mr_name = str(remote_ptr)
+
+    local_handle = ep1.register_memory_region(
+        local_name,
+        local_ptr,
+        int(send_buffer.storage_offset()),
+        max_size,
+    )
+    ep2.register_memory_region(
+        mr_name,
+        remote_ptr,
+        int(recv_buffer.storage_offset()),
+        max_size,
+    )
+
+    remote_handle = ep1.register_remote_memory_region(mr_name, ep2.mr_info()[mr_name])
+
     print(
         f"{'Size':<15} | {'Latency (us)':<15} | {'Bandwidth (GB/s)':<20} | {'Check':<10}"
     )
@@ -49,52 +80,17 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=200):
 
     for size in test_sizes:
         # ---------------------------------------------------------
-        # A. 准备数据 (Tensor Allocation)
+        # A. 准备数据 (Tensor View)
         # ---------------------------------------------------------
+        send_tensor = send_buffer[:size]
+        recv_tensor = recv_buffer[:size]
+        send_tensor.random_(0, 255)
+        recv_tensor.zero_()
         if device_type == "cuda":
-            send_tensor = torch.randint(
-                0, 255, (size,), dtype=torch.uint8, device="cpu"
-            )
-            recv_tensor = torch.zeros((size,), dtype=torch.uint8, device="cpu")
             torch.cuda.synchronize()
-        else:
-            send_tensor = torch.randint(
-                0, 255, (size,), dtype=torch.uint8, device="cpu"
-            )
-            recv_tensor = torch.zeros((size,), dtype=torch.uint8, device="cpu")
 
         # ---------------------------------------------------------
-        # B. 内存注册 (Memory Registration)
-        # ---------------------------------------------------------
-        # One-Sided 操作必须显式注册目标内存，并获取 RKey
-        local_ptr = send_tensor.data_ptr()
-        remote_ptr = recv_tensor.data_ptr()
-
-        local_name = str(local_ptr)
-        mr_name = str(remote_ptr)
-
-        # 注册 Initiator 内存，保存 handle 用于 write_with_imm 的 tuple
-        local_handle = ep1.register_memory_region(
-            local_name,
-            local_ptr,
-            int(send_tensor.storage_offset()),
-            size,
-        )
-        # 注册 Target 内存 (string name so it is exported via endpoint_info mr_info)
-        ep2.register_memory_region(
-            mr_name,
-            remote_ptr,
-            int(recv_tensor.storage_offset()),
-            size,
-        )
-
-        # 在 ep1 的 remote pool 中注册，返回 remote handle
-        remote_handle = ep1.register_remote_memory_region(
-            mr_name, ep2.mr_info()[mr_name]
-        )
-
-        # ---------------------------------------------------------
-        # C. 预热 (Warmup)
+        # B. 预热 (Warmup)
         # ---------------------------------------------------------
         warmup_iters = 5
         for _ in range(warmup_iters):
@@ -114,7 +110,7 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=200):
             torch.cuda.synchronize()
 
         # ---------------------------------------------------------
-        # D. 正式评测 (Benchmark Loop)
+        # C. 正式评测 (Benchmark Loop)
         # ---------------------------------------------------------
         t_start = time.perf_counter()
 
@@ -140,7 +136,7 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=200):
         t_end = time.perf_counter()
 
         # ---------------------------------------------------------
-        # E. 计算指标
+        # D. 计算指标
         # ---------------------------------------------------------
         total_time = t_end - t_start
         avg_latency_s = total_time / iterations
@@ -148,7 +144,7 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=200):
         throughput_gbs = (size * iterations) / total_time / 1e9
 
         # ---------------------------------------------------------
-        # F. 数据校验
+        # E. 数据校验
         # ---------------------------------------------------------
         check_status = "OK"
         if device_type == "cuda":
