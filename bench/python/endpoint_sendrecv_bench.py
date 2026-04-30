@@ -52,17 +52,11 @@ def run_benchmark(device_type="cuda", num_qp=1, iterations=200):
     for size in test_sizes:
         # 1. 准备数据
         # 使用 uint8，这样 numel 就等于 bytes
+        device = torch.device(device_type)
+        send_tensor = torch.randint(0, 255, (size,), dtype=torch.uint8, device=device)
+        recv_tensor = torch.zeros((size,), dtype=torch.uint8, device=device)
         if device_type == "cuda":
-            send_tensor = torch.randint(
-                0, 255, (size,), dtype=torch.uint8, device="cpu"
-            )
-            recv_tensor = torch.zeros((size,), dtype=torch.uint8, device="cpu")
             torch.cuda.synchronize()
-        else:
-            send_tensor = torch.randint(
-                0, 255, (size,), dtype=torch.uint8, device="cpu"
-            )
-            recv_tensor = torch.zeros((size,), dtype=torch.uint8, device="cpu")
 
         # 3. 预热 (Warmup)
         warmup_iters = 5
@@ -174,4 +168,5 @@ if __name__ == "__main__":
         args.device = "cpu"
 
     run_benchmark(device_type=args.device, num_qp=args.qp, iterations=args.iters)
-    torch.cuda.synchronize()
+    if args.device == "cuda":
+        torch.cuda.synchronize()
