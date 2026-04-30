@@ -178,48 +178,45 @@ elif args.transfer_engine == "nixl":
 
 torch.cuda.set_device(local_rank)
 
-ttensors = [
-    torch.ones([2 << rawsize], device=f"cuda:{local_rank}") for rawsize in args.size
-]
+max_numel = 2 << max(args.size)
+max_ttensor = torch.ones([max_numel], device=f"cuda:{local_rank}")
+ttensors = [max_ttensor[: 2 << rawsize] for rawsize in args.size]
+max_mr_key = 0
 print(local_rank)
 torch.cuda.synchronize()
 
 if args.transfer_engine == "dlslime":
-    for idx, ttensor in enumerate(ttensors):
-        rdma_endpoint.register_memory_region(
-            idx,
-            ttensor.data_ptr(),
-            int(ttensor.storage_offset()),
-            ttensor.numel() * ttensor.itemsize,
-        )
+    rdma_endpoint.register_memory_region(
+        max_mr_key,
+        max_ttensor.data_ptr(),
+        int(max_ttensor.storage_offset()),
+        max_ttensor.numel() * max_ttensor.itemsize,
+    )
 elif args.transfer_engine == "mooncake":
-    for idx, ttensor in enumerate(ttensors):
-        result = rdma_endpoint.register_memory(
-            ttensor.data_ptr() + ttensor.storage_offset(),
-            ttensor.numel() * ttensor.itemsize,
-        )
-        mooncake_endpoint_info["kv_table"][idx] = (
-            ttensor.data_ptr() + ttensor.storage_offset(),
-            ttensor.numel() * ttensor.itemsize,
-        )
-        if result != 0:
-            raise RuntimeError(f"Failed to register memory region: {result}")
+    result = rdma_endpoint.register_memory(
+        max_ttensor.data_ptr() + max_ttensor.storage_offset(),
+        max_ttensor.numel() * max_ttensor.itemsize,
+    )
+    if result != 0:
+        raise RuntimeError(f"Failed to register memory region: {result}")
+    mooncake_endpoint_info["kv_table"][max_mr_key] = (
+        max_ttensor.data_ptr() + max_ttensor.storage_offset(),
+        max_ttensor.numel() * max_ttensor.itemsize,
+    )
 elif args.transfer_engine == "nixl":
     # adapted from: https://github.com/ai-dynamo/nixl/blob/main/examples/python/blocking_send_recv_example.py
-    nixl_memory_info = []
-    for idx, ttensor in enumerate(ttensors):
-        nixl_memory_info.append(
-            (
-                ttensor.data_ptr() + ttensor.storage_offset(),
-                ttensor.numel() * ttensor.itemsize,
-                local_rank,
-                "",
-            )
+    nixl_memory_info = [
+        (
+            max_ttensor.data_ptr() + max_ttensor.storage_offset(),
+            max_ttensor.numel() * max_ttensor.itemsize,
+            local_rank,
+            "",
         )
-        nixl_endpoint_info["kv_table"][idx] = (
-            ttensor.data_ptr() + ttensor.storage_offset(),
-            ttensor.numel() * ttensor.itemsize,
-        )
+    ]
+    nixl_endpoint_info["kv_table"][max_mr_key] = (
+        max_ttensor.data_ptr() + max_ttensor.storage_offset(),
+        max_ttensor.numel() * max_ttensor.itemsize,
+    )
     reg_descs = agent.register_memory(nixl_memory_info, "VRAM", is_sorted=False)
     if not reg_descs:  # Same as reg_descs if successful
         print("Memory registration failed.")
@@ -423,15 +420,30 @@ for idx, (rawsize, ttensor) in enumerate(zip(args.size, ttensors)):
     for iter_id in range(args.num_iteration):
         if args.transfer_engine == "dlslime":
             transfer_batch_concurrency_dlslime(
-                role, args.opcode, idx, ttensor, args.batch_size, args.num_concurrency
+                role,
+                args.opcode,
+                max_mr_key,
+                ttensor,
+                args.batch_size,
+                args.num_concurrency,
             )
         elif args.transfer_engine == "mooncake":
             transfer_batch_concurrency_mooncake(
-                role, args.opcode, idx, ttensor, args.batch_size, args.num_concurrency
+                role,
+                args.opcode,
+                max_mr_key,
+                ttensor,
+                args.batch_size,
+                args.num_concurrency,
             )
         elif args.transfer_engine == "nixl":
             transfer_batch_concurrency_nixl(
-                role, args.opcode, idx, ttensor, args.batch_size, args.num_concurrency
+                role,
+                args.opcode,
+                max_mr_key,
+                ttensor,
+                args.batch_size,
+                args.num_concurrency,
             )
         elif args.transfer_engine == "nccl":
             transfer_batch_concurrency_nccl(
