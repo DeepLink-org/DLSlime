@@ -20,6 +20,7 @@
 #include "rdma_channel.h"
 #include "rdma_common.h"
 #include "rdma_context.h"
+#include "rdma_op_state.h"
 #include "remote_memory_pool.h"
 
 namespace dlslime {
@@ -44,64 +45,51 @@ constexpr int BURST_SIZE    = 128;
 // Context Structures for IO Operations
 // ============================================================
 
-enum class IOContextState {
-    FREE,
-    PENDING,
-    WAIT_TOKEN,
-    POSTED,
-    DONE
-};
-
 // --- Read/Write Context (Initiator) ---
+//
+// Transport dispatch slot for the one-sided (read / write / writeWithImm)
+// path. Strictly a lease-scoped coordinator: a single in-flight op owns
+// the slot from acquire until every per-qp callback has fired.
+//
+// Responsibilities (slot-level only):
+//   - hold the per-qp RDMAAssign storage that wr_id points into
+//   - track per-qp callback firings (slot_qp_mask)
+//   - carry a back-reference to the current op_state so callbacks can
+//     update it
+// NON-responsibilities (belong to EndpointOpState):
+//   - user-visible completion signal, status, imm_data
+//   - op identity / lifetime
 struct ReadWriteContext {
     int32_t slot_id;
 
-    std::shared_ptr<dlslime::device::DeviceSignal> signal;
-
     std::vector<RDMAAssign> assigns_;
 
-    uintptr_t local_ptr;
-    uintptr_t remote_ptr;
-    size_t    length;
-    uint32_t  rkey;
-    int32_t   imm_data;
-    OpCode    op_code;
-    uint32_t  expected_mask;
+    // The op currently leasing this slot. Reset to nullptr on release.
+    std::shared_ptr<EndpointOpState> op_state;
 
-    std::atomic<uint32_t> finished_qp_mask{0};
-    std::atomic<int32_t>  completion_status{0};
-
-    IOContextState state_ = IOContextState::FREE;
+    // Per-qp callback-fired mask. The slot is returned to rw_free_ring_
+    // only when this reaches slot_qp_expected, so no wr_id can point
+    // into assigns_ after re-lease.
+    std::atomic<uint32_t> slot_qp_mask{0};
+    uint32_t              slot_qp_expected{0};
 };
 
 struct ImmRecvContext {
+    // Transport-owned receive slot. These contexts stay posted on the
+    // hardware RQ and recycle through a refill stack; user futures do
+    // NOT reference them (they observe EndpointOpState instead, matched
+    // via pending_imm_recv_ops_ / completed_imm_recv_events_).
     int32_t                                        slot_id;
     std::shared_ptr<dlslime::device::DeviceSignal> signal;
     std::vector<RDMAAssign>                        assigns_;
 
-    // Transport-owned receive slot. These contexts are kept posted on the
-    // hardware RQ and recycled after completion; user futures must not retain
-    // pointers to them because the slot can be refilled and reused.
     uint32_t              expected_mask;
     std::atomic<uint32_t> finished_qp_mask{0};
     std::atomic<int32_t>  completion_status{0};
     std::atomic<int32_t>  imm_data{0};
-    IOContextState        state_ = IOContextState::FREE;
 
-    // Intrusive pointer for lock-free MPSC refill stack.
+    // Intrusive pointer for the lock-free MPSC refill stack.
     std::atomic<ImmRecvContext*> next_refill_{nullptr};
-};
-
-struct ImmRecvOpState {
-    // User-owned state for one immRecv() call. A completion event is copied
-    // here when it is matched to this operation, so wait()/immData() remain
-    // stable even after the transport slot is reposted.
-    std::shared_ptr<dlslime::device::DeviceSignal> signal;
-    uint32_t                                       expected_mask{0};
-    std::atomic<int32_t>                           completion_status{RDMAAssign::SUCCESS};
-    std::atomic<int32_t>                           imm_data{0};
-    std::atomic<uint64_t>                          trace_start_ns{0};
-    std::atomic<uint64_t>                          trace_end_ns{0};
 };
 
 struct ImmRecvEvent {
@@ -155,6 +143,11 @@ struct alignas(64) PaddedAtomicUint64 {
 };
 
 // Context for Send Operations
+//
+// As with ReadWriteContext, a slot is leased from send_free_ring_ at
+// submission time and returned only after all per-qp data_send callbacks
+// for the owning op have fired. This eliminates modulo-reuse races on
+// slot-local state (meta_arrived_flag_, remote_meta_info_, op_state).
 struct alignas(64) SendContext {
     int64_t slot_id;
 
@@ -166,21 +159,19 @@ struct alignas(64) SendContext {
     RDMAAssign meta_recv_assign_;
     RDMAAssign data_send_assigns_[64];
 
+    // Per-lease state machine (WAIT_GPU_READY → WAIT_META → …).
     SendContextState state_;
 
-    std::shared_ptr<dlslime::device::DeviceSignal> signal;
+    std::shared_ptr<EndpointOpState> op_state;
 
-    uint64_t expected_mask = 0;
-
-    void reset()
-    {
-        expected_mask = 0;
-        state_        = SendContextState::WAIT_GPU_READY;
-        signal->reset_all();
-    }
+    std::atomic<uint32_t> slot_qp_mask{0};
+    uint32_t              slot_qp_expected{0};
 };
 
 // Context for Recv Operations
+//
+// Leased from recv_free_ring_ at submission; released after all per-qp
+// data_recv callbacks fire. See SendContext for the rationale.
 struct alignas(64) RecvContext {
     int64_t        slot_id;
     storage_view_t view_;
@@ -192,18 +183,13 @@ struct alignas(64) RecvContext {
 
     uintptr_t remote_meta_key_;
 
+    // Per-lease state machine (WAIT_GPU_BUF → INIT_SEND_META → …).
     RecvContextState state_;
 
-    std::shared_ptr<dlslime::device::DeviceSignal> signal;
+    std::shared_ptr<EndpointOpState> op_state;
 
-    uint64_t expected_mask = 0;
-
-    void reset()
-    {
-        expected_mask = 0;
-        state_        = RecvContextState::INIT_SEND_META;
-        signal->reset_all();
-    }
+    std::atomic<uint32_t> slot_qp_mask{0};
+    uint32_t              slot_qp_expected{0};
 };
 
 // ============================================================
@@ -284,15 +270,18 @@ private:
     void dummyReset(ImmRecvContext* ctx);
     void postImmRecvSlot(ImmRecvContext* ctx);
     void postImmRecvWindow();
-    void completeImmRecvOp(const std::shared_ptr<ImmRecvOpState>& op_state, const ImmRecvEvent& event);
+    void completeImmRecvOp(const std::shared_ptr<EndpointOpState>& op_state, const ImmRecvEvent& event);
     void enqueueImmRecvCompletion(ImmRecvContext* ctx);
 
     /// Lock-free MPSC helpers for the refill stack.
     void            pushRefill(ImmRecvContext* ctx);
     ImmRecvContext* popAllRefill();
 
-    int32_t
-    dispatchTask(OpCode op_code, const std::vector<assign_tuple_t>&, int32_t imm_data = 0, void* stream = nullptr);
+    int32_t dispatchTask(OpCode                             op_code,
+                         const std::vector<assign_tuple_t>& assign,
+                         std::shared_ptr<EndpointOpState>   op_state,
+                         int32_t                            imm_data = 0,
+                         void*                              stream   = nullptr);
 
     int32_t readWriteProcess();
     int32_t immRecvProcess();
@@ -302,6 +291,24 @@ private:
     // ============================================================
     int32_t sendProcess();
     int32_t recvProcess();
+
+    // Tracks every EndpointOpState this endpoint still considers in-flight,
+    // so cancelAll() can force-complete exactly those operations instead of
+    // blasting every pooled slot signal. Weak references so lingering
+    // callbacks do not pin completed ops indefinitely.
+    void registerInFlight(const std::shared_ptr<EndpointOpState>& op_state);
+
+    // Slot acquire / release helpers. Acquire blocks (spins) if the pool
+    // is exhausted, applying back-pressure at the API boundary instead of
+    // silently stomping a still-in-flight slot. Release pushes the slot
+    // back onto its free ring; it is only called once every per-qp
+    // callback for the owning op has fired.
+    ReadWriteContext* acquireReadWriteSlot();
+    SendContext*      acquireSendSlot();
+    RecvContext*      acquireRecvSlot();
+    void              releaseReadWriteSlot(ReadWriteContext* ctx);
+    void              releaseSendSlot(SendContext* ctx);
+    void              releaseRecvSlot(RecvContext* ctx);
 
     // ============================================================
     // Member Variables - Common
@@ -326,10 +333,14 @@ private:
     ReadWriteContext* read_write_ctx_pool_;
     ImmRecvContext*   imm_recv_ctx_pool_;
 
-    std::vector<std::shared_ptr<ReadWriteFuture>> read_write_future_pool_;
-
     jring_t* read_write_buffer_ring_;
     jring_t* imm_recv_buffer_ring_;
+
+    // Free-slot ring: holds every ReadWriteContext that is idle and safe
+    // to lease. Populated at init. A slot leaves on acquire() and
+    // re-enters only after every per-qp callback for its current op has
+    // fired — never by modulo reuse.
+    jring_t* rw_free_ring_;
 
     std::deque<ReadWriteContext*> pending_rw_queue_;
 
@@ -340,9 +351,9 @@ private:
 
     // Matching queues for the decoupled imm-recv path.
     // Protected by imm_recv_match_lock_ (spinlock, short critical sections).
-    SpinLock                                    imm_recv_match_lock_;
-    std::deque<std::shared_ptr<ImmRecvOpState>> pending_imm_recv_ops_;
-    std::deque<ImmRecvEvent>                    completed_imm_recv_events_;
+    SpinLock                                     imm_recv_match_lock_;
+    std::deque<std::shared_ptr<EndpointOpState>> pending_imm_recv_ops_;
+    std::deque<ImmRecvEvent>                     completed_imm_recv_events_;
 
     // Lock-free MPSC refill stack. CQ callback threads push via pushRefill(),
     // the progress thread drains via popAllRefill(). No lock needed.
@@ -364,12 +375,15 @@ private:
     jring_t* send_buffer_ring_;
     jring_t* recv_buffer_ring_;
 
+    // Free-slot rings for the two-sided message path. Same invariant as
+    // rw_free_ring_: slots are only released back here after every per-qp
+    // data-path callback for the owning op has fired.
+    jring_t* send_free_ring_;
+    jring_t* recv_free_ring_;
+
     // Context Pools to avoid dynamic allocation
     SendContext* send_ctx_pool_;
     RecvContext* recv_ctx_pool_;
-
-    std::vector<std::shared_ptr<SendFuture>> send_future_pool_;
-    std::vector<std::shared_ptr<RecvFuture>> recv_future_pool_;
 
     std::deque<SendContext*> pending_send_queue_;
     std::deque<RecvContext*> pending_recv_queue_;
@@ -387,6 +401,12 @@ private:
     int32_t send_ctx_handle_{-1};
 
     int64_t* msg_dummy_;
+
+    // ============================================================
+    // In-flight op registry (for cancelAll())
+    // ============================================================
+    SpinLock                                    in_flight_lock_;
+    std::vector<std::weak_ptr<EndpointOpState>> in_flight_ops_;
 };
 
 }  // namespace dlslime

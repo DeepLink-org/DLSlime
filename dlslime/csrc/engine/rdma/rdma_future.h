@@ -7,11 +7,7 @@
 
 namespace dlslime {
 
-struct SendContext;
-struct RecvContext;
-struct ReadWriteContext;
-struct ImmRecvContext;
-struct ImmRecvOpState;
+struct EndpointOpState;
 
 /**
  * @brief Base class for RDMA futures, inherits from DeviceFuture
@@ -30,39 +26,41 @@ class RecvFuture;
 class ImmRecvFuture;
 class ReadWriteFuture;
 
+// Futures hold a shared_ptr<EndpointOpState> so they track a specific logical
+// operation, not whatever happens to occupy a reused slot at wait() time.
 class SendFuture: public RDMAFuture {
 public:
-    explicit SendFuture(SendContext* ctx);
+    explicit SendFuture(std::shared_ptr<EndpointOpState> op_state);
 
     int32_t wait() const override;
 
 private:
-    SendContext* ctx_;
+    std::shared_ptr<EndpointOpState> op_state_;
 };
 
 class RecvFuture: public RDMAFuture {
 public:
-    explicit RecvFuture(RecvContext* ctx);
+    explicit RecvFuture(std::shared_ptr<EndpointOpState> op_state);
 
     int32_t wait() const override;
 
 private:
-    RecvContext* ctx_;
+    std::shared_ptr<EndpointOpState> op_state_;
 };
 
 class ReadWriteFuture: public RDMAFuture {
 public:
-    explicit ReadWriteFuture(ReadWriteContext* ctx);
+    explicit ReadWriteFuture(std::shared_ptr<EndpointOpState> op_state);
 
     int32_t wait() const override;
 
 private:
-    ReadWriteContext* ctx_;
+    std::shared_ptr<EndpointOpState> op_state_;
 };
 
 class ImmRecvFuture: public RDMAFuture {
 public:
-    explicit ImmRecvFuture(std::shared_ptr<ImmRecvOpState> op_state);
+    explicit ImmRecvFuture(std::shared_ptr<EndpointOpState> op_state);
 
     int32_t wait() const override;
 
@@ -73,7 +71,7 @@ public:
     uint64_t timeTraceElapsedNs() const;
 
 private:
-    std::shared_ptr<ImmRecvOpState> op_state_;
+    std::shared_ptr<EndpointOpState> op_state_;
 };
 
 }  // namespace dlslime

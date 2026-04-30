@@ -25,6 +25,8 @@ docs/
 │   └── share_memory.md         # Shared memory management
 │
 ├── benchmark-rpc.md            # SlimeRPC vs Ray RPC benchmark guide
+├── endpoint-device-signal-refactor.md
+│                              # RDMAEndpoint completion ownership refactor
 │
 ├── huawei_ascend/               # Huawei Ascend integration
 │   └── README.md               # Ascend platform guide
@@ -44,6 +46,7 @@ docs/
 ### Design & Architecture
 
 - [Reactor Design](design/reactor-design.md) - Event-driven reactor pattern architecture
+- [Endpoint DeviceSignal Refactor](endpoint-device-signal-refactor.md) - Fix slot-owned completion hazards in RDMAEndpoint
 - [Lazy Handshake](lazy_handshake.md) - Lazy handshake protocol design
 - [RDMA Lazy Peer API](rdma_lazy_peer_api.md) - RDMA lazy peer API documentation
 
