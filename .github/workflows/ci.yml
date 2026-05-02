@@ -98,13 +98,6 @@ jobs:
         with:
           clean: false
 
-      - name: Show runner devices
-        run: |
-          hostname
-          docker --version
-          nvidia-smi || true
-          ibv_devinfo || true
-
       - name: Run RDMA Python tests in Docker
         run: |
           set -euxo pipefail
@@ -147,7 +140,5 @@ jobs:
             python -m pip install -e .
             python -m pip show dlslime
             python -c "import dlslime; print(\"dlslime:\", dlslime.__file__); print(\"available_nic:\", dlslime.available_nic())"
-            for test_file in tests/python/test_*.py; do
-              pytest "${test_file}" -v
-            done
+            pytest tests/python -v
           '
