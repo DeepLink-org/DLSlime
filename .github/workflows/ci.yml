@@ -129,6 +129,7 @@ jobs:
 
           docker exec "${container_name}" bash -lc '
             set -euxo pipefail
+            cd /mnt/nvme1n1/ml_research/majinming/src/DLSlime
             export PIP_CONFIG_FILE=/dev/null
             export PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
             export PIP_TRUSTED_HOST=mirrors.aliyun.com
@@ -138,6 +139,10 @@ jobs:
             export HTTPS_PROXY=http://127.0.0.1:7897
             unset PIP_EXTRA_INDEX_URL
             python -m pip install -U pip pytest
+            python -m pip show dlslime || true
+            python -m pip uninstall -y dlslime || true
             python -m pip install -e .
+            python -m pip show dlslime
+            python -c "import dlslime; print(\"dlslime:\", dlslime.__file__); print(\"available_nic:\", dlslime.available_nic())"
             pytest tests/python -v
           '
