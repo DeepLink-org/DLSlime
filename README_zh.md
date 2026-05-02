@@ -1,5 +1,5 @@
 <div align="center">
-<p align="center"> <img src="docs/imgs/assets/logo.svg" alt="" width="300"> </p>
+  <img src="docs/imgs/assets/logo.png" alt="DLSlime logo" width="44%">
 </div>
 <p align="center">
   <a href="docs/roadmap.md"><img src="docs/imgs/assets/roadmap.svg" width="16" height="16" style="vertical-align: middle;"> 路线图 </a> |
@@ -7,7 +7,7 @@
   <a href="docs/imgs/assets/wechat_qrcode.jpg"><img src="docs/imgs/assets/wechat.svg" width="16" height="16" style="vertical-align: middle;"> 微信群 </a> |
   <a href="https://zhuanlan.zhihu.com/p/1950701795149067622"><img src="docs/imgs/assets/zhihu.svg" width="16" height="16" style="vertical-align: middle;"> 知乎 </a>
 </p>
-<h1 align="center"> 灵活高效的异构传输工具包 </h1>
+<h2 align="center"> 灵活高效的异构传输工具包 </h2>
 
 ## 快速开始 (Getting Started)
 
