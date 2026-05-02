@@ -85,8 +85,10 @@ jobs:
   rdma-tests:
     name: RDMA tests
     if: >
-      github.event_name == 'workflow_dispatch' &&
-      inputs.run_rdma_tests == 'true'
+      (github.event_name == 'workflow_dispatch' &&
+       inputs.run_rdma_tests == 'true') ||
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: [self-hosted, linux, rdma]
     environment: self-hosted-rdma
     timeout-minutes: 60
