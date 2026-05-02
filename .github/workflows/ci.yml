@@ -134,7 +134,11 @@ jobs:
 
           docker exec "${container_name}" bash -lc '
             set -euxo pipefail
-            python -m pip install -U pip pytest
-            python -m pip install -e .
+            python -m pip install -U pip pytest \
+              -i https://mirrors.aliyun.com/pypi/simple/ \
+              --trusted-host mirrors.aliyun.com
+            python -m pip install -e . \
+              -i https://mirrors.aliyun.com/pypi/simple/ \
+              --trusted-host mirrors.aliyun.com
             pytest tests/python -v
           '
