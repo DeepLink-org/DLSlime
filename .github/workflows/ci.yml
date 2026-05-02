@@ -96,11 +96,6 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-          cache: pip
-
       - name: Show runner devices
         run: |
           hostname
@@ -134,11 +129,11 @@ jobs:
 
           docker exec "${container_name}" bash -lc '
             set -euxo pipefail
-            python -m pip install -U pip pytest \
-              -i https://mirrors.aliyun.com/pypi/simple/ \
-              --trusted-host mirrors.aliyun.com
-            python -m pip install -e . \
-              -i https://mirrors.aliyun.com/pypi/simple/ \
-              --trusted-host mirrors.aliyun.com
+            export PIP_CONFIG_FILE=/dev/null
+            export PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
+            export PIP_TRUSTED_HOST=mirrors.aliyun.com
+            unset PIP_EXTRA_INDEX_URL
+            python -m pip install -U pip pytest
+            python -m pip install -e .
             pytest tests/python -v
           '
