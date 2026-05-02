@@ -1,4 +1,4 @@
-"""Stress test for send/recv slot reuse after the PR #70 refactor.
+"""Stress tests for send/recv slot reuse after the PR #70 refactor.
 
 What this verifies
 ------------------
@@ -24,29 +24,28 @@ its current tenant has fired. So:
   ``EndpointOpState`` — otherwise the recv buffer for op A would end
   up with the wrong bytes.
 
-Why this test is sequential, not concurrent
--------------------------------------------
-The PR explicitly leaves one pre-existing protocol hazard unfixed:
-``SendContext::meta_arrived_flag_`` is set by whichever meta RECV the
-hardware consumes in FIFO order, not by the slot the peer wrote meta
-for. With two or more concurrent sends in flight the flag ends up on
-the wrong slot and ``sendProcess`` deadlocks in ``WAIT_META``. This is
-a protocol-level issue that the free-slot-ring refactor does not
-address (see ``docs/endpoint-ownership-model.md``, "Message-path
-specifics"). Running concurrent pairs through this stress would hang
-on that protocol bug, not on the refactor. So we use sequential
-churn, which exercises the refactor-owned invariants (release-on-
-complete + no-cross-wire-after-reuse) and does NOT trip the
-meta-handshake protocol bug.
+Two tests:
+
+* ``test_sequential_slot_churn``    — one pair at a time, many rounds.
+  Exercises pure slot reuse; the simplest shape that would have
+  tripped the pre-refactor ABA hazard.
+* ``test_concurrent_matched_order`` — N concurrent pairs per round,
+  both sides pairing in the same relative order. This is the correct
+  concurrency contract for two-sided send/recv (see "API contract —
+  pair ordering" in docs/endpoint-ownership-model.md). IBRC FIFO
+  plus the free-slot ring guarantee that sender slot-k is matched
+  with receiver slot-k throughout the lifetime of the connection,
+  so no cross-wiring can occur. A cross-wire here would be either a
+  refactor regression or a protocol regression.
 
 Run directly:
 
-    pytest tests/python/stress_send_recv.py -v
+    pytest tests/python/test_stress_send_recv.py -v
 
 Overridable via env:
 
     SLIME_MAX_MSG_FIFO_DEPTH=4 STRESS_ROUNDS=32 STRESS_MSG_BYTES=1024 \\
-        pytest tests/python/stress_send_recv.py -v
+        pytest tests/python/test_stress_send_recv.py -v
 """
 
 # Env must be set before `import dlslime` — the C++ layer reads these
@@ -153,3 +152,55 @@ def test_sequential_slot_churn(endpoints):
                 f"got[:16]={recv_buf[:16].tolist()} "
                 f"want[:16]={send_buf[:16].tolist()}"
             )
+
+
+def test_concurrent_matched_order(endpoints):
+    """N > DEPTH concurrent send/recv pairs per round, ROUNDS rounds.
+
+    Both endpoints issue calls in the same relative order (the standard
+    point-to-point pair-ordering contract). With that contract held,
+    IBRC FIFO plus the free-slot ring is sufficient for correctness:
+    sender slot-k is matched with receiver slot-k for the lifetime of
+    the connection, so every recv buffer must end up with its paired
+    send's payload.
+
+    A cross-wire here would indicate either a refactor regression
+    (slot release-on-complete broken) or a protocol regression
+    (IBRC-FIFO / free-ring-FIFO assumption violated)."""
+
+    sender, receiver = endpoints
+    N = DEPTH * 2  # must exceed DEPTH to force slot reuse
+    rounds = max(2, TOTAL_OPS // N)
+
+    for round_idx in range(rounds):
+        base = round_idx * N
+        send_bufs = [_payload(base + i, MSG_BYTES) for i in range(N)]
+        recv_bufs = [torch.zeros(MSG_BYTES, dtype=torch.uint8) for _ in range(N)]
+
+        # Matched order: recv[i] posted before send[i], both iterating
+        # in the same i-order on both endpoints.
+        recv_futs = []
+        send_futs = []
+        for i in range(N):
+            recv_futs.append(receiver.recv((recv_bufs[i].data_ptr(), 0, MSG_BYTES)))
+            send_futs.append(sender.send((send_bufs[i].data_ptr(), 0, MSG_BYTES)))
+
+        for fut in send_futs:
+            fut.wait()
+        for fut in recv_futs:
+            fut.wait()
+
+        for i in range(N):
+            op_idx = base + i
+            got = recv_bufs[i]
+            want = send_bufs[i]
+            if not torch.equal(got, want):
+                got_tag = int.from_bytes(bytes(got[:4].tolist()), "little")
+                pytest.fail(
+                    f"round {round_idx}, pair {i} (op_idx={op_idx}): "
+                    f"recv does not match send. Got header op_idx={got_tag}, "
+                    f"expected {op_idx}. This either means slot release-on-"
+                    f"complete regressed (refactor bug) or the free-slot "
+                    f"ring lost FIFO order relative to HW completions "
+                    f"(protocol bug)."
+                )

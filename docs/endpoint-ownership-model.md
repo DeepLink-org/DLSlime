@@ -148,12 +148,14 @@ the refactor each of these is explicitly elsewhere:
 ## Message-Path Specifics (Send / Recv)
 
 The two-sided path uses the same slot lease model but has extra
-slot-local transport state that is reset per lease:
+slot-local transport state:
 
-- `SendContext::meta_arrived_flag_`  — reset in `acquireSendSlot()`.
-  Set by the `meta_recv_assign_` callback when the peer writes a
-  meta reply. Preserved across slot releases because the RECV
-  itself is continually reposted for RNR safety.
+- `SendContext::meta_arrived_flag_`  — set by the `meta_recv_assign_`
+  callback when the peer writes a meta reply; consumed (reset to 0) by
+  `sendProcess` when it advances past `WAIT_META`. NOT reset on
+  `acquireSendSlot()` — the peer may have already posted meta for this
+  slot before the user called `send()`; clearing the flag on acquire
+  would drop a valid pre-arrival and deadlock.
 - `SendContext::remote_meta_info_`   — overwritten by the peer via
   `WRITE_WITH_IMM`. Slot-local buffer.
 - `RecvContext::local_meta_info_`    — filled by user's `recv()`
@@ -165,6 +167,34 @@ user-visible `op_state.signal` is set only by the `data_send_assigns_`
 / `data_recv_assigns_` callbacks installed when the op actually runs
 (`sendProcess` / `recvProcess`), which capture the current
 `op_state` by `shared_ptr` — consistent with I3.
+
+### API contract — pair ordering
+
+Two-sided `send()` / `recv()` is correct under concurrency provided
+both endpoints pair their calls in the same relative order. This is
+the standard point-to-point contract (the same invariant held by
+MPI, UCX, NCCL two-sided, and every other two-sided RDMA stack).
+
+Why it is sufficient:
+
+1. **IBRC send-side FIFO.** WRs posted on an RC QP complete in post
+   order.
+2. **IBRC receive-side FIFO.** The peer's k-th `WRITE_WITH_IMM`
+   always consumes our RECV WR #k.
+3. **FIFO slot allocation + release-in-completion-order** (from the
+   free-slot ring + guarantee 1).
+
+Together these give: sender slot-k is matched with receiver slot-k
+for the lifetime of the connection. Meta destined for slot-k lands
+in slot-k's `remote_meta_info_`, and by (2) it is slot-k's RECV that
+the HW consumes to signal that arrival — so the flag is set on the
+correct slot and `sendProcess` makes progress on the right pending
+send.
+
+Violating the pair-ordering contract (sender issues `send(A), send(B)`
+while receiver issues `recv(B), recv(A)`) will cross-wire data. This
+is a user-level contract, not a DLSlime-specific limitation; the
+library does not try to detect the violation.
 
 ## Imm-Recv Path Specifics
 
