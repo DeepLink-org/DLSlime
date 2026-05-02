@@ -132,6 +132,10 @@ jobs:
             export PIP_CONFIG_FILE=/dev/null
             export PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
             export PIP_TRUSTED_HOST=mirrors.aliyun.com
+            export http_proxy=http://127.0.0.1:7897
+            export https_proxy=http://127.0.0.1:7897
+            export HTTP_PROXY=http://127.0.0.1:7897
+            export HTTPS_PROXY=http://127.0.0.1:7897
             unset PIP_EXTRA_INDEX_URL
             python -m pip install -U pip pytest
             python -m pip install -e .
