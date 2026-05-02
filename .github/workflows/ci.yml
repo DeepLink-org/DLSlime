@@ -139,6 +139,7 @@ jobs:
             export https_proxy=http://127.0.0.1:7897
             export HTTP_PROXY=http://127.0.0.1:7897
             export HTTPS_PROXY=http://127.0.0.1:7897
+            export SLIME_VISIBLE_DEVICES=mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7
             unset PIP_EXTRA_INDEX_URL
             python -m pip install -U pip pytest
             python -m pip show dlslime || true
@@ -146,5 +147,7 @@ jobs:
             python -m pip install -e .
             python -m pip show dlslime
             python -c "import dlslime; print(\"dlslime:\", dlslime.__file__); print(\"available_nic:\", dlslime.available_nic())"
-            pytest tests/python -v
+            for test_file in tests/python/test_*.py; do
+              pytest "${test_file}" -v
+            done
           '
