@@ -95,6 +95,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          clean: false
 
       - name: Show runner devices
         run: |
@@ -123,7 +125,7 @@ jobs:
             --name "${container_name}" \
             -v /mnt/nvme1n1/ml_research/majinming:/mnt/nvme1n1/ml_research/majinming \
             -v /mnt/nvme1n1/ml_research/models:/models \
-            -w "${GITHUB_WORKSPACE}" \
+            -w /mnt/nvme1n1/ml_research/majinming/src/DLSlime \
             majinming_lmdeploy:v1 \
             sleep infinity
 
