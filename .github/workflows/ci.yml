@@ -104,13 +104,37 @@ jobs:
       - name: Show runner devices
         run: |
           hostname
+          docker --version
           nvidia-smi || true
           ibv_devinfo || true
 
-      - name: Install test dependencies
+      - name: Run RDMA Python tests in Docker
         run: |
-          python -m pip install -U pip pytest
-          python -m pip install -e .
+          set -euxo pipefail
 
-      - name: Run RDMA Python tests
-        run: pytest tests/python -v
+          container_name="dlslime-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          cleanup() {
+            docker rm -f "${container_name}" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          docker run -d \
+            --gpus all \
+            --network host \
+            --ipc host \
+            --privileged \
+            --cap-add SYS_ADMIN \
+            --cap-add SYS_PTRACE \
+            --name "${container_name}" \
+            -v /mnt/nvme1n1/ml_research/majinming:/mnt/nvme1n1/ml_research/majinming \
+            -v /mnt/nvme1n1/ml_research/models:/models \
+            -w "${GITHUB_WORKSPACE}" \
+            majinming_lmdeploy:v1 \
+            sleep infinity
+
+          docker exec "${container_name}" bash -lc '
+            set -euxo pipefail
+            python -m pip install -U pip pytest
+            python -m pip install -e .
+            pytest tests/python -v
+          '
