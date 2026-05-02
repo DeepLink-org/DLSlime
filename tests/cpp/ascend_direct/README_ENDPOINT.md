@@ -6,21 +6,22 @@
 
 ## Key Differences from `ascend_direct_perf.cpp`
 
-| Aspect | Old (`ascend_direct_perf.cpp`) | New (`ascend_endpoint_perf.cpp`) |
-|--------|-------------------------------|----------------------------------|
-| **Class** | `AscendDirectContext` | `AscendDirectEndpoint` |
-| **Memory Pools** | Single internal map | Separate `AscendLocalMemoryPool` + `AscendRemoteMemoryPool` |
-| **Register Local** | `register_memory_region(device_id, addr, length)` | `register_memory_region(mr_key, addr, offset, length)` |
-| **Register Remote** | ❌ Not supported | `register_remote_memory_region(mr_key, name, json)` |
-| **Read Operation** | `read_batch(batch, host, port)` (batch + sync) | `read(assign_tuple_t, stream)` → `Future` (normalized + async) |
-| **Connection** | Implicit in `read_batch()` | Explicit `connect(remote_info)` |
-| **Endpoint Exchange** | Manual addr exchange via ZMQ | `endpoint_info()` JSON exchange |
-| **Future Support** | ❌ Synchronous only | ✅ Returns `AscendFuture` with `wait()` |
-| **Memory Region Keys** | Used `device_id` as key | Uses unique `mr_key` (1000+, 2000+ for remote) |
+| Aspect                 | Old (`ascend_direct_perf.cpp`)                    | New (`ascend_endpoint_perf.cpp`)                               |
+| ---------------------- | ------------------------------------------------- | -------------------------------------------------------------- |
+| **Class**              | `AscendDirectContext`                             | `AscendDirectEndpoint`                                         |
+| **Memory Pools**       | Single internal map                               | Separate `AscendLocalMemoryPool` + `AscendRemoteMemoryPool`    |
+| **Register Local**     | `register_memory_region(device_id, addr, length)` | `register_memory_region(mr_key, addr, offset, length)`         |
+| **Register Remote**    | ❌ Not supported                                  | `register_remote_memory_region(mr_key, name, json)`            |
+| **Read Operation**     | `read_batch(batch, host, port)` (batch + sync)    | `read(assign_tuple_t, stream)` → `Future` (normalized + async) |
+| **Connection**         | Implicit in `read_batch()`                        | Explicit `connect(remote_info)`                                |
+| **Endpoint Exchange**  | Manual addr exchange via ZMQ                      | `endpoint_info()` JSON exchange                                |
+| **Future Support**     | ❌ Synchronous only                               | ✅ Returns `AscendFuture` with `wait()`                        |
+| **Memory Region Keys** | Used `device_id` as key                           | Uses unique `mr_key` (1000+, 2000+ for remote)                 |
 
 ## New Features Validated
 
 ### 1. Separate Memory Pools
+
 ```cpp
 // Internally creates:
 // - AscendLocalMemoryPool (shared across endpoints)
@@ -29,6 +30,7 @@ auto endpoint = std::make_shared<AscendDirectEndpoint>();
 ```
 
 ### 2. Normalized Memory Registration
+
 ```cpp
 // Local memory (with mr_key)
 uint64_t mr_key = 1000 + i;
@@ -41,6 +43,7 @@ endpoint->register_remote_memory_region(remote_mr_key, "name", remote_mr_info);
 ```
 
 ### 3. Explicit Connection
+
 ```cpp
 // Exchange endpoint info via JSON
 json local_info = endpoint->endpoint_info();
@@ -49,6 +52,7 @@ endpoint->connect(remote_info);
 ```
 
 ### 4. Future-based Async API
+
 ```cpp
 // Returns future for async operations
 std::vector<assign_tuple_t> assignments = {
@@ -74,6 +78,7 @@ make ascend_endpoint_perf
 ### Run
 
 **Terminal 1 (Target - Device 2):**
+
 ```bash
 ./bin/ascend_endpoint_perf \
     --mode=target \
@@ -85,6 +90,7 @@ make ascend_endpoint_perf
 ```
 
 **Terminal 2 (Initiator - Device 0):**
+
 ```bash
 ./bin/ascend_endpoint_perf \
     --mode=initiator \
@@ -98,6 +104,7 @@ make ascend_endpoint_perf
 ### Expected Output
 
 **Initiator:**
+
 ```
 === Ascend Direct Endpoint Perf Test (Initiator) ===
 Running on 10.201.6.51:16789

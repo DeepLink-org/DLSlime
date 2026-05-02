@@ -25,7 +25,10 @@ public:
             // Spin. On x86 this compiles to a PAUSE-based loop.
         }
     }
-    void unlock() noexcept { flag_.clear(std::memory_order_release); }
+    void unlock() noexcept
+    {
+        flag_.clear(std::memory_order_release);
+    }
 };
 
 inline jring_t* createRing(const char* name, size_t count)

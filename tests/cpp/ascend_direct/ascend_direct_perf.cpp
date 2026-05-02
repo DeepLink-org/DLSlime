@@ -112,8 +112,7 @@ std::vector<uintptr_t> allocRegistMem(const std::unique_ptr<AscendDirectContext>
         }
 
         uintptr_t dev_addr_uintptr = reinterpret_cast<uintptr_t>(dev_addr);
-        ret                        = as_ctx->register_memory_region(
-            FLAGS_device_id, dev_addr_uintptr, batched_block_size);
+        ret = as_ctx->register_memory_region(FLAGS_device_id, dev_addr_uintptr, batched_block_size);
         if (ret != 0) {
             SLIME_LOG_ERROR("Failed to registerLocalMemory, ret: ", ret);
             return {};

@@ -53,7 +53,7 @@ struct AscendContext {
  * Inherits from DeviceFuture to provide a consistent async interface
  * across different device types. Waits for Ascend operations to complete.
  */
-class AscendFuture : public DeviceFuture {
+class AscendFuture: public DeviceFuture {
 public:
     /**
      * @brief Construct an AscendFuture

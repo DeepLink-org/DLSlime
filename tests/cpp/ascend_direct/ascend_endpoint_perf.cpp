@@ -36,16 +36,15 @@ DEFINE_uint32(report_precision, 2, "Report precision");
 using namespace dlslime;
 using json = nlohmann::json;
 
-const static std::unordered_map<std::string, uint64_t> RATE_UNIT_MP = {
-    {"GB", 1000ull * 1000ull * 1000ull},
-    {"GiB", 1ull << 30},
-    {"Gb", 1000ull * 1000ull * 1000ull / 8},
-    {"MB", 1000ull * 1000ull},
-    {"MiB", 1ull << 20},
-    {"Mb", 1000ull * 1000ull / 8},
-    {"KB", 1000ull},
-    {"KiB", 1ull << 10},
-    {"Kb", 1000ull / 8}};
+const static std::unordered_map<std::string, uint64_t> RATE_UNIT_MP = {{"GB", 1000ull * 1000ull * 1000ull},
+                                                                       {"GiB", 1ull << 30},
+                                                                       {"Gb", 1000ull * 1000ull * 1000ull / 8},
+                                                                       {"MB", 1000ull * 1000ull},
+                                                                       {"MiB", 1ull << 20},
+                                                                       {"Mb", 1000ull * 1000ull / 8},
+                                                                       {"KB", 1000ull},
+                                                                       {"KiB", 1ull << 10},
+                                                                       {"Kb", 1000ull / 8}};
 
 static inline std::string calculateRate(uint64_t data_bytes, uint64_t duration)
 {
@@ -156,20 +155,20 @@ int initiator()
     socket.connect("tcp://" + FLAGS_remote_host + ":" + std::to_string(FLAGS_remote_port));
 
     // Send local endpoint info
-    json local_info         = endpoint->endpoint_info();
-    local_info["dev_addrs"] = dev_addrs;  // Include device addresses for remote registration
+    json local_info            = endpoint->endpoint_info();
+    local_info["dev_addrs"]    = dev_addrs;  // Include device addresses for remote registration
     std::string local_info_str = local_info.dump();
     socket.send(zmq::buffer(local_info_str), zmq::send_flags::none);
 
     // Receive remote endpoint info
     zmq::message_t msg;
-    auto recv_res = socket.recv(msg);
+    auto           recv_res = socket.recv(msg);
     if (!recv_res) {
         SLIME_LOG_ERROR("Failed to receive remote endpoint info");
         return -1;
     }
-    std::string    remote_info_str(static_cast<char*>(msg.data()), msg.size());
-    json           remote_info = json::parse(remote_info_str);
+    std::string remote_info_str(static_cast<char*>(msg.data()), msg.size());
+    json        remote_info = json::parse(remote_info_str);
 
     // Extract remote device addresses
     std::vector<uintptr_t> remote_dev_addrs = remote_info["dev_addrs"].get<std::vector<uintptr_t>>();
@@ -275,7 +274,8 @@ int target()
     try {
         socket.bind(bind_addr);
         std::cout << "✓ Successfully bound to port " << FLAGS_local_port << std::endl;
-    } catch (const zmq::error_t& e) {
+    }
+    catch (const zmq::error_t& e) {
         SLIME_LOG_ERROR("Failed to bind to port ", FLAGS_local_port, ": ", e.what());
         SLIME_LOG_ERROR("Troubleshooting:");
         SLIME_LOG_ERROR("  1. Wait 30 seconds and try again (TIME_WAIT state)");
@@ -286,7 +286,7 @@ int target()
 
     // Receive initiator's endpoint info
     zmq::message_t recv_msg;
-    auto recv_res1 = socket.recv(recv_msg);
+    auto           recv_res1 = socket.recv(recv_msg);
     if (!recv_res1) {
         SLIME_LOG_ERROR("Failed to receive initiator endpoint info");
         return -1;
@@ -313,8 +313,8 @@ int target()
     }
 
     // Send local endpoint info back
-    json local_info         = endpoint->endpoint_info();
-    local_info["dev_addrs"] = dev_addrs;
+    json local_info            = endpoint->endpoint_info();
+    local_info["dev_addrs"]    = dev_addrs;
     std::string local_info_str = local_info.dump();
     socket.send(zmq::buffer(local_info_str), zmq::send_flags::none);
 
@@ -322,7 +322,7 @@ int target()
 
     // Wait for completion signal
     zmq::message_t stop_msg;
-    auto recv_res2 = socket.recv(stop_msg);
+    auto           recv_res2 = socket.recv(stop_msg);
     if (!recv_res2) {
         SLIME_LOG_WARN("Failed to receive completion signal (initiator may have disconnected)");
     }

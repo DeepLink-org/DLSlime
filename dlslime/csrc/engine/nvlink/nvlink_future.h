@@ -12,7 +12,7 @@ namespace dlslime {
  * NVLink operations complete synchronously via cudaMemcpyAsync,
  * so wait() is a no-op (stream synchronization happens externally).
  */
-class NVLinkFuture : public DeviceFuture {
+class NVLinkFuture: public DeviceFuture {
 public:
     NVLinkFuture()  = default;
     ~NVLinkFuture() = default;
