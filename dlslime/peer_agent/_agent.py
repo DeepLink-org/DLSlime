@@ -1,17 +1,16 @@
-"""
-PeerAgent: Control plane client for DLSlime RDMA connection management.
+"""PeerAgent: declarative control-plane client + I/O facade.
 
-Event-driven architecture using Redis Streams:
-- Each agent has a stream mailbox: stream:{agent_id}
-- NanoCtrl pushes connection commands to agent streams
-- Agent listens to stream and initiates p2p bootstrap
-- QP info exchange via Redis (exchange:{sender}:{receiver})
-- No polling, pure message-driven
+Owns lifecycle (register, heartbeat, shutdown), per-peer RDMA endpoint
+state, MR registration, and the convenience facade over the per-endpoint
+I/O primitives. Handshake protocol lives in ``_mailbox.py``.
 """
+
+from __future__ import annotations
 
 import json
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, List, Optional, Set
 
 try:
@@ -26,207 +25,8 @@ except ImportError as e:
 from nanoctrl import NanoCtrlClient
 
 from dlslime import available_nic, RDMAContext, RDMAEndpoint, RDMAMemoryPool
-
-
-class StreamMailbox:
-    """
-    Redis Streams-based mailbox for receiving connection commands from NanoCtrl.
-    Pure event-driven, no polling. Listens to stream:{agent_alias}.
-    """
-
-    def __init__(self, agent: "PeerAgent", stream_block_ms: int = 100):
-        """
-        Args:
-            agent: PeerAgent instance
-            stream_block_ms: XREAD block timeout in milliseconds (default 100ms)
-        """
-        self._agent = agent
-        self._stream_block_ms = stream_block_ms
-        self._stop_event = threading.Event()
-        self._thread: Optional[threading.Thread] = None
-
-    def start(self) -> None:
-        """Start the stream listener thread."""
-        # Delete any stale stream messages from a previous run before listening.
-        prefix = (
-            f"{self._agent.redis_key_prefix}:" if self._agent.redis_key_prefix else ""
-        )
-        stream_key = f"{prefix}stream:{self._agent.alias}"
-        self._agent.redis_client.delete(stream_key)
-
-        self._thread = threading.Thread(target=self._listen_loop, daemon=True)
-        self._thread.start()
-        print(
-            f"StreamMailbox {self._agent.alias}: Started listening to stream "
-            f"(block={self._stream_block_ms}ms)"
-        )
-
-    def stop(self) -> None:
-        """Stop the stream listener."""
-        self._stop_event.set()
-        if self._thread:
-            self._thread.join(timeout=2)
-        print(f"StreamMailbox {self._agent.alias}: Stopped")
-
-    def _listen_loop(self) -> None:
-        """Main event loop: blocking XREAD on agent's stream mailbox."""
-        prefix = (
-            f"{self._agent.redis_key_prefix}:" if self._agent.redis_key_prefix else ""
-        )
-        stream_key = f"{prefix}stream:{self._agent.alias}"
-
-        # Start from the beginning of the (now-freshly-cleared) stream.
-        last_id = "0-0"
-
-        print(
-            f"StreamMailbox {self._agent.alias}: Listening to {stream_key} (from beginning)"
-        )
-
-        while not self._stop_event.is_set():
-            try:
-                # XREAD with blocking
-                result = self._agent.redis_client.xread(
-                    {stream_key: last_id},
-                    block=self._stream_block_ms,
-                    count=100,  # Batch up to 100 messages
-                )
-
-                if not result:
-                    continue  # Timeout, no messages
-
-                # Process messages
-                for _, messages in result:
-                    for msg_id, fields in messages:
-                        try:
-                            self._handle_message(fields)
-                        except Exception as e:
-                            print(
-                                f"StreamMailbox {self._agent.alias}: Error handling message: {e}"
-                            )
-                            import traceback
-
-                            traceback.print_exc()
-                        last_id = msg_id
-
-            except redis.exceptions.ConnectionError:
-                time.sleep(0.1)
-            except Exception as e:
-                print(f"StreamMailbox {self._agent.alias}: Error in listen loop: {e}")
-                import traceback
-
-                traceback.print_exc()
-                time.sleep(0.1)
-
-    def _handle_message(self, fields: Dict[str, str]) -> None:
-        """Handle incoming stream message."""
-        msg_type = fields.get("type")
-
-        if msg_type == "connect_peer":
-            # Command from NanoCtrl: connect to specific peer
-            peer = fields.get("peer")
-            if peer:
-                print(
-                    f"StreamMailbox {self._agent.alias}: Received connect_peer -> {peer}"
-                )
-                self._try_connect_peer(peer)
-            else:
-                print(
-                    f"StreamMailbox {self._agent.alias}: connect_peer missing 'peer' field"
-                )
-
-        elif msg_type == "qp_ready":
-            # Notification from peer: their QP info is ready
-            peer = fields.get("peer")
-            if peer:
-                print(
-                    f"StreamMailbox {self._agent.alias}: Received qp_ready from {peer}"
-                )
-                self._try_connect_peer(peer)
-            else:
-                print(
-                    f"StreamMailbox {self._agent.alias}: qp_ready missing 'peer' field"
-                )
-
-        else:
-            print(
-                f"StreamMailbox {self._agent.alias}: Unknown message type: {msg_type}"
-            )
-
-    def _try_connect_peer(self, peer: str) -> None:
-        """
-        Attempt symmetric rendezvous with peer.
-        Idempotent: safe to call multiple times.
-        """
-        # Skip if already connected or a connection attempt is in progress.
-        if self._agent.is_peer_connected(peer):
-            return
-        with self._agent._connecting_peers_lock:
-            if peer in self._agent._connecting_peers:
-                return
-            self._agent._connecting_peers.add(peer)
-
-        try:
-            self._try_connect_peer_inner(peer)
-        finally:
-            # Always release the in-flight guard. A rendezvous attempt may return
-            # early when the peer has not published its QP info yet; later
-            # connect_peer / qp_ready messages must be allowed to retry.
-            with self._agent._connecting_peers_lock:
-                self._agent._connecting_peers.discard(peer)
-
-    def _try_connect_peer_inner(self, peer: str) -> None:
-        """Core rendezvous logic (called with connecting-guard held)."""
-
-        # A. Create local endpoint and get QP info
-        endpoint = self._agent.ensure_local_endpoint_created(peer)
-        my_qp_info = endpoint.endpoint_info()
-
-        # B. Publish our QP info to exchange key
-        prefix = (
-            f"{self._agent.redis_key_prefix}:" if self._agent.redis_key_prefix else ""
-        )
-        exchange_key_out = f"{prefix}exchange:{self._agent.alias}:{peer}"
-        self._agent.redis_client.set(
-            exchange_key_out,
-            json.dumps(my_qp_info, default=str),
-        )
-
-        # C. Notify peer via their stream that our QP info is ready
-        peer_stream_key = f"{prefix}stream:{peer}"
-        try:
-            self._agent.redis_client.xadd(
-                peer_stream_key,
-                {
-                    "type": "qp_ready",
-                    "peer": self._agent.alias,
-                    "timestamp": str(time.time()),
-                },
-                maxlen=1000,
-                approximate=True,
-            )
-        except Exception as e:
-            print(f"StreamMailbox {self._agent.alias}: Failed to notify {peer}: {e}")
-
-        # D. Try to fetch peer's QP info (non-blocking)
-        exchange_key_in = f"{prefix}exchange:{peer}:{self._agent.alias}"
-        peer_qp_info_str = self._agent.redis_client.get(exchange_key_in)
-
-        if peer_qp_info_str is None:
-            # Peer hasn't published yet; they will notify us when ready
-            return
-
-        try:
-            peer_qp_info = json.loads(peer_qp_info_str)
-        except json.JSONDecodeError:
-            print(
-                f"StreamMailbox {self._agent.alias}: Failed to parse QP info from {peer}"
-            )
-            return
-
-        # E. Complete RDMA handshake
-        endpoint.connect(peer_qp_info)
-        self._agent.mark_peer_connected(peer)
-        print(f"Link Established: {self._agent.alias} <-> {peer}")
+from ._mailbox import StreamMailbox
+from ._obs import _tlog
 
 
 class PeerAgent:
@@ -260,7 +60,7 @@ class PeerAgent:
         """
         self.server_url = server_url
         self.redis_address = redis_address
-        self.alias = alias  # May be None, will be set during registration
+        self.alias: str = alias or ""  # May be None, will be set during registration
         self.name_prefix = name_prefix
         self.device = device
         self.ib_port = ib_port
@@ -296,10 +96,33 @@ class PeerAgent:
         )  # Protects _endpoints for concurrent reconcile
         self._connected_peers: Set[str] = set()
         self._connected_peers_lock = threading.Lock()
+        # Notified whenever _connected_peers changes, so `wait_for_peers`
+        # can block on a condition instead of polling. Shares the existing
+        # lock so is_peer_connected / mark_peer_connected call sites are
+        # unchanged.
+        self._connected_peers_cond = threading.Condition(self._connected_peers_lock)
 
         # Prevents duplicate in-flight connect attempts for the same peer.
         self._connecting_peers: Set[str] = set()
         self._connecting_peers_lock = threading.Lock()
+
+        # Peers we've already XADDed our qp_ready to. Used to suppress
+        # ping-pong: without this, an inbound qp_ready triggers another
+        # outbound qp_ready, which triggers another inbound one, etc. —
+        # each round walking the mailbox listener's single-threaded queue.
+        self._notified_peers: Set[str] = set()
+        self._notified_peers_lock = threading.Lock()
+
+        # Worker pool for eager RDMAEndpoint construction in
+        # set_desired_topology. RDMAEndpoint() allocates QPs and takes
+        # ~10-15 ms each; doing them serially on the mailbox listener
+        # makes max_edge scale as O(num_peers) — moving the allocation
+        # here instead, in parallel, keeps the listener's per-message
+        # cost to a dict lookup.
+        self._endpoint_creation_pool = ThreadPoolExecutor(
+            max_workers=16,
+            thread_name_prefix="peer-agent-ep-create",
+        )
 
         # MR info cache (persistent, no TTL - MR info is immutable after registration)
         # Architecture: Redis (source of truth) → PeerAgent (cache) → endpoint
@@ -328,7 +151,7 @@ class PeerAgent:
         self._cleanup_stale_mr_keys()
 
         # Start StreamMailbox (event-driven connection management)
-        self._mailbox = StreamMailbox(self, stream_block_ms=100)
+        self._mailbox = StreamMailbox(self, stream_block_ms=5)
         self._mailbox.start()
 
         # Start cleanup event listener
@@ -338,8 +161,9 @@ class PeerAgent:
         self._heartbeat_thread: Optional[threading.Thread] = None
         self._start_heartbeat()
 
-        time.sleep(0.1)
-
+    # ------------------------------------------------------------------
+    # Registration / lifecycle
+    # ------------------------------------------------------------------
     def _register(self) -> None:
         """Register this agent with the control plane (also allocates name if not provided)."""
         max_retries = 5
@@ -350,7 +174,7 @@ class PeerAgent:
         for attempt in range(max_retries):
             try:
                 result = self._client.register_peer(
-                    alias=self.alias,
+                    alias=self.alias or None,
                     device=self.device,
                     ib_port=self.ib_port,
                     link_type=self.link_type,
@@ -418,6 +242,8 @@ class PeerAgent:
                                         endpoint.shutdown()
                                     with self._connected_peers_lock:
                                         self._connected_peers.discard(peer)
+                                        self._connected_peers_cond.notify_all()
+                                    self.clear_peer_notified(peer)
                                     del self._endpoints[peer]
                                     print(
                                         f"PeerAgent {self.alias}: Removed endpoint for {peer}"
@@ -499,19 +325,42 @@ class PeerAgent:
         self._heartbeat_thread = threading.Thread(target=heartbeat_loop, daemon=True)
         self._heartbeat_thread.start()
 
+    # ------------------------------------------------------------------
+    # Peer / endpoint state
+    # ------------------------------------------------------------------
     def ensure_local_endpoint_created(self, peer_alias: str) -> RDMAEndpoint:
         """
         Idempotent: create endpoint for peer if not exists.
         Returns the endpoint (existing or newly created). Thread-safe.
+
+        The RDMAEndpoint constructor allocates QPs, which takes ~10-15 ms
+        per call. We release `_endpoints_lock` during construction so that
+        concurrent pre-creation of many endpoints (see set_desired_topology)
+        actually runs in parallel — otherwise holding the lock would
+        serialize the QP allocations and defeat the purpose.
         """
+        # Fast path: lookup under lock.
         with self._endpoints_lock:
-            if peer_alias not in self._endpoints:
-                endpoint = RDMAEndpoint(
-                    pool=self._memory_pool,
-                    num_qp=self.qp_num,
-                )
-                self._endpoints[peer_alias] = endpoint
-            return self._endpoints[peer_alias]
+            ep = self._endpoints.get(peer_alias)
+            if ep is not None:
+                return ep
+
+        # Slow path: construct outside the lock. Another thread may also be
+        # constructing for the same peer; we handle that with a double-check.
+        new_ep = RDMAEndpoint(
+            pool=self._memory_pool,
+            num_qp=self.qp_num,
+        )
+
+        with self._endpoints_lock:
+            existing = self._endpoints.get(peer_alias)
+            if existing is not None:
+                # Lost the race. `new_ep` goes out of scope; its destructor
+                # releases the QPs we allocated. Cheap in absolute terms
+                # (~14 ms once) and rare in practice.
+                return existing
+            self._endpoints[peer_alias] = new_ep
+            return new_ep
 
     def get_connected_peers(self) -> Set[str]:
         """Return set of peer aliases we've successfully connected to."""
@@ -525,44 +374,135 @@ class PeerAgent:
     def mark_peer_connected(self, peer_alias: str) -> None:
         with self._connected_peers_lock:
             self._connected_peers.add(peer_alias)
+            self._connected_peers_cond.notify_all()
 
+    def has_notified_peer(self, peer_alias: str) -> bool:
+        """True iff we've already sent our qp_ready to this peer during the
+        current session. Suppresses the redundant outbound qp_ready that
+        would otherwise fire on every qp_ready we *receive*."""
+        with self._notified_peers_lock:
+            return peer_alias in self._notified_peers
+
+    def mark_peer_notified(self, peer_alias: str) -> None:
+        with self._notified_peers_lock:
+            self._notified_peers.add(peer_alias)
+
+    def clear_peer_notified(self, peer_alias: str) -> None:
+        """Allow the next handshake cycle to re-notify — called when a
+        peer disconnects / is cleaned up so a reconnect works."""
+        with self._notified_peers_lock:
+            self._notified_peers.discard(peer_alias)
+
+    # ------------------------------------------------------------------
+    # Topology
+    # ------------------------------------------------------------------
     def set_desired_topology(
         self,
         target_peers: List[str],
         min_bw: Optional[str] = None,
-        symmetric: bool = False,
     ) -> None:
         """
         Set desired topology via control plane. NanoCtrl saves to Redis.
         Reconciler will converge to this state.
 
+        Topology is always symmetric: declaring "I want to talk to B"
+        implies "B is in a topology with me" because RC RDMA requires
+        bilateral QP handshake.
+
         Args:
             target_peers: List of peer agent aliases to connect to
             min_bw: Optional min bandwidth hint (e.g. "100Gbps"), reserved
-            symmetric: If True, NanoCtrl also merges this agent into each target's spec.
-                Required when only one side initiates (e.g. decode -> prefill migration).
         """
+        _tlog(f"{self.alias}: set_desired_topology({target_peers}) ENTER")
+        t0 = time.perf_counter()
         spec: Dict[str, Any] = {"target_peers": target_peers}
         if min_bw is not None:
             spec["min_bw"] = min_bw
-        if symmetric:
-            spec["symmetric"] = True
         if self.redis_key_prefix:
             spec["scope"] = self.redis_key_prefix
+
+        # Fire RDMAEndpoint construction in parallel *before* the HTTP RPC
+        # returns. By the time NanoCtrl has fanned out connect_peer events
+        # and they arrive on our mailbox, every target's endpoint already
+        # exists — the listener's ensure_local_endpoint_created becomes a
+        # dict lookup instead of a 14-ms QP allocation.
+        #
+        # We don't wait for the futures: the NanoCtrl RPC round-trip
+        # (~10 ms) usually overlaps enough of the construction that it's
+        # effectively free. The double-check in ensure_local_endpoint_created
+        # keeps the listener safe even if an incoming message races the
+        # pre-creation worker.
+        eager_futures = [
+            self._endpoint_creation_pool.submit(self.ensure_local_endpoint_created, p)
+            for p in target_peers
+        ]
+
         result = self._client.set_desired_topology(
             self.alias,
             target_peers=target_peers,
             min_bw=min_bw,
-            symmetric=symmetric,
+        )
+        _tlog(
+            f"{self.alias}: set_desired_topology HTTP RTT "
+            f"+{(time.perf_counter() - t0) * 1000:.3f}ms"
         )
         if result.get("status") != "ok":
             raise RuntimeError(f"set_desired_topology failed: {result}")
+
+        # Block until eager endpoint creation finishes. After the HTTP RTT
+        # most/all are already done, so this typically adds sub-millisecond.
+        # We still want to wait so that has_peer_connected() / connect_to()
+        # callers see a stable state.
+        t_join = time.perf_counter()
+        for f in eager_futures:
+            try:
+                f.result(timeout=30.0)
+            except Exception as e:
+                print(
+                    f"PeerAgent {self.alias}: eager endpoint pre-creation failed: {e}"
+                )
+        _tlog(
+            f"{self.alias}: set_desired_topology eager-endpoints-wait "
+            f"+{(time.perf_counter() - t_join) * 1000:.3f}ms"
+        )
 
     def query(self) -> Dict[str, Dict[str, Any]]:
         """Query all registered peer agents."""
         agents = self._client.query_peers()
         return {agent["name"]: agent for agent in agents}
 
+    def wait_for_peers(self, peers: List[str], timeout_sec: float = 60.0) -> None:
+        """
+        Block until all specified peers are connected.
+        Useful for tests / sync points after set_desired_topology.
+
+        Event-driven: mark_peer_connected notifies the condition variable,
+        so the wakeup latency is whatever threading.Condition adds on top
+        of the reconciler's mark — no polling interval floor.
+        """
+        _tlog(f"{self.alias}: wait_for_peers({peers}) ENTER")
+        t0 = time.perf_counter()
+        deadline = time.monotonic() + timeout_sec
+        with self._connected_peers_cond:
+            while True:
+                missing = [p for p in peers if p not in self._connected_peers]
+                if not missing:
+                    _tlog(
+                        f"{self.alias}: wait_for_peers({peers}) DONE "
+                        f"+{(time.perf_counter() - t0) * 1000:.3f}ms"
+                    )
+                    return
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError(
+                        f"Timeout waiting for peers {peers}. "
+                        f"Connected: {sorted(self._connected_peers)}"
+                    )
+                self._connected_peers_cond.wait(timeout=remaining)
+
+    # ------------------------------------------------------------------
+    # Memory region registration
+    # ------------------------------------------------------------------
     def register_memory_region(
         self,
         mr_name: str,
@@ -637,6 +577,32 @@ class PeerAgent:
             endpoint = self._endpoints[peer_alias]
         return endpoint.register_remote_memory_region(mr_name, mr_info)
 
+    def get_remote_handle(self, peer_alias: str, mr_name: str) -> int:
+        """Resolve a peer's published MR name to a local remote-MR handle.
+
+        One-shot convenience for the common pattern of
+        ``get_mr_info`` + ``register_remote_memory_region``. Both underlying
+        steps are idempotent (info is cached; the remote pool returns the
+        existing handle on repeat registration), so calling this repeatedly
+        is cheap.
+
+        Raises:
+            RuntimeError: if the peer has not published the named MR yet.
+                Callers who expect to race the publisher should poll
+                ``get_mr_info`` directly rather than catching this.
+        """
+        mr_info = self.get_mr_info(peer_alias, mr_name)
+        if mr_info is None:
+            raise RuntimeError(
+                f"Remote MR '{mr_name}' from peer '{peer_alias}' is not "
+                "published yet. Ensure the peer called "
+                "register_memory_region before requesting its handle."
+            )
+        return self.register_remote_memory_region(peer_alias, mr_name, mr_info)
+
+    # ------------------------------------------------------------------
+    # I/O
+    # ------------------------------------------------------------------
     def get_endpoint(self, peer_alias: str) -> RDMAEndpoint:
         """Get RDMA endpoint for peer (must be connected)."""
         with self._endpoints_lock:
@@ -647,23 +613,33 @@ class PeerAgent:
                 )
             return self._endpoints[peer_alias]
 
-    def wait_for_peers(self, peers: List[str], timeout_sec: float = 60.0) -> None:
-        """
-        Block until all specified peers are connected.
-        Useful for tests / sync points after set_desired_topology.
-        """
-        deadline = time.time() + timeout_sec
-        while time.time() < deadline:
-            connected = self.get_connected_peers()
-            missing = [p for p in peers if p not in connected]
-            if not missing:
-                return
-            time.sleep(0.5)
-        raise TimeoutError(
-            f"Timeout waiting for peers {peers}. "
-            f"Connected: {self.get_connected_peers()}"
-        )
+    # One-shot I/O forwarders (convenience facade over get_endpoint().op()).
+    #
+    # Cost: one dict lookup + one Python lock acquire per call; O(1) per
+    # submission, not O(n) per assignment. Hot loops should still cache
+    # the endpoint once (ep = agent.get_endpoint(peer)) and call
+    # ep.<op>(...) directly.
+    def read(self, peer_alias: str, assign, stream=None):
+        return self.get_endpoint(peer_alias).read(assign, stream)
 
+    def write(self, peer_alias: str, assign, stream=None):
+        return self.get_endpoint(peer_alias).write(assign, stream)
+
+    def write_with_imm(self, peer_alias: str, assign, imm_data: int = 0, stream=None):
+        return self.get_endpoint(peer_alias).write_with_imm(assign, imm_data, stream)
+
+    def send(self, peer_alias: str, chunk, stream=None):
+        return self.get_endpoint(peer_alias).send(chunk, stream)
+
+    def recv(self, peer_alias: str, chunk, stream=None):
+        return self.get_endpoint(peer_alias).recv(chunk, stream)
+
+    def imm_recv(self, peer_alias: str, stream=None):
+        return self.get_endpoint(peer_alias).imm_recv(stream)
+
+    # ------------------------------------------------------------------
+    # Shutdown
+    # ------------------------------------------------------------------
     def shutdown(self) -> None:
         """Shutdown and clean up."""
         if self._shutdown_called:
@@ -681,6 +657,13 @@ class PeerAgent:
         if self._heartbeat_thread:
             self._heartbeat_thread.join(timeout=1)
 
+        # Drain the eager-endpoint-creation pool. Workers here don't block
+        # on anything external, so shutdown(wait=True) returns promptly.
+        try:
+            self._endpoint_creation_pool.shutdown(wait=True)
+        except Exception as e:
+            print(f"PeerAgent {self.alias}: endpoint-pool shutdown warning: {e}")
+
         # Clean up exchange keys to prevent stale QP info
         prefix = f"{self.redis_key_prefix}:" if self.redis_key_prefix else ""
         with self._endpoints_lock:
@@ -695,6 +678,8 @@ class PeerAgent:
 
         with self._connected_peers_lock:
             self._connected_peers.clear()
+        with self._notified_peers_lock:
+            self._notified_peers.clear()
 
         # Clean up stream mailbox
         stream_key = f"{prefix}stream:{self.alias}"

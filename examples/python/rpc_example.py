@@ -38,11 +38,11 @@ class CalcService:
 
 def main(ctrl_url: str):
     worker = PeerAgent(alias="worker:0", server_url=ctrl_url)
-    worker.set_desired_topology(["driver:0"], symmetric=True)
+    worker.set_desired_topology(["driver:0"])
 
     # --- driver agent ---
     driver = PeerAgent(alias="driver:0", server_url=ctrl_url)
-    driver.set_desired_topology(["worker:0"], symmetric=True)
+    driver.set_desired_topology(["worker:0"])
 
     # wait for both sides to connect
     worker.wait_for_peers(["driver:0"])
