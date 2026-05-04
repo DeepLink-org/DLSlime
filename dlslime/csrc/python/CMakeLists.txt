@@ -6,6 +6,15 @@ find_package(pybind11 REQUIRED PATHS ${pybind11_DIR})
 set(PYTHON_SUPPORTED_VERSIONS "3.8" "3.9" "3.10" "3.11" "3.12")
 
 set(_slime_c_sources bind.cpp)
+
+# DLSlimeCache (V0): pure C++ + STL, no RDMA dependency. Sources baked
+# into the python extension so they can use pybind11 directly. See
+# csrc/cache/extent.h for the design.
+list(APPEND _slime_c_sources
+    ${CMAKE_CURRENT_SOURCE_DIR}/../cache/cache_server.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../cache/bindings.cpp
+)
+
 if (BUILD_RDMA)
     # SlimeRPC C++ session lives inside _slime_c -- it depends on both
     # the RDMA engine (for RDMAEndpoint, ImmRecvFuture) AND on pybind11

@@ -44,6 +44,10 @@
 #include "dlslime/csrc/rpc/rpc_session.h"
 #endif
 
+// Forward declaration: cache bindings live in a separate translation
+// unit (cache/bindings.cpp) so they can be developed independently.
+void bind_cache(pybind11::module_& m);
+
 // Ops moved to NanoCCL - these includes are commented out
 // #if defined(BUILD_INTRA_OPS) || defined(BUILD_INTER_OPS)
 // #include <torch/torch.h>
@@ -97,6 +101,10 @@ PYBIND11_MODULE(_slime_c, m)
     EXPOSE_BUILD_FLAG(m, BUILD_INTRA_OPS);
     EXPOSE_BUILD_FLAG(m, BUILD_INTER_OPS);
     EXPOSE_BUILD_FLAG(m, BUILD_RPC);
+
+    // DLSlimeCache (V0): always-on, no extra build flag — the V0 server
+    // is pure metadata and pulls in zero RDMA / GPU dependencies.
+    bind_cache(m);
 
     py::enum_<dlslime::OpCode>(m, "OpCode")
         .value("READ", dlslime::OpCode::READ)
