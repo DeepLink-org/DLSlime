@@ -161,16 +161,11 @@ with contextlib.ExitStack() as stack:
         for peer_alias in agent_list:
             if peer_alias != agent_alias:
                 try:
-                    remote_mr_info = agent.get_mr_info(peer_alias, "data")
-                    if remote_mr_info is None:
+                    try:
+                        remote_handler = agent.get_remote_handle(peer_alias, "data")
+                    except RuntimeError:
                         print(f"  {agent_alias} -> {peer_alias}: MR info not found")
                         continue
-
-                    remote_handler = agent.register_remote_memory_region(
-                        peer_alias,
-                        "data",
-                        remote_mr_info,
-                    )
 
                     local_handler = recv_handlers.get((agent_alias, peer_alias))
                     if local_handler is None:
@@ -179,9 +174,8 @@ with contextlib.ExitStack() as stack:
                         )
                         continue
 
-                    endpoint = agent.get_endpoint(peer_alias)
-                    slot = endpoint.read(
-                        [(local_handler, remote_handler, 0, 0, 8)], None
+                    slot = agent.read(
+                        peer_alias, [(local_handler, remote_handler, 0, 0, 8)], None
                     )
                     slot.wait()
 

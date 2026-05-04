@@ -67,7 +67,7 @@ def main():
     # buf_mb * SLIME_RPC_MAX_INFLIGHT bytes of CPU memory needlessly.
     worker._rpc_max_inflight = max(1, int(getattr(args, "max_inflight", 4)))
 
-    worker.set_desired_topology(["bench-driver"], symmetric=True)
+    worker.set_desired_topology(["bench-driver"])
     print("Worker ready, waiting for driver to connect…")
     worker.wait_for_peers(["bench-driver"], timeout_sec=120)
     print("Connected. Serving (Ctrl-C to stop).")

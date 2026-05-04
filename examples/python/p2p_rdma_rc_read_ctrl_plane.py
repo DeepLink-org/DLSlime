@@ -49,10 +49,6 @@ initiator_agent.wait_for_peers([target_name])
 target_agent.wait_for_peers([initiator_name])
 print("Connections established.")
 
-# Get endpoints
-initiator = initiator_agent.get_endpoint(target_name)
-target = target_agent.get_endpoint(initiator_name)
-
 # Register local memory regions (each agent registers its own MR)
 local_tensor = torch.zeros([16], device="cpu", dtype=torch.uint8)
 handler = initiator_agent.register_memory_region(
@@ -62,7 +58,7 @@ handler = initiator_agent.register_memory_region(
     local_tensor.numel() * local_tensor.itemsize,
 )
 
-remote_tensor = torch.ones([16], device="cpu", dtype=torch.uint8)
+remote_tensor = torch.ones([16], device="cuda", dtype=torch.uint8)
 target_agent.register_memory_region(
     "kv",
     remote_tensor.data_ptr(),
@@ -70,21 +66,16 @@ target_agent.register_memory_region(
     remote_tensor.numel() * remote_tensor.itemsize,
 )
 
-# Get remote MR info through control plane
-print("Getting remote MR info...")
-remote_mr_info = initiator_agent.get_mr_info(target_name, "kv")
-assert remote_mr_info is not None, "Failed to get remote MR info"
+# Resolve remote MR handle through the control plane (fetches MR info and
+# registers it with the local endpoint in one step).
+print("Resolving remote MR handle...")
+hremote_on_initiator = initiator_agent.get_remote_handle(target_name, "kv")
 
-# Register remote memory region
-hremote_on_initiator = initiator_agent.register_remote_memory_region(
-    target_name,
-    "kv",
-    remote_mr_info,
-)
-
-# Perform RDMA read
+# Perform RDMA read via the agent's one-shot facade (forwards to the
+# target peer's endpoint).
 print("Performing RDMA read...")
-slot = initiator.read(
+slot = initiator_agent.read(
+    target_name,
     [
         (handler, hremote_on_initiator, 0, 8, 8),
     ],

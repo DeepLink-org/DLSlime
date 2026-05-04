@@ -118,7 +118,7 @@ def main():
     driver._rpc_buffer_size = buf_bytes
     driver._rpc_max_inflight = max(1, int(getattr(args, "max_inflight", 4)))
 
-    driver.set_desired_topology(["bench-worker"], symmetric=True)
+    driver.set_desired_topology(["bench-worker"])
     print("Waiting for worker…")
     driver.wait_for_peers(["bench-worker"], timeout_sec=120)
     print("Connected. Starting benchmark.\n")

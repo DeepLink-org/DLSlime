@@ -26,6 +26,7 @@ parser.add_argument("--batch-size", type=int, default=1)
 parser.add_argument("--size", nargs="+", type=int, default=[n for n in range(8, 20)])
 parser.add_argument("--num-concurrency", type=int, default=16)
 parser.add_argument("--num-iteration", type=int, default=100)
+parser.add_argument("--num-warmup-iteration", type=int, default=10)
 parser.add_argument("--opcode", type=str, choices=["read", "write"], default="write")
 parser.add_argument("--with-imm-data", action="store_true", help="with-imm-data")
 parser.add_argument(
@@ -182,12 +183,15 @@ max_numel = 2 << max(args.size)
 max_ttensor = torch.ones([max_numel], device=f"cuda:{local_rank}")
 ttensors = [max_ttensor[: 2 << rawsize] for rawsize in args.size]
 max_mr_key = 0
+dlslime_mr_name = "bench_mr"  # named MR for the DLSlime handle model
+dlslime_local_handle = None
+dlslime_remote_handle = None
 print(local_rank)
 torch.cuda.synchronize()
 
 if args.transfer_engine == "dlslime":
-    rdma_endpoint.register_memory_region(
-        max_mr_key,
+    dlslime_local_handle = rdma_endpoint.register_memory_region(
+        dlslime_mr_name,
         max_ttensor.data_ptr(),
         int(max_ttensor.storage_offset()),
         max_ttensor.numel() * max_ttensor.itemsize,
@@ -237,6 +241,13 @@ if rank == 0:
 if args.transfer_engine == "dlslime":
     # endpoint connect
     rdma_endpoint.connect(all_endpoint_info[(rank + num_channels) % world_size])
+    # Resolve the peer's published MR to a local remote-handle. Both sides
+    # register so either can initiate read/write; only the initiator role
+    # actually uses the handle in this benchmark.
+    peer_mr_info = all_endpoint_info[peer_rank]["mr_info"][dlslime_mr_name]
+    dlslime_remote_handle = rdma_endpoint.register_remote_memory_region(
+        dlslime_mr_name, peer_mr_info
+    )
 elif args.transfer_engine == "nccl":
     # construction by torch.distributed
     pass
@@ -279,7 +290,7 @@ end_event = torch.cuda.Event(enable_timing=True)
 
 
 def transfer_batch_concurrency_dlslime(
-    role, opcode, mr_key, tensor, batch_size, num_concurrency
+    role, opcode, local_handle, remote_handle, tensor, batch_size, num_concurrency
 ):
     fn = rdma_endpoint.read if opcode == "read" else rdma_endpoint.write
     if role == "initiator":
@@ -288,7 +299,13 @@ def transfer_batch_concurrency_dlslime(
             assign = [
                 fn(
                     [
-                        (mr_key, mr_key, 0, 0, tensor.numel() * tensor.itemsize)
+                        (
+                            local_handle,
+                            remote_handle,
+                            0,
+                            0,
+                            tensor.numel() * tensor.itemsize,
+                        )
                         for _ in range(batch_size)
                     ],
                     None,
@@ -416,13 +433,14 @@ for idx, (rawsize, ttensor) in enumerate(zip(args.size, ttensors)):
     rank_0_print(f"benchmark s={ttensor.numel() * ttensor.itemsize / 1024}K")
     size = 2 << rawsize
     total_time = 0.0
-    start_event.record()
-    for iter_id in range(args.num_iteration):
+
+    def _run_one_iteration():
         if args.transfer_engine == "dlslime":
             transfer_batch_concurrency_dlslime(
                 role,
                 args.opcode,
-                max_mr_key,
+                dlslime_local_handle,
+                dlslime_remote_handle,
                 ttensor,
                 args.batch_size,
                 args.num_concurrency,
@@ -450,6 +468,17 @@ for idx, (rawsize, ttensor) in enumerate(zip(args.size, ttensors)):
                 role, args.opcode, idx, ttensor, args.batch_size, args.num_concurrency
             )
         torch.cuda.synchronize()
+
+    # Warmup (excluded from timing). Barrier after so all ranks start the
+    # timed region together and the first measured iteration isn't paying
+    # cold-start cost.
+    for _ in range(args.num_warmup_iteration):
+        _run_one_iteration()
+    dist.barrier()
+
+    start_event.record()
+    for iter_id in range(args.num_iteration):
+        _run_one_iteration()
     end_event.record()
     torch.cuda.synchronize()
     dist.barrier()
