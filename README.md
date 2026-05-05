@@ -9,361 +9,172 @@
 </p>
 <h2 align="center"> Flexible & Efficient Heterogeneous Transfer Toolkit </h2>
 
-## Getting Started
+DLSlime is a heterogeneous transfer toolkit for distributed deep learning
+systems. It provides Python and C++ APIs for peer-to-peer data movement across
+RDMA, NVLink, Ascend Direct, and torch-distributed style backends, with higher
+level PeerAgent, SlimeRPC, and cache-service utilities built on top of the same
+data plane.
 
-DLSlime offers a set of peer-to-peer communication interfaces. For instance, consider the task of batched slice assignment from a remote tensor to a local tensor. You can accomplish this using the following APIs.
+## Highlights
 
-![Assignment Operation](docs/imgs/interface.svg).
-
-Here are some examples of DLSlime interface.
-
-### P2P Communication
-
-#### RDMA RC Mode
-
-- RDMA RC Read (Sync / Async mode)
-
-```
-python example/python/p2p_rdma_rc_read.py
-```
-
-- RDMA RC Read (Coroutine mode)
-
-```
-python example/python/p2p_rdma_rc_read_coroutine.py
-```
-
-- RDMA RC Write (Sync / Async mode)
-
-```
-python example/python/p2p_rdma_rc_write.py
-```
-
-- RDMA RC Write with immediate data (Sync / Async mode)
-
-```
-python example/python/p2p_rdma_rc_write_with_imm_data.py
-```
-
-- RDMA RC Send/Recv
-
-```
-python example/python/p2p_rdma_rc_send_recv.py
-```
-
-```
-python example/python/p2p_rdma_rc_send_recv_gdr.py
-```
-
-- DLSlime torch backend
-
-```
-torchrun --nproc_per_node=2 examples/python/p2p_rdma_rc_send_recv_torch.py
-```
-
-#### NVLink Mode
-
-```
-torchrun --nproc_per_node=2 p2p_nvlink.py
-```
-
-### Huawei Ascend Direct Mode
-
-See: [Huawei README](docs/huawei_ascend/README.md)
+| Area              | What DLSlime Provides                                                    |
+| ----------------- | ------------------------------------------------------------------------ |
+| P2P transfer      | RDMA RC read/write/send-recv, NVLink transfer, Ascend Direct transfer    |
+| Python control    | `RDMAEndpoint`, `PeerAgent`, memory-region registration, async futures   |
+| RPC               | SlimeRPC service/proxy helpers over PeerAgent mailbox transport          |
+| Cache service     | `dlslime-cache` service for assignment-directory backed RDMA cache slabs |
+| Torch integration | Optional torch backend and torchrun examples                             |
+| Benchmarks        | Transfer, endpoint, cache, and RPC microbenchmarks under `bench/`        |
 
 ## Install
 
-### pip install
+### From PyPI
 
+```bash
+pip install dlslime==0.0.3.rc2
 ```
-pip install dlslime==0.0.1.post10
-```
 
-> \[!Note\]
-> The DLSlime pip version is built with default FLAGS (see Build from source for details).
+The PyPI package is built with the default CMake flags. Build from source when
+you need optional transports or local C++ changes.
 
-### Build from source
+### From Source
 
-#### Python
-
-```
+```bash
 git clone https://github.com/deeplink-org/DLSlime.git
-FLAG=<ON|OFF> pip install -v --no-build-isolation -e .
+cd DLSlime
+pip install -v --no-build-isolation -e .
 ```
 
-#### CPP
+Pass CMake flags through the environment when enabling optional components:
 
-```
-git clone https://github.com/deeplink-org/DLSlime.git
-mkdir -p DLSlime/build && cmake -DFLAG=<ON|OFF> ..
-```
-
-#### Build flags
-
-The `FLAG` can be
-
-| Flag                  | Description                        | Platform | default |
-| :-------------------- | :--------------------------------- | :------- | ------: |
-| `BUILD_RDMA`          | Build RDMA Transfer Engine         | Hetero   |      ON |
-| `BUILD_PYTHON`        | Build Python wrapper               | Hetero   |      ON |
-| `BUILD_NVLINK`        | Build NVLINK Transfer Engine       | GPGPU    |     OFF |
-| `BUILD_ASCEND_DIRECT` | Build Ascend direct transport      | ASCEND   |     OFF |
-| `BUILD_TORCH_PLUGIN`  | Build DLSlime as a torch backend   | Hetero   |     OFF |
-| `BUILD_INTRA_OPS`     | Use INTRA Collective OPS           | GPGPU    |     OFF |
-| `BUILD_INTER_OPS`     | Use INTER Collective OPS (NVSHMEM) | NVIDIA   |     OFF |
-
-> \[!Note\]
-> Please enable `USE_MACA` when using DLSlime as a torch backend in Metax platform.
-
-## Benchmark
-
-For the SlimeRPC vs Ray Python RPC microbenchmark, see
-[docs/benchmark-rpc.md](docs/benchmark-rpc.md).
-
-### GDRDMA P2P Read/Write
-
-- Platform: NVIDIA ConnectX-7 HHHL Adapter Card; 200GbE (default mode) / NDR200 IB; Dual-port QSFP112; PCIe 5.0 x16 with x16 PCIe extension option; RoCE v2.
-
-#### #BS=1, #Concurrency=1
-
-```
-torchrun --master-addr 10.130.8.145 --master-port 6006 --nnodes 2 --nproc-per-node 1 --node-rank 1 bench/python/agg_transfer_bench_spmd.py --qp-num 8 --transfer-engine dlslime --batch-size 1 --num-iteration 100 --num-concurrency 1
+```bash
+BUILD_NVLINK=ON BUILD_TORCH_PLUGIN=ON \
+  pip install -v --no-build-isolation -e .
 ```
 
-```
-torchrun --master-addr 10.130.8.145 --master-port 6006 --nnodes 2 --nproc-per-node 1 --node-rank 0 bench/python/agg_transfer_bench_spmd.py --qp-num 8 --transfer-engine dlslime --batch-size 1 --num-iteration 100 --num-concurrency 1
-```
+For a pure C++ build:
 
-| Transfer Engine | #Channels | Message Size (bytes) | Batch Size | Num Concurrency | Avg Latency(ms) | Bandwidth(MB/s) |
-| --------------- | --------- | -------------------- | ---------- | --------------- | --------------- | --------------- |
-| dlslime         | 1         | 2,048                | 1          | 1               | 0.039           | 52              |
-| dlslime         | 1         | 4,096                | 1          | 1               | 0.037           | 111             |
-| dlslime         | 1         | 8,192                | 1          | 1               | 0.038           | 216             |
-| dlslime         | 1         | 16,384               | 1          | 1               | 0.037           | 442             |
-| dlslime         | 1         | 32,768               | 1          | 1               | 0.039           | 836             |
-| dlslime         | 1         | 65,536               | 1          | 1               | 0.039           | 1689            |
-| dlslime         | 1         | 131,072              | 1          | 1               | 0.041           | 3195            |
-| dlslime         | 1         | 262,144              | 1          | 1               | 0.043           | 6059            |
-| dlslime         | 1         | 524,288              | 1          | 1               | 0.049           | 10689           |
-| dlslime         | 1         | 1,048,576            | 1          | 1               | 0.062           | 17012           |
-| dlslime         | 1         | 2,097,152            | 1          | 1               | 0.083           | 25154           |
-| dlslime         | 1         | 4,194,304            | 1          | 1               | 0.127           | 33112           |
-| dlslime         | 1         | 8,388,608            | 1          | 1               | 0.211           | 39797           |
-| dlslime         | 1         | 16,777,216           | 1          | 1               | 0.382           | 43893           |
-| dlslime         | 1         | 33,554,432           | 1          | 1               | 0.726           | 46244           |
-| dlslime         | 1         | 67,108,864           | 1          | 1               | 1.412           | 47518           |
-| dlslime         | 1         | 134,217,728          | 1          | 1               | 2.783           | 48235           |
-
-#### #BS=64, #Concurrency=1
-
-```
-torchrun --master-addr 10.130.8.145 --master-port 6006 --nnodes 2 --nproc-per-node 1 --node-rank 1 bench/python/agg_transfer_bench_spmd.py --qp-num 8 --transfer-engine dlslime --batch-size 64 --num-iteration 100 --num-concurrency 1
+```bash
+cmake -S . -B build -GNinja -DBUILD_PYTHON=OFF -DBUILD_RDMA=ON
+cmake --build build
 ```
 
-```
-torchrun --master-addr 10.130.8.145 --master-port 6006 --nnodes 2 --nproc-per-node 1 --node-rank 0 bench/python/agg_transfer_bench_spmd.py --qp-num 8 --transfer-engine dlslime --batch-size 64 --num-iteration 100 --num-concurrency 1
-```
+### Build Flags
 
-| Transfer Engine | #Channels | Message Size (bytes) | Batch Size | Num Concurrency | Avg Latency(ms) | Bandwidth(MB/s) |
-| --------------- | --------- | -------------------- | ---------- | --------------- | --------------- | --------------- |
-| dlslime         | 1         | 2,048                | 64         | 1               | 0.084           | 1562            |
-| dlslime         | 1         | 4,096                | 64         | 1               | 0.082           | 3213            |
-| dlslime         | 1         | 8,192                | 64         | 1               | 0.086           | 6095            |
-| dlslime         | 1         | 16,384               | 64         | 1               | 0.093           | 11249           |
-| dlslime         | 1         | 32,768               | 64         | 1               | 0.115           | 18193           |
-| dlslime         | 1         | 65,536               | 64         | 1               | 0.158           | 26542           |
-| dlslime         | 1         | 131,072              | 64         | 1               | 0.243           | 34498           |
-| dlslime         | 1         | 262,144              | 64         | 1               | 0.414           | 40549           |
-| dlslime         | 1         | 524,288              | 64         | 1               | 0.758           | 44248           |
-| dlslime         | 1         | 1,048,576            | 64         | 1               | 1.443           | 46510           |
-| dlslime         | 1         | 2,097,152            | 64         | 1               | 2.809           | 47782           |
-| dlslime         | 1         | 4,194,304            | 64         | 1               | 5.555           | 48327           |
-| dlslime         | 1         | 8,388,608            | 64         | 1               | 11.041          | 48624           |
-| dlslime         | 1         | 16,777,216           | 64         | 1               | 22.003          | 48798           |
-| dlslime         | 1         | 33,554,432           | 64         | 1               | 43.941          | 48872           |
-| dlslime         | 1         | 67,108,864           | 64         | 1               | 87.809          | 48912           |
-| dlslime         | 1         | 134,217,728          | 64         | 1               | 175.512         | 48942           |
+| Flag                  |                                  Default | Description                                            |
+| --------------------- | ---------------------------------------: | ------------------------------------------------------ |
+| `BUILD_RDMA`          |                                     `ON` | Build the RDMA transfer engine                         |
+| `BUILD_PYTHON`        | `OFF` in CMake, `ON` in `pyproject.toml` | Build Python bindings                                  |
+| `BUILD_NVLINK`        |                                    `OFF` | Build the NVLink transfer engine                       |
+| `BUILD_ASCEND_DIRECT` |                                    `OFF` | Build Ascend Direct transport                          |
+| `BUILD_TORCH_PLUGIN`  |                                    `OFF` | Build DLSlime as a torch backend                       |
+| `BUILD_BENCH`         |                                    `OFF` | Build C++ transfer-engine benchmarks                   |
+| `BUILD_TEST`          |                                    `OFF` | Build C++ tests                                        |
+| `USE_MACA`            |                                    `OFF` | Enable Metax platform support for torch backend builds |
 
-#### #BS=64, #Concurrency=8
+## Quick Start
 
-```
-torchrun --master-addr 10.130.8.145 --master-port 6006 --nnodes 2 --nproc-per-node 1 --node-rank 1 bench/python/agg_transfer_bench_spmd.py --qp-num 8 --transfer-engine dlslime --batch-size 64 --num-iteration 100 --num-concurrency 8
+### RDMA Endpoint
+
+The low-level endpoint API registers local memory regions, exchanges endpoint
+metadata out of band, connects peers, and issues RDMA operations.
+
+```bash
+python examples/python/p2p_rdma_rc_read.py
+python examples/python/p2p_rdma_rc_write.py
+python examples/python/p2p_rdma_rc_write_with_imm_data.py
+python examples/python/p2p_rdma_rc_send_recv_gdr.py
 ```
 
-```
-torchrun --master-addr 10.130.8.145 --master-port 6006 --nnodes 2 --nproc-per-node 1 --node-rank 0 bench/python/agg_transfer_bench_spmd.py --qp-num 8 --transfer-engine dlslime --batch-size 64 --num-iteration 100 --num-concurrency 8
-```
+The examples use `available_nic()` to find RDMA devices and `RDMAEndpoint` to
+register local and remote memory regions.
 
-| Transfer Engine | #Channels | Message Size (bytes) | Batch Size | Num Concurrency | Avg Latency(ms) | Bandwidth(MB/s) |
-| --------------- | --------- | -------------------- | ---------- | --------------- | --------------- | --------------- |
-| dlslime         | 1         | 2,048                | 64         | 8               | 0.037           | 3519            |
-| dlslime         | 1         | 4,096                | 64         | 8               | 0.038           | 6948            |
-| dlslime         | 1         | 8,192                | 64         | 8               | 0.038           | 13758           |
-| dlslime         | 1         | 16,384               | 64         | 8               | 0.04            | 26416           |
-| dlslime         | 1         | 32,768               | 64         | 8               | 0.057           | 36997           |
-| dlslime         | 1         | 65,536               | 64         | 8               | 0.098           | 42618           |
-| dlslime         | 1         | 131,072              | 64         | 8               | 0.184           | 45602           |
-| dlslime         | 1         | 262,144              | 64         | 8               | 0.356           | 47148           |
-| dlslime         | 1         | 524,288              | 64         | 8               | 0.699           | 47975           |
-| dlslime         | 1         | 1,048,576            | 64         | 8               | 1.384           | 48478           |
-| dlslime         | 1         | 2,097,152            | 64         | 8               | 2.755           | 48709           |
-| dlslime         | 1         | 4,194,304            | 64         | 8               | 5.498           | 48823           |
-| dlslime         | 1         | 8,388,608            | 64         | 8               | 10.982          | 48884           |
-| dlslime         | 1         | 16,777,216           | 64         | 8               | 21.954          | 48908           |
-| dlslime         | 1         | 33,554,432           | 64         | 8               | 43.895          | 48923           |
-| dlslime         | 1         | 67,108,864           | 64         | 8               | 87.766          | 48936           |
-| dlslime         | 1         | 134,217,728          | 64         | 8               | 175.517         | 48940           |
+### PeerAgent and SlimeRPC
 
-### GDRDMA Aggregated Bandwidth
+PeerAgent adds control-plane based discovery and connection management. Start a
+NanoCtrl instance first, then run the RPC example:
 
-#### #BS=1, #Concurrency=1
-
-```
-torchrun --master-addr 10.130.8.145 --master-port 6006 --nnodes 2 --nproc-per-node 8 --node-rank 1 bench/python/agg_transfer_bench_spmd.py --qp-num 8 --transfer-engine dlslime --batch-size 1 --num-iteration 100 --num-concurrency 1
+```bash
+nanoctrl start
+python examples/python/rpc_example.py --ctrl http://127.0.0.1:3000
 ```
 
-```
-torchrun --master-addr 10.130.8.145 --master-port 6006 --nnodes 2 --nproc-per-node 8 --node-rank 0 bench/python/agg_transfer_bench_spmd.py --qp-num 8 --transfer-engine dlslime --batch-size 1 --num-iteration 100 --num-concurrency 1
-```
+The example defines a Python service, serves it on a worker PeerAgent, and
+calls it from a driver PeerAgent through the SlimeRPC proxy API.
 
-| Transfer Engine | #Channels | Message Size (bytes) | Batch Size | Num Concurrency | Avg Latency(ms) | Bandwidth(MB/s) |
-| --------------- | --------- | -------------------- | ---------- | --------------- | --------------- | --------------- |
-| dlslime         | 8         | 2,048                | 1          | 1               | 0.051           | 157             |
-| dlslime         | 8         | 4,096                | 1          | 1               | 0.042           | 768             |
-| dlslime         | 8         | 8,192                | 1          | 1               | 0.04            | 1576            |
-| dlslime         | 8         | 16,384               | 1          | 1               | 0.054           | 2929            |
-| dlslime         | 8         | 32,768               | 1          | 1               | 0.051           | 5713            |
-| dlslime         | 8         | 65,536               | 1          | 1               | 0.052           | 11547           |
-| dlslime         | 8         | 131,072              | 1          | 1               | 0.055           | 22039           |
-| dlslime         | 8         | 262,144              | 1          | 1               | 0.058           | 42313           |
-| dlslime         | 8         | 524,288              | 1          | 1               | 0.064           | 74753           |
-| dlslime         | 8         | 1,048,576            | 1          | 1               | 0.072           | 127489          |
-| dlslime         | 8         | 2,097,152            | 1          | 1               | 0.101           | 184823          |
-| dlslime         | 8         | 4,194,304            | 1          | 1               | 0.149           | 246861          |
-| dlslime         | 8         | 8,388,608            | 1          | 1               | 0.237           | 299510          |
-| dlslime         | 8         | 16,777,216           | 1          | 1               | 0.403           | 340252          |
-| dlslime         | 8         | 33,554,432           | 1          | 1               | 0.743           | 364918          |
-| dlslime         | 8         | 67,108,864           | 1          | 1               | 1.423           | 378620          |
-| dlslime         | 8         | 134,217,728          | 1          | 1               | 2.79            | 384630          |
+### DLSlimeCache
 
-#### #BS=64, #Concurrency=1
+DLSlimeCache owns a preallocated memory region and stores assignment manifests
+so clients can write bytes into cache slabs and read them back through normal
+RDMA operations.
 
-```
-torchrun --master-addr 10.130.8.145 --master-port 6006 --nnodes 2 --nproc-per-node 8 --node-rank 1 bench/python/agg_transfer_bench_spmd.py --qp-num 8 --transfer-engine dlslime --batch-size 64 --num-iteration 100 --num-concurrency 1
+```bash
+nanoctrl start
+dlslime-cache start --ctrl http://127.0.0.1:3000 \
+  --host 127.0.0.1 --port 8765 --memory-size 1G
+
+python examples/python/cache_client_example.py --url http://127.0.0.1:8765
+
+dlslime-cache stop
 ```
 
-```
-torchrun --master-addr 10.130.8.145 --master-port 6006 --nnodes 2 --nproc-per-node 8 --node-rank 0 bench/python/agg_transfer_bench_spmd.py --qp-num 8 --transfer-engine dlslime --batch-size 64 --num-iteration 100 --num-concurrency 1
-```
+See [docs/design/dlslime-cache.md](docs/design/dlslime-cache.md) for the cache
+service design and API.
 
-| Transfer Engine | #Channels | Message Size (bytes) | Batch Size | Num Concurrency | Avg Latency(ms) | Bandwidth(MB/s) |
-| --------------- | --------- | -------------------- | ---------- | --------------- | --------------- | --------------- |
-| dlslime         | 8         | 2,048                | 64         | 1               | 0.091           | 11690           |
-| dlslime         | 8         | 4,096                | 64         | 1               | 0.081           | 24403           |
-| dlslime         | 8         | 8,192                | 64         | 1               | 0.091           | 45926           |
-| dlslime         | 8         | 16,384               | 64         | 1               | 0.098           | 84092           |
-| dlslime         | 8         | 32,768               | 64         | 1               | 0.117           | 138696          |
-| dlslime         | 8         | 65,536               | 64         | 1               | 0.16            | 206866          |
-| dlslime         | 8         | 131,072              | 64         | 1               | 0.241           | 273976          |
-| dlslime         | 8         | 262,144              | 64         | 1               | 0.415           | 320008          |
-| dlslime         | 8         | 524,288              | 64         | 1               | 0.757           | 353714          |
-| dlslime         | 8         | 1,048,576            | 64         | 1               | 1.439           | 372217          |
-| dlslime         | 8         | 2,097,152            | 64         | 1               | 2.819           | 381397          |
-| dlslime         | 8         | 4,194,304            | 64         | 1               | 5.555           | 386489          |
-| dlslime         | 8         | 8,388,608            | 64         | 1               | 11.044          | 388927          |
-| dlslime         | 8         | 16,777,216           | 64         | 1               | 22.009          | 390278          |
-| dlslime         | 8         | 33,554,432           | 64         | 1               | 43.951          | 390978          |
-| dlslime         | 8         | 67,108,864           | 64         | 1               | 87.804          | 391370          |
-| dlslime         | 8         | 134,217,728          | 64         | 1               | 175.508         | 391588          |
+### NVLink and Ascend
 
-#### #BS=64, #Concurrency=8
-
-```
-torchrun --master-addr 10.130.8.145 --master-port 6006 --nnodes 2 --nproc-per-node 8 --node-rank 1 bench/python/agg_transfer_bench_spmd.py --qp-num 8 --transfer-engine dlslime --batch-size 64 --num-iteration 100 --num-concurrency 8
+```bash
+torchrun --nproc_per_node=2 examples/python/p2p_nvlink.py
+python examples/python/p2p_ascend_read.py
 ```
 
-```
-torchrun --master-addr 10.130.8.145 --master-port 6006 --nnodes 2 --nproc-per-node 8 --node-rank 0 bench/python/agg_transfer_bench_spmd.py --qp-num 8 --transfer-engine dlslime --batch-size 64 --num-iteration 100 --num-concurrency 8
-```
+Ascend Direct setup details live in
+[docs/huawei_ascend/README.md](docs/huawei_ascend/README.md).
 
-| Transfer Engine | #Channels | Message Size (bytes) | Batch Size | Num Concurrency | Avg Latency(ms) | Bandwidth(MB/s) |
-| --------------- | --------- | -------------------- | ---------- | --------------- | --------------- | --------------- |
-| dlslime         | 8         | 2,048                | 64         | 8               | 0.036           | 28494           |
-| dlslime         | 8         | 4,096                | 64         | 8               | 0.038           | 50860           |
-| dlslime         | 8         | 8,192                | 64         | 8               | 0.048           | 104545          |
-| dlslime         | 8         | 16,384               | 64         | 8               | 0.041           | 207051          |
-| dlslime         | 8         | 32,768               | 64         | 8               | 0.056           | 297354          |
-| dlslime         | 8         | 65,536               | 64         | 8               | 0.099           | 337571          |
-| dlslime         | 8         | 131,072              | 64         | 8               | 0.185           | 363003          |
-| dlslime         | 8         | 262,144              | 64         | 8               | 0.356           | 376743          |
-| dlslime         | 8         | 524,288              | 64         | 8               | 0.701           | 383701          |
-| dlslime         | 8         | 1,048,576            | 64         | 8               | 1.386           | 387629          |
-| dlslime         | 8         | 2,097,152            | 64         | 8               | 2.757           | 389493          |
-| dlslime         | 8         | 4,194,304            | 64         | 8               | 5.5             | 390523          |
-| dlslime         | 8         | 8,388,608            | 64         | 8               | 10.984          | 391043          |
-| dlslime         | 8         | 16,777,216           | 64         | 8               | 21.955          | 391291          |
-| dlslime         | 8         | 33,554,432           | 64         | 8               | 43.891          | 391407          |
-| dlslime         | 8         | 67,108,864           | 64         | 8               | 87.771          | 391480          |
-| dlslime         | 8         | 134,217,728          | 64         | 8               | 175.518         | 391530          |
+## Benchmarks
 
-### GDRDMA P2P Send/Recv
+Benchmark commands and historical performance tables now live under the
+benchmark directory:
 
-```
-SLIME_QP_NUM=2 python bench/python/dlslime_torch_dist_sendrecv_bench.py --mode send --use-gpu --iterations 100
+- [bench/README.md](bench/README.md) - transfer, endpoint, cache, and RPC benchmark entry point
+- [docs/benchmark-rpc.md](docs/benchmark-rpc.md) - focused SlimeRPC vs Ray benchmark guide
+
+Common entry points:
+
+```bash
+# Aggregated RDMA transfer benchmark, two nodes
+torchrun --master-addr <addr> --master-port 6006 \
+  --nnodes 2 --nproc-per-node 8 --node-rank <rank> \
+  bench/python/agg_transfer_bench_spmd.py \
+  --qp-num 8 --transfer-engine dlslime \
+  --batch-size 64 --num-iteration 100 --num-concurrency 8
+
+# SlimeRPC vs Ray local benchmark
+bash bench/python/run_rpc_bench.sh
 ```
 
+## Repository Layout
+
+```text
+dlslime/          Python package and C++ sources
+examples/python/  Runnable Python examples
+bench/            Benchmark scripts, result files, and benchmark README
+docs/             Design notes, roadmap, platform docs, and benchmark notes
+tests/            Python and C++ tests
+cmake/            CMake helper modules
+scripts/          Development scripts
 ```
-SLIME_QP_NUM=2 python bench/python/dlslime_torch_dist_sendrecv_bench.py --mode recv --use-gpu --iterations 100
-```
 
-| Message Size (bytes) | Avg Latency | Bandwidth     | Device |
-| -------------------- | ----------- | ------------- | ------ |
-| 1,024                | 0.027 ms    | 37.65 MB/s    | GPU    |
-| 2,048                | 0.028 ms    | 72.17 MB/s    | GPU    |
-| 4,096                | 0.028 ms    | 144.81 MB/s   | GPU    |
-| 8,192                | 0.028 ms    | 295.98 MB/s   | GPU    |
-| 16,384               | 0.029 ms    | 564.15 MB/s   | GPU    |
-| 32,768               | 0.031 ms    | 1069.90 MB/s  | GPU    |
-| 65,536               | 0.031 ms    | 2083.20 MB/s  | GPU    |
-| 131,072              | 0.032 ms    | 4038.17 MB/s  | GPU    |
-| 262,144              | 0.036 ms    | 7299.42 MB/s  | GPU    |
-| 524,288              | 0.042 ms    | 12495.87 MB/s | GPU    |
-| 1,048,576            | 0.053 ms    | 19961.18 MB/s | GPU    |
-| 2,097,152            | 0.075 ms    | 27924.99 MB/s | GPU    |
-| 4,194,304            | 0.117 ms    | 35716.55 MB/s | GPU    |
-| 8,388,608            | 0.212 ms    | 39637.66 MB/s | GPU    |
-| 16,777,216           | 0.387 ms    | 43386.08 MB/s | GPU    |
-| 33,554,432           | 0.871 ms    | 38532.98 MB/s | GPU    |
-| 67,108,864           | 1.665 ms    | 40298.91 MB/s | GPU    |
-| 134,217,728          | 3.159 ms    | 42487.69 MB/s | GPU    |
-| 268,435,456          | 5.643 ms    | 47572.53 MB/s | GPU    |
-| 536,870,912          | 11.137 ms   | 48204.20 MB/s | GPU    |
+## Documentation
 
-### Heterogeneous Interconnection​
+- [Documentation index](docs/README.md)
+- [Roadmap](docs/roadmap.md)
+- [DLSlimeCache design](docs/design/dlslime-cache.md)
+- [Endpoint ownership model](docs/endpoint-ownership-model.md)
+- [Endpoint DeviceSignal refactor](docs/endpoint-device-signal-refactor.md)
+- [Huawei Ascend guide](docs/huawei_ascend/README.md)
+- [Chinese README](README_zh.md)
 
-- hardware configs
+## License
 
-| Device |                       NIC Model | Bandwidth | PCIe Version | PCIe Lanes |
-| :----- | ------------------------------: | --------: | -----------: | ---------: |
-| A      | Mellanox ConnectX-7 Lx (MT4129) |  400 Gbps |     PCIe 5.0 |        x16 |
-| B      | Mellanox ConnectX-7 Lx (MT4129) |  400 Gbps |     PCIe 5.0 |         x8 |
-| C      | Mellanox ConnectX-7 Lx (MT4129) |  200 Gbps |     PCIe 5.0 |        x16 |
-| D      | Mellanox ConnectX-7 Lx (MT4129) |  400 Gbps |     PCIe 5.0 |        x16 |
-
-- experiments configs
-
-  - Message Size = 128 MB
-  - RDMA RC Read(single NIC)
-  - Under affinity scenario
-  - RDMA with GPU Direct
-
-- Interconnect bandwidth matrix：(MB/s, demonstrates attainment of the theoretical bound).
-
-| Throughput (MB/s) |        A |        B |        C |        D |
-| :---------------- | -------: | -------: | -------: | -------: |
-| A                 | 48967.45 | 28686.29 | 24524.29 | 27676.57 |
-| B                 | 28915.72 | 28275.85 | 23472.29 | 27234.60 |
-| C                 | 24496.14 | 24496.51 | 24513.57 | 24493.89 |
-| D                 | 29317.66 | 28683.25 | 24515.30 | 27491.33 |
-
-detailed results: [bench](bench/results)
+See [LICENSE](LICENSE).
