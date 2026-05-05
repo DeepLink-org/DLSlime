@@ -9,7 +9,7 @@
   <a href="README.md">English</a> |
   <a href="README_zh.md">中文</a>
 </p>
-<h2 align="center"> PeerAgent-Centered Data Plane for Distributed AI Services </h2>
+<h2 align="center"> Composable and Embeddable Communication Runtime for Distributed AI Services </h2>
 
 DLSlime is a PeerAgent-centered communication and microservice toolkit for
 distributed AI systems. PeerAgent is the runtime hub: application services such
@@ -17,8 +17,12 @@ as SlimeRPC and DLSlimeCache build on it, NanoCtrl supplies service governance
 and coordination metadata around it, and endpoint APIs below it drive
 heterogeneous transports such as RDMA, NVLink, and Ascend Direct.
 
-The goal is to let systems compose high-performance data movement without tying
-application logic to one transport, one topology, or one service layout.
+DLSlime is designed to be adopted one layer at a time. Applications can start
+with direct endpoints, add PeerAgent coordination, use NanoCtrl for governance,
+or build on SlimeRPC and DLSlimeCache when they need service-shaped components.
+The same layers are exposed as Python/C++ APIs, local services, and HTTP
+control-plane contracts, so DLSlime can be embedded into existing serving,
+inference, cache, or RL systems instead of replacing them.
 
 ## PeerAgent-Centered Architecture
 
@@ -103,7 +107,7 @@ and
 
 ```bash
 nanoctrl start
-python examples/python/p2p_rdma_rc_read_ctrl_plane.py --ctrl http://127.0.0.1:3000
+python examples/python/p2p_rdma_rc_read_ctrl_plane.py
 ```
 
 ### DLSlimeCache Service
