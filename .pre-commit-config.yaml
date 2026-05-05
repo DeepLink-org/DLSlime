@@ -1,6 +1,6 @@
 repos:
   - repo: https://github.com/omnilib/ufmt
-    rev: v2.3.0
+    rev: v2.9.0
     hooks:
       - id: ufmt
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -24,11 +24,50 @@ repos:
           - mdformat-openmmlab
           - mdformat_frontmatter
           - linkify-it-py
+
   - repo: https://github.com/codespell-project/codespell
     rev: v2.1.0
     hooks:
       - id: codespell
-        args: ["--skip=docs/*,docs/imgs/*,csrc/dlslime/json.hpp,csrc/python/pybind_json/pybind_json.hpp,*json_merge_manually*,*json_merger*,*.svg,*.csv,*jring*,*json*,*dlpack*,*gloo*,*/ibgda_device.cuh"]
+        args: ["-L", "CANN,cann,crate"]
+        exclude: >
+          (?x)^(
+              .*/docs/imgs/.*|
+              .*/json\.hpp|
+              .*/pybind_json\.hpp
+          )$
+
+  - repo: https://github.com/doublify/pre-commit-rust
+    rev: v1.0
+    hooks:
+      - id: fmt
+        name: fmt (NanoCtrl)
+        args: ["--manifest-path", "NanoCtrl/Cargo.toml"]
+        files: ^NanoCtrl/
+        pass_filenames: false
+      - id: fmt
+        name: fmt (NanoRoute)
+        args: ["--manifest-path", "NanoRoute/Cargo.toml"]
+        files: ^NanoRoute/
+        pass_filenames: false
+      # NanoCtrl
+      - id: cargo-check
+        name: cargo check (NanoCtrl)
+        args: ["--manifest-path", "NanoCtrl/Cargo.toml"]
+        files: ^NanoCtrl/
+      - id: clippy
+        name: clippy (NanoCtrl)
+        args: ["--manifest-path", "NanoCtrl/Cargo.toml", "--", "-D", "warnings"]
+        files: ^NanoCtrl/
+      # NanoRoute
+      - id: cargo-check
+        name: cargo check (NanoRoute)
+        args: ["--manifest-path", "NanoRoute/Cargo.toml"]
+        files: ^NanoRoute/
+      - id: clippy
+        name: clippy (NanoRoute)
+        args: ["--manifest-path", "NanoRoute/Cargo.toml", "--", "-D", "warnings"]
+        files: ^NanoRoute/
 
   - repo: https://github.com/pre-commit/mirrors-clang-format
     rev: v18.1.6
