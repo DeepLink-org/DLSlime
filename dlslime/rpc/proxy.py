@@ -68,7 +68,8 @@ def _get_or_create_channel(agent, peer_alias: str) -> Channel:
         if key in _channel_cache:
             return _channel_cache[key]
 
-    endpoint = agent.get_endpoint(peer_alias)
+    conn = agent.get_connection(peer_alias)
+    endpoint = agent.get_endpoint(conn)
     buf_size = int(getattr(agent, "_rpc_buffer_size", 32_000_000))
     slot_count = int(getattr(agent, "_rpc_max_inflight", 0) or 0)
     if slot_count <= 0:
@@ -84,10 +85,12 @@ def _get_or_create_channel(agent, peer_alias: str) -> Channel:
         buf_size, endpoint=endpoint, name=f"rpc:send:{peer_alias}"
     )
     recv_buf = GrowableBuffer(
-        buf_size * slot_count, pool=agent._memory_pool, name=local_mr_name
+        buf_size * slot_count, pool=conn.memory_pool, name=local_mr_name
     )
 
-    agent.register_memory_region(local_mr_name, recv_buf.ptr, 0, recv_buf.capacity)
+    recv_buf.handler = agent.register_memory_region(
+        local_mr_name, recv_buf.ptr, 0, recv_buf.capacity
+    )
 
     remote_mr = _wait_for_mr(agent, peer_alias, remote_mr_name)
     remote_handler = endpoint.register_remote_memory_region(

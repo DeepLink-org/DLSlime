@@ -162,6 +162,7 @@ class StreamMailbox:
             if peer:
                 qp_info_str = fields.get("qp_info")
                 peer_qp_info: Optional[Dict[str, Any]] = None
+                conn_meta: Dict[str, Any] = {}
                 if qp_info_str:
                     try:
                         peer_qp_info = json.loads(qp_info_str)
@@ -170,11 +171,22 @@ class StreamMailbox:
                             f"StreamMailbox {self._agent.alias}: "
                             f"malformed qp_info from {peer}, falling back to GET"
                         )
+                meta_str = fields.get("conn_meta")
+                if meta_str:
+                    try:
+                        conn_meta = json.loads(meta_str)
+                    except json.JSONDecodeError:
+                        print(
+                            f"StreamMailbox {self._agent.alias}: "
+                            f"malformed conn_meta from {peer}, using defaults"
+                        )
                 print(
                     f"StreamMailbox {self._agent.alias}: Received qp_ready from {peer}"
                     f"{' (with embedded qp_info)' if peer_qp_info else ''}"
                 )
-                self._try_connect_peer(peer, peer_qp_info=peer_qp_info)
+                self._try_connect_peer(
+                    peer, peer_qp_info=peer_qp_info, conn_meta=conn_meta
+                )
             else:
                 print(
                     f"StreamMailbox {self._agent.alias}: qp_ready missing 'peer' field"
@@ -186,7 +198,10 @@ class StreamMailbox:
             )
 
     def _try_connect_peer(
-        self, peer: str, peer_qp_info: Optional[Dict[str, Any]] = None
+        self,
+        peer: str,
+        peer_qp_info: Optional[Dict[str, Any]] = None,
+        conn_meta: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
         Attempt symmetric rendezvous with peer.
@@ -201,7 +216,7 @@ class StreamMailbox:
             self._agent._connecting_peers.add(peer)
 
         try:
-            self._try_connect_peer_inner(peer, peer_qp_info)
+            self._try_connect_peer_inner(peer, peer_qp_info, conn_meta or {})
         finally:
             # Always release the in-flight guard. A rendezvous attempt may return
             # early when the peer has not published its QP info yet; later
@@ -210,7 +225,10 @@ class StreamMailbox:
                 self._agent._connecting_peers.discard(peer)
 
     def _try_connect_peer_inner(
-        self, peer: str, peer_qp_info: Optional[Dict[str, Any]] = None
+        self,
+        peer: str,
+        peer_qp_info: Optional[Dict[str, Any]] = None,
+        conn_meta: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Core rendezvous logic (called with connecting-guard held).
 
@@ -228,9 +246,13 @@ class StreamMailbox:
             f"has_qp_info={peer_qp_info is not None}"
         )
 
+        if conn_meta:
+            self._agent.ensure_connection_from_meta(peer, conn_meta)
+
         # A. Create local endpoint and get QP info
         endpoint = self._agent.ensure_local_endpoint_created(peer)
         my_qp_info = endpoint.endpoint_info()
+        my_conn_meta = self._agent._connection_meta(peer)
         _tlog(
             f"{self._agent.alias}: [A] ensure_endpoint+endpoint_info "
             f"+{(time.perf_counter() - t_enter) * 1000:.3f}ms"
@@ -255,6 +277,7 @@ class StreamMailbox:
                         "type": "qp_ready",
                         "peer": self._agent.alias,
                         "qp_info": json.dumps(my_qp_info, default=str),
+                        "conn_meta": json.dumps(my_conn_meta, default=str),
                         "timestamp": str(time.time()),
                     },
                     maxlen=1000,
@@ -318,4 +341,4 @@ class StreamMailbox:
             f"{self._agent.alias}: [E] mark_peer_connected({peer}) DONE "
             f"total={(time.perf_counter() - t_enter) * 1000:.3f}ms"
         )
-        print(f"Link Established: {self._agent.alias} <-> {peer}")
+        print(f"Link Established: initiator={self._agent.alias} target={peer}")

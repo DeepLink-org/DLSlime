@@ -15,19 +15,11 @@ from dlslime import start_peer_agent
 initiator_agent = start_peer_agent(
     # alias=None (default) - NanoCtrl will auto-generate unique name
     server_url="http://127.0.0.1:3000",
-    device=None,  # Auto-select
-    ib_port=1,
-    link_type="RoCE",
-    qp_num=1,
 )
 
 target_agent = start_peer_agent(
     # alias=None (default) - NanoCtrl will auto-generate unique name
     server_url="http://127.0.0.1:3000",
-    device=None,  # Auto-select (will use same device if only one available)
-    ib_port=1,
-    link_type="RoCE",
-    qp_num=1,
 )
 
 # Get allocated names
@@ -40,12 +32,11 @@ print("Available peers:", initiator_agent.query())
 
 # Declarative: set desired topology (both sides want to connect to each other)
 print("Setting desired topology...")
-initiator_agent.set_desired_topology(target_peers=[target_name])
-target_agent.set_desired_topology(target_peers=[initiator_name])
+conn = initiator_agent.set_desired_topology(target_name, ib_port=1, qp_num=1)
 
 # Wait for reconciliation to establish connections
 print("Waiting for connections...")
-initiator_agent.wait_for_peers([target_name])
+conn.wait()
 target_agent.wait_for_peers([initiator_name])
 print("Connections established.")
 
@@ -66,21 +57,9 @@ target_agent.register_memory_region(
     remote_tensor.numel() * remote_tensor.itemsize,
 )
 
-# Resolve remote MR handle through the control plane (fetches MR info and
-# registers it with the local endpoint in one step).
-print("Resolving remote MR handle...")
-hremote_on_initiator = initiator_agent.get_remote_handle(target_name, "kv")
-
-# Perform RDMA read via the agent's one-shot facade (forwards to the
-# target peer's endpoint).
+# Perform RDMA read via the directed connection handle.
 print("Performing RDMA read...")
-slot = initiator_agent.read(
-    target_name,
-    [
-        (handler, hremote_on_initiator, 0, 8, 8),
-    ],
-    None,
-)
+slot = conn.read("kv", local_offset=8, remote_offset=0, length=8)
 slot.wait()
 
 # Verify results

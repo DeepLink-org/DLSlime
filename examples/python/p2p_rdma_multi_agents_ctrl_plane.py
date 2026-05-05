@@ -51,12 +51,7 @@ with contextlib.ExitStack() as stack:
             # NanoCtrl auto-generates unique name (no alias parameter)
             agent = start_peer_agent(
                 # alias=None (default) - NanoCtrl will auto-generate unique name
-                name_prefix="agent",  # Prefix for generated names (e.g., "agent-1a", "agent-2b")
                 server_url="http://127.0.0.1:3000",
-                device=None,  # Auto-select
-                ib_port=1,
-                link_type="RoCE",
-                qp_num=1,
             )
             stack.enter_context(agent)  # Auto-cleanup on exit
             # Use allocated name as key
@@ -81,7 +76,8 @@ with contextlib.ExitStack() as stack:
 
     def set_topology(agent_alias, agent):
         target_peers = [p for p in agents.keys() if p != agent_alias]
-        agent.set_desired_topology(target_peers=target_peers)
+        for peer in target_peers:
+            agent.set_desired_topology(peer, ib_port=1, qp_num=1)
         if verbose:
             print(f"  {agent_alias}: target_peers={target_peers}")
 

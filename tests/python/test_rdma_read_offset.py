@@ -29,28 +29,19 @@ def test_rdma_read_offset_order():
     agent1 = start_peer_agent(
         alias="test_agent_1",
         server_url="http://127.0.0.1:3000",
-        device=None,
-        ib_port=1,
-        link_type="RoCE",
-        qp_num=1,
     )
 
     agent2 = start_peer_agent(
         alias="test_agent_2",
         server_url="http://127.0.0.1:3000",
-        device=None,
-        ib_port=1,
-        link_type="RoCE",
-        qp_num=1,
     )
 
     print("   Agents started")
 
     # Declarative connection
     print("\n2. Setting desired topology and waiting for connection...")
-    agent1.set_desired_topology(target_peers=["test_agent_2"])
-    agent2.set_desired_topology(target_peers=["test_agent_1"])
-    agent1.wait_for_peers(["test_agent_2"])
+    conn = agent1.set_desired_topology("test_agent_2", ib_port=1, qp_num=1)
+    conn.wait()
     agent2.wait_for_peers(["test_agent_1"])
     print("   Connection established")
 

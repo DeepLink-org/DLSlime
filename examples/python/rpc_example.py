@@ -38,15 +38,14 @@ class CalcService:
 
 def main(ctrl_url: str):
     worker = PeerAgent(alias="worker:0", server_url=ctrl_url)
-    worker.set_desired_topology(["driver:0"])
 
     # --- driver agent ---
     driver = PeerAgent(alias="driver:0", server_url=ctrl_url)
-    driver.set_desired_topology(["worker:0"])
+    conn = driver.set_desired_topology("worker:0", ib_port=1, qp_num=1)
 
     # wait for both sides to connect
+    conn.wait()
     worker.wait_for_peers(["driver:0"])
-    driver.wait_for_peers(["worker:0"])
     print("Connected.")
 
     try:
