@@ -32,7 +32,7 @@ repos:
         args: ["-L", "CANN,cann,crate"]
         exclude: >
           (?x)^(
-              .*/docs/imgs/.*|
+              (?:.*/)?docs/imgs/.*|
               .*/json\.hpp|
               .*/pybind_json\.hpp
           )$
