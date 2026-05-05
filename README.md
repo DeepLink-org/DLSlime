@@ -291,13 +291,12 @@ bash bench/python/run_rpc_bench.sh
 ## Repository Layout
 
 ```text
-dlslime/          Python package and C++ sources
-examples/python/  Runnable Python examples
-bench/            Benchmark scripts, result files, and benchmark README
-docs/             Design notes, roadmap, platform docs, and benchmark notes
-tests/            Python and C++ tests
-cmake/            CMake helper modules
-scripts/          Development scripts
+dlslime/   Core Python package, C++ bindings, and transfer/runtime primitives
+NanoCtrl/  Service governance control plane
+examples/  Runnable examples for endpoint, PeerAgent, cache, and RPC flows
+bench/     Benchmark scripts and benchmark README
+docs/      Design notes, roadmap, and platform guides
+tests/     Python and C++ tests
 ```
 
 ## Documentation
