@@ -9,7 +9,7 @@
   <a href="README.md">English</a> |
   <a href="README_zh.md">中文</a>
 </p>
-<h2 align="center"> Composable and Embeddable Communication Runtime for Distributed AI Services </h2>
+<h2 align="center"> Composable and Embeddable Communication Runtime for AI Services </h2>
 
 DLSlime is a PeerAgent-centered communication and microservice toolkit for
 distributed AI systems. PeerAgent is the runtime hub: application services such

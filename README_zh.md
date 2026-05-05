@@ -9,7 +9,7 @@
   <a href="README.md">English</a> |
   <a href="README_zh.md">中文</a>
 </p>
-<h2 align="center"> 面向分布式 AI 服务的可组合、可嵌入通信运行时 </h2>
+<h2 align="center"> 面向 AI 服务的可组合、可嵌入通信运行时 </h2>
 
 DLSlime 是一个以 PeerAgent 为中心的分布式 AI 通信与微服务工具包。
 PeerAgent 是运行时枢纽：SlimeRPC、DLSlimeCache 等应用服务构建在
