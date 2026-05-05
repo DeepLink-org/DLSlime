@@ -155,22 +155,11 @@ control plane.
   <img src="docs/imgs/PDDisagg.png" alt="Disaggregated inference service" width="88%">
 </p>
 
-LMDeploy reference: [DistServe HTTP endpoints](https://lmdeploy.readthedocs.io/en/v0.12.2/http-routingtable.html#distserve) and [DistServe with MooncakeTransferEngine](https://kvcache-ai.github.io/Mooncake/getting_started/examples/lmdeploy-integration-v0.9.html).
+LMDeploy reference: [DistServe with DLSlimeBackend](https://lmdeploy.readthedocs.io/en/v0.12.2/http-routingtable.html#distserve) and [DistServe with MooncakeBackend](https://kvcache-ai.github.io/Mooncake/getting_started/examples/lmdeploy-integration-v0.9.html).
 
 ### RL Service
 
 Coming soon.
-
-## Common Use Cases
-
-| Use case                           | Start here                                                    |
-| ---------------------------------- | ------------------------------------------------------------- |
-| Direct P2P transfer                | `RDMAEndpoint` examples under `examples/python/p2p_rdma_*`    |
-| Control-plane coordinated transfer | `PeerAgent` examples under `examples/python/*_ctrl_plane.py`  |
-| Python service RPC                 | `examples/python/rpc_example.py` and `dlslime.rpc`            |
-| RDMA-backed cache service          | `dlslime-cache` and `examples/python/cache_client_example.py` |
-| Transport benchmarking             | `bench/README.md`                                             |
-| Ascend integration                 | `docs/huawei_ascend/README.md`                                |
 
 ## Install
 
