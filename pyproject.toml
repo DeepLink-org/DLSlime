@@ -25,17 +25,21 @@ description = "DLSlime Transfer Engine"
 name = "dlslime"
 readme = "README.md"
 requires-python = ">=3.8"
-version = "0.0.3.rc1"
+version = "0.0.3.rc2"
 dependencies = [
   "pydantic>=2.0",
   "pyzmq>=25.0",
   "redis>=4.0",
   "httpx>=0.24",
   "nanoctrl>=0.0.6",
+  "jsonargparse>=4.27",
   # for --build-no-isolation
   "scikit-build-core>=0.10",
   "pybind11>=2.12",
 ]
+
+[project.scripts]
+dlslime-cache = "dlslime.cache.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/DeepLink-org/DLSlime.git"
