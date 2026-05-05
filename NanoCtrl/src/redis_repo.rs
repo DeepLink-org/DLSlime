@@ -12,14 +12,14 @@ use crate::models::*;
 
 /// Entity TTL in seconds (for heartbeat mechanism).
 ///
-/// All entities (engines, agents) must send heartbeat every 15 seconds.
+/// All registered entities must send heartbeat every 15 seconds.
 /// TTL is set to 60 seconds to allow 4 missed heartbeats before expiration.
 pub const ENTITY_TTL_SECS: usize = 60;
 
 /// Lua scripts embedded once at compile time.
 pub struct LuaScripts {
-    pub register_engine: String,
-    pub unregister_engine: String,
+    pub register_entity: String,
+    pub unregister_entity: String,
     pub heartbeat: String,
 }
 
@@ -27,9 +27,9 @@ impl LuaScripts {
     /// Load all Lua scripts from embedded source.
     pub fn load() -> Result<Self, AppError> {
         Ok(Self {
-            register_engine: include_str!("../lua/register_engine.lua").to_string(),
-            unregister_engine: include_str!("../lua/unregister_engine.lua").to_string(),
-            heartbeat: include_str!("../lua/heartbeat_engine.lua").to_string(),
+            register_entity: include_str!("../lua/register_entity.lua").to_string(),
+            unregister_entity: include_str!("../lua/unregister_entity.lua").to_string(),
+            heartbeat: include_str!("../lua/heartbeat.lua").to_string(),
         })
     }
 }
@@ -321,101 +321,100 @@ impl RedisRepo {
         Ok(())
     }
 
-    // ────────────────────── engine ops ─────────────────────────
+    // ────────────────────── generic entity ops ─────────────────────────
 
-    /// Register an engine atomically using Lua script (HSET + EXPIRE + INCR + PUBLISH).
+    /// Register an entity atomically using Lua script (HSET + EXPIRE + INCR + PUBLISH).
     /// Returns the new revision number.
-    pub async fn register_engine(
+    pub async fn register_entity(
         &self,
         scope: Option<&str>,
-        body: &RegisterEngineBody,
+        body: &RegisterEntityBody,
     ) -> Result<i64, AppError> {
         let mut conn = self.conn().await?;
-        let engine_key = self.scoped_key(scope, &["engine", &body.engine_id]);
-        let revision_key = self.scoped_key(scope, &["nano_meta:engine_revision"]);
-        let channel = self.scoped_key(scope, &["nano_events:engine_update"]);
+        let entity_key = self.scoped_key(scope, &[&body.entity_type, &body.entity_id]);
+        let revision_name = format!("{}_revision", body.entity_type);
+        let channel_name = format!("{}_update", body.entity_type);
+        let revision_key = self.scoped_key(scope, &["nano_meta", &revision_name]);
+        let channel = self.scoped_key(scope, &["nano_events", &channel_name]);
 
-        let zmq_address = format!("tcp://{}:{}", body.host, body.port);
-        let payload = serde_json::json!({
-            "id": body.engine_id,
-            "role": body.role,
-            "host": body.host,
-            "port": body.port,
-            "zmq_address": zmq_address,
-            "world_size": body.world_size,
-            "num_blocks": body.num_blocks,
-            "peer_addrs": body.peer_addrs,
-            "model_path": body.model_path,  // null if not provided (old engine)
-        });
-        let engine_info = serde_json::json!({
-            "id": body.engine_id,
-            "role": body.role,
-            "world_size": body.world_size,
-            "num_blocks": body.num_blocks,
-            "host": body.host,
-            "port": body.port,
-            "peer_addrs": body.peer_addrs,
-            "p2p_host": body.p2p_host.as_deref().unwrap_or_default(),
-            "p2p_port": body.p2p_port.unwrap_or(0),
-            "max_num_seqs": body.max_num_seqs.unwrap_or(0),
-            "model_path": body.model_path,  // null if not provided (old engine)
+        let entity_info = serde_json::json!({
+            "entity_type": body.entity_type,
+            "entity_id": body.entity_id,
+            "id": body.entity_id,
+            "kind": body.kind,
+            "endpoint": body.endpoint,
+            "metadata": body.metadata,
+            "resource": body.resource,
         });
 
         let rev: i64 = redis::cmd("EVAL")
-            .arg(&*self.scripts.register_engine)
+            .arg(&*self.scripts.register_entity)
             .arg(3) // number of keys
-            .arg(&engine_key)
+            .arg(&entity_key)
             .arg(&revision_key)
             .arg(&channel)
-            .arg(&body.engine_id) // ARGV[1]
-            .arg(&body.role) // ARGV[2]
-            .arg(&body.host) // ARGV[3]
-            .arg(body.port.to_string()) // ARGV[4]
-            .arg(body.world_size.to_string()) // ARGV[5]
-            .arg(body.num_blocks.to_string()) // ARGV[6]
-            .arg(serde_json::to_string(&body.peer_addrs).unwrap_or_default()) // ARGV[7]
-            .arg(engine_info.to_string()) // ARGV[8]
-            .arg(payload.to_string()) // ARGV[9]
-            .arg(ENTITY_TTL_SECS.to_string()) // ARGV[10]
-            .arg(body.model_path.as_deref().unwrap_or("")) // ARGV[11]
+            .arg(&body.entity_type) // ARGV[1]
+            .arg(&body.entity_id) // ARGV[2]
+            .arg(&body.kind) // ARGV[3]
+            .arg(
+                body.endpoint
+                    .as_ref()
+                    .map(|v| v.to_string())
+                    .unwrap_or_default(),
+            ) // ARGV[4]
+            .arg(body.metadata.to_string()) // ARGV[5]
+            .arg(
+                body.resource
+                    .as_ref()
+                    .map(|v| v.to_string())
+                    .unwrap_or_default(),
+            ) // ARGV[6]
+            .arg(entity_info.to_string()) // ARGV[7]
+            .arg(ENTITY_TTL_SECS.to_string()) // ARGV[8]
             .query_async(&mut *conn)
             .await?;
 
         tracing::info!(
-            "Registered engine: {} (revision: {}, TTL: {}s)",
-            body.engine_id,
+            "Registered entity: {}:{} kind={} (revision: {}, TTL: {}s)",
+            body.entity_type,
+            body.entity_id,
+            body.kind,
             rev,
             ENTITY_TTL_SECS
         );
         Ok(rev)
     }
 
-    /// Unregister an engine atomically. Returns revision, or `NotFound`.
-    pub async fn unregister_engine(
+    /// Unregister an entity atomically. Returns revision, or `NotFound`.
+    pub async fn unregister_entity(
         &self,
         scope: Option<&str>,
-        engine_id: &str,
+        entity_type: &str,
+        entity_id: &str,
     ) -> Result<i64, AppError> {
         let mut conn = self.conn().await?;
-        let engine_key = self.scoped_key(scope, &["engine", engine_id]);
-        let revision_key = self.scoped_key(scope, &["nano_meta:engine_revision"]);
-        let channel = self.scoped_key(scope, &["nano_events:engine_update"]);
+        let entity_key = self.scoped_key(scope, &[entity_type, entity_id]);
+        let revision_name = format!("{entity_type}_revision");
+        let channel_name = format!("{entity_type}_update");
+        let revision_key = self.scoped_key(scope, &["nano_meta", &revision_name]);
+        let channel = self.scoped_key(scope, &["nano_events", &channel_name]);
 
         let rev: i64 = redis::cmd("EVAL")
-            .arg(&*self.scripts.unregister_engine)
+            .arg(&*self.scripts.unregister_entity)
             .arg(3)
-            .arg(&engine_key)
+            .arg(&entity_key)
             .arg(&revision_key)
             .arg(&channel)
-            .arg(engine_id)
+            .arg(entity_type)
+            .arg(entity_id)
             .query_async(&mut *conn)
             .await?;
 
         if rev == 0 {
-            tracing::warn!("Unregister engine: {engine_id} not found (already removed or never registered), treating as success");
+            tracing::warn!("Unregister entity: {entity_type}:{entity_id} not found (already removed or never registered), treating as success");
             return Ok(0);
         }
-        tracing::info!("Unregistered engine: {engine_id} (revision: {rev})");
+        tracing::info!("Unregistered entity: {entity_type}:{entity_id} (revision: {rev})");
         Ok(rev)
     }
 
@@ -445,14 +444,15 @@ impl RedisRepo {
         Ok(result == 1)
     }
 
-    /// Get engine info by ID.
-    pub async fn get_engine_info(
+    /// Get entity info by type and ID.
+    pub async fn get_entity_info(
         &self,
         scope: Option<&str>,
-        engine_id: &str,
+        entity_type: &str,
+        entity_id: &str,
     ) -> Result<Option<Value>, AppError> {
         let mut conn = self.conn().await?;
-        let key = self.scoped_key(scope, &["engine", engine_id]);
+        let key = self.scoped_key(scope, &[entity_type, entity_id]);
         let info_str: Option<String> = redis::cmd("HGET")
             .arg(&key)
             .arg("info")
@@ -465,16 +465,26 @@ impl RedisRepo {
         }
     }
 
-    /// List all registered engines.
-    pub async fn list_engines(&self, scope: Option<&str>) -> Result<Vec<Value>, AppError> {
+    /// List registered entities, optionally filtered by entity type and kind.
+    pub async fn list_entities(
+        &self,
+        scope: Option<&str>,
+        entity_type: Option<&str>,
+        kind: Option<&str>,
+    ) -> Result<Vec<Value>, AppError> {
         let mut conn = self.conn().await?;
-        let pattern = self.scoped_key(scope, &["engine:*"]);
+        let pattern = match entity_type {
+            Some(entity_type) if !entity_type.is_empty() => {
+                self.scoped_key(scope, &[entity_type, "*"])
+            }
+            _ => self.scoped_key(scope, &["*:*"]),
+        };
         let keys: Vec<String> = redis::cmd("KEYS")
             .arg(&pattern)
             .query_async(&mut *conn)
             .await?;
 
-        let mut engines = Vec::new();
+        let mut entities = Vec::new();
         for key in keys {
             let info_str: Option<String> = redis::cmd("HGET")
                 .arg(&key)
@@ -484,11 +494,16 @@ impl RedisRepo {
                 .unwrap_or(None);
             if let Some(s) = info_str {
                 if let Ok(v) = serde_json::from_str::<Value>(&s) {
-                    engines.push(v);
+                    if let Some(kind) = kind {
+                        if v.get("kind").and_then(Value::as_str) != Some(kind) {
+                            continue;
+                        }
+                    }
+                    entities.push(v);
                 }
             }
         }
-        Ok(engines)
+        Ok(entities)
     }
 
     // ─────────────────────── RDMA ops ──────────────────────────

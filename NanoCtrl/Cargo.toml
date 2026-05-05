@@ -1,6 +1,6 @@
 [package]
 name = "nanoctrl"
-version = "0.0.6"
+version = "0.0.7"
 edition = "2021"
 description = "NanoInfra control plane server"
 license = "MIT"

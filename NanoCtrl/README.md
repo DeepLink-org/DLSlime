@@ -80,7 +80,7 @@ Notes:
 - Runtime metadata is stored under `$NANOCTRL_RUNTIME_DIR` (or `$XDG_RUNTIME_DIR/nanoctrl`, default `/tmp/nanoctrl`).
 - `nanoctrl status` uses runtime metadata address by default; can be overridden with `--address`.
 
-**Distributed deployment**: When engines run on remote nodes, they need to connect to Redis. If Redis runs on the master node, set:
+**Distributed deployment**: When services run on remote nodes, they need to connect to Redis. If Redis runs on the master node, set:
 
 ```bash
 export NANOCTRL_REDIS_URL=redis://127.0.0.1:6379   # NanoCtrl connects to local Redis
@@ -96,13 +96,13 @@ NanoCtrl is stateless and supports multiple scopes (sessions) sharing the same i
 
 ## API Endpoints
 
-### Engine Management
+### Generic Entity Registry
 
-- `POST /register_engine` - Register a new engine (prefill/decode/hybrid)
-- `POST /unregister_engine` - Unregister an engine
-- `POST /heartbeat_engine` - Refresh engine TTL (heartbeat)
-- `POST /get_engine_info` - Get engine information by ID
-- `POST /list_engines` - List all registered engines (optionally filtered by scope)
+- `POST /register` - Register a service or other discoverable entity
+- `POST /unregister` - Unregister an entity
+- `POST /heartbeat` - Refresh entity TTL
+- `POST /get_entity_info` - Get entity information by type and ID
+- `POST /list_entities` - List registered entities, optionally filtered by type or kind
 
 ### RDMA Connection Management
 
@@ -120,34 +120,42 @@ NanoCtrl is stateless and supports multiple scopes (sessions) sharing the same i
 
 ## API Details
 
-### Register Engine
+### Register Entity
 
 ```bash
-POST /register_engine
+POST /register
 Content-Type: application/json
 
 {
-  "engine_id": "prefill-0",
-  "role": "prefill",  # "prefill", "decode", or "hybrid"
-  "world_size": 8,
-  "num_blocks": 15000,
-  "host": "127.0.0.1",
-  "port": 6001,
-  "peer_addrs": ["<prefill-engine-ip>:5000"],
-  "p2p_host": "127.0.0.1",  # optional
-  "p2p_port": 5000,         # optional
-  "scope": "my-session"      # optional, for multi-tenant isolation
+  "entity_type": "service",
+  "entity_id": "prefill-0",
+  "kind": "prefill",
+  "endpoint": {
+    "host": "127.0.0.1",
+    "port": 6001,
+    "protocol": "zmq"
+  },
+  "metadata": {
+    "world_size": 8,
+    "num_blocks": 15000,
+    "peer_addrs": ["<prefill-engine-ip>:5000"],
+    "p2p_host": "127.0.0.1",
+    "p2p_port": 5000
+  },
+  "scope": "my-session"
 }
 ```
 
-### List Engines
+### List Entities
 
 ```bash
-POST /list_engines
+POST /list_entities
 Content-Type: application/json
 
 {
-  "scope": "my-session"  # optional, filter by scope
+  "entity_type": "service",
+  "kind": "prefill",
+  "scope": "my-session"
 }
 ```
 
@@ -156,29 +164,36 @@ Response:
 ```json
 {
   "status": "ok",
-  "engines": [
+  "entities": [
     {
+      "entity_type": "service",
+      "entity_id": "prefill-0",
       "id": "prefill-0",
-      "role": "prefill",
-      "world_size": 8,
-      "num_blocks": 15000,
-      "host": "127.0.0.1",
-      "port": 6001,
-      "zmq_address": "tcp://127.0.0.1:6001"
+      "kind": "prefill",
+      "endpoint": {
+        "host": "127.0.0.1",
+        "port": 6001,
+        "protocol": "zmq"
+      },
+      "metadata": {
+        "world_size": 8,
+        "num_blocks": 15000
+      }
     }
   ]
 }
 ```
 
-### Heartbeat Engine
+### Heartbeat Entity
 
 ```bash
-POST /heartbeat_engine
+POST /heartbeat
 Content-Type: application/json
 
 {
-  "engine_id": "prefill-0",
-  "scope": "my-session"  # optional
+  "entity_type": "service",
+  "entity_id": "prefill-0",
+  "scope": "my-session"
 }
 ```
 
@@ -190,7 +205,7 @@ Content-Type: application/json
 
 ## Python Client (`nanoctrl`)
 
-NanoCtrl ships a lightweight Python client package for engine lifecycle management.
+NanoCtrl ships a lightweight Python client package for entity lifecycle management.
 
 ### Installation
 
@@ -210,23 +225,22 @@ client = NanoCtrlClient(
     scope="my-session",            # optional, for multi-tenant isolation
 )
 
-# Register an engine
-client.register(engine_id="prefill-0", extra={
-    "role": "prefill",
-    "world_size": 8,
-    "num_blocks": 15000,
-    "host": "10.0.0.2",
-    "port": 6001,
-})
+# Register a service
+client.register(
+    "prefill-0",
+    "prefill",
+    endpoint={"host": "10.0.0.2", "port": 6001, "protocol": "zmq"},
+    metadata={"world_size": 8, "num_blocks": 15000},
+)
 
 # Start background heartbeat (daemon thread, 15s interval)
 client.start_heartbeat(
     interval=15.0,
-    on_not_found=lambda: client.register(engine_id="prefill-0", extra={...}),
+    on_not_found=lambda: client.register("prefill-0", "prefill", metadata={...}),
 )
 
-# Query engine info
-info = client.get_engine_info("prefill-0")
+# Query entity info
+info = client.get_entity_info("prefill-0")
 
 # Get Redis URL (for distributed setup)
 redis_url = client.get_redis_url()
@@ -239,11 +253,12 @@ client.stop()
 
 | Method                                          | Description                                                                                                                           |
 | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `register(engine_id, extra)`                    | POST `/register_engine` — register with NanoCtrl                                                                                      |
-| `unregister()`                                  | POST `/unregister_engine` — remove engine registration                                                                                |
-| `heartbeat()`                                   | POST `/heartbeat_engine` — returns `"ok"`, `"not_found"`, or `"error"`                                                                |
+| `register(entity_id, kind, endpoint, metadata)` | POST `/register` — register with NanoCtrl                                                                                             |
+| `unregister()`                                  | POST `/unregister` — remove entity registration                                                                                       |
+| `heartbeat()`                                   | POST `/heartbeat` — returns `"ok"`, `"not_found"`, or `"error"`                                                                       |
 | `get_redis_url()`                               | POST `/get_redis_address` — returns `redis://host:port`                                                                               |
-| `get_engine_info(engine_id)`                    | POST `/get_engine_info` — returns engine info dict                                                                                    |
+| `get_entity_info(entity_id, entity_type)`       | POST `/get_entity_info` — returns entity info dict                                                                                    |
+| `list_entities(entity_type, kind)`              | POST `/list_entities` — returns matching entity info dicts                                                                            |
 | `start_heartbeat(interval, on_not_found, name)` | Start background heartbeat thread; calls `on_not_found` callback when NanoCtrl responds `not_found` (useful for auto re-registration) |
 | `stop_heartbeat(timeout)`                       | Stop the heartbeat thread                                                                                                             |
 | `stop(timeout)`                                 | Stop heartbeat + unregister (safe to call multiple times)                                                                             |
@@ -262,8 +277,8 @@ NanoCtrl uses the following Redis key patterns (with optional scope prefix):
 - `{scope}:spec:topology:*` - Desired topology specifications
 - `{scope}:inbox:*` - Legacy inbox for cleanup events
 - `{scope}:mr:*` - Memory Region (MR) information
-- `{scope}:engine:*` - Engine registration info
-- `{scope}:nano_meta:engine_revision` - Engine revision counter
-- `{scope}:nano_events:engine_update` - Engine update pub/sub channel
+- `{scope}:{entity_type}:{entity_id}` - Generic entity registration info
+- `{scope}:nano_meta:{entity_type}_revision` - Entity revision counter
+- `{scope}:nano_events:{entity_type}_update` - Entity update pub/sub channel
 
-If no scope is provided, keys are used without prefix (e.g., `engine:*` instead of `{scope}:engine:*`).
+If no scope is provided, keys are used without prefix (e.g., `service:cache:0` instead of `{scope}:service:cache:0`).

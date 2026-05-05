@@ -65,17 +65,16 @@ def discover_cache_url(
     client = NanoCtrlClient(address=ctrl, scope=scope)
     client.check_connection()
 
-    info = client.get_engine_info(service_id) if service_id else None
+    info = client.get_entity_info(service_id) if service_id else None
     if info is None:
-        caches = [
-            engine for engine in client.list_engines() if engine.get("role") == "cache"
-        ]
+        caches = client.list_entities(kind="cache")
         if not caches:
-            raise RuntimeError("No NanoCtrl engine with role='cache' found")
+            raise RuntimeError("No NanoCtrl service with kind='cache' found")
         info = caches[0]
 
-    host = info["host"]
-    port = int(info["port"])
+    endpoint = info.get("endpoint") or {}
+    host = endpoint["host"]
+    port = int(endpoint["port"])
     return f"http://{host}:{port}"
 
 

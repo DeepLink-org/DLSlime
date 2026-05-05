@@ -167,9 +167,6 @@ async fn run_server(args: ServerArgs) -> anyhow::Result<()> {
         .route("/", get(handlers::util::root))
         // Generic heartbeat (unified for all entity types)
         .route("/heartbeat", post(handlers::util::heartbeat))
-        // Backward-compat aliases (same unified handler)
-        .route("/heartbeat_engine", post(handlers::util::heartbeat))
-        .route("/heartbeat_agent", post(handlers::util::heartbeat))
         // Peer agent
         .route("/start_peer_agent", post(handlers::peer::start_peer_agent))
         .route("/query", post(handlers::peer::query))
@@ -181,14 +178,11 @@ async fn run_server(args: ServerArgs) -> anyhow::Result<()> {
         )
         .route("/register_mr", post(handlers::rdma::register_mr))
         .route("/get_mr_info", post(handlers::rdma::get_mr_info))
-        // Engine
-        .route("/register_engine", post(handlers::engine::register_engine))
-        .route(
-            "/unregister_engine",
-            post(handlers::engine::unregister_engine),
-        )
-        .route("/get_engine_info", post(handlers::engine::get_engine_info))
-        .route("/list_engines", post(handlers::engine::list_engines))
+        // Generic service/entity registry
+        .route("/register", post(handlers::entity::register))
+        .route("/unregister", post(handlers::entity::unregister))
+        .route("/get_entity_info", post(handlers::entity::get_entity_info))
+        .route("/list_entities", post(handlers::entity::list_entities))
         // Utility
         .route(
             "/get_redis_address",

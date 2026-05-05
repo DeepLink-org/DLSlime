@@ -131,69 +131,80 @@ pub struct GetRedisAddressResponse {
     pub redis_address: String, // Redis address in format "host:port"
 }
 
+fn default_entity_type() -> String {
+    "service".to_string()
+}
+
+fn default_json_object() -> Value {
+    Value::Object(Default::default())
+}
+
 #[derive(Debug, Deserialize)]
-pub struct RegisterEngineBody {
-    pub engine_id: String,
-    pub role: String, // "prefill", "decode", "hybrid"
-    pub world_size: u32,
-    pub num_blocks: u32,
-    pub host: String,
-    pub port: u32,
-    pub peer_addrs: Vec<String>, // Peer agent addresses
+pub struct RegisterEntityBody {
+    #[serde(default = "default_entity_type")]
+    pub entity_type: String,
+    pub entity_id: String,
+    pub kind: String,
     #[serde(default)]
-    pub p2p_host: Option<String>, // P2P free instruction host
+    pub endpoint: Option<Value>,
+    #[serde(default = "default_json_object")]
+    pub metadata: Value,
     #[serde(default)]
-    pub p2p_port: Option<u32>, // P2P free instruction port
+    pub resource: Option<Value>,
     #[serde(default)]
     pub scope: Option<String>, // Scope for partitioning (from NANOCTRL_SCOPE env var on client)
-    #[serde(default)]
-    pub max_num_seqs: Option<u32>, // Max batch size (GDN slot count = max_num_seqs + 1)
-    #[serde(default)]
-    pub model_path: Option<String>, // Path to model/tokenizer directory
 }
 
 #[derive(Debug, Serialize)]
-pub struct RegisterEngineResponse {
+pub struct RegisterEntityResponse {
     pub status: String,
     pub message: String,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct GetEngineInfoBody {
-    pub engine_id: String,
+pub struct GetEntityInfoBody {
+    #[serde(default = "default_entity_type")]
+    pub entity_type: String,
+    pub entity_id: String,
     #[serde(default)]
     pub scope: Option<String>, // Scope for partitioning (from NANOCTRL_SCOPE env var on client)
 }
 
 #[derive(Debug, Serialize)]
-pub struct GetEngineInfoResponse {
+pub struct GetEntityInfoResponse {
     pub status: String,
-    pub engine_info: Option<serde_json::Value>, // Engine info as JSON
+    pub entity_info: Option<serde_json::Value>, // Entity info as JSON
 }
 
 #[derive(Debug, Deserialize)]
-pub struct UnregisterEngineBody {
-    pub engine_id: String,
+pub struct UnregisterEntityBody {
+    #[serde(default = "default_entity_type")]
+    pub entity_type: String,
+    pub entity_id: String,
     #[serde(default)]
     pub scope: Option<String>, // Scope for partitioning (from NANOCTRL_SCOPE env var on client)
 }
 
 #[derive(Debug, Serialize)]
-pub struct UnregisterEngineResponse {
+pub struct UnregisterEntityResponse {
     pub status: String,
     pub message: String,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct ListEnginesBody {
+pub struct ListEntitiesBody {
+    #[serde(default)]
+    pub entity_type: Option<String>,
+    #[serde(default)]
+    pub kind: Option<String>,
     #[serde(default)]
     pub scope: Option<String>, // Scope for partitioning (from NANOCTRL_SCOPE env var on client)
 }
 
 #[derive(Debug, Serialize)]
-pub struct ListEnginesResponse {
+pub struct ListEntitiesResponse {
     pub status: String,
-    pub engines: Vec<serde_json::Value>, // List of engine info as JSON
+    pub entities: Vec<serde_json::Value>, // List of entity info as JSON
 }
 
 #[derive(Debug, Deserialize)]
