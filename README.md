@@ -5,108 +5,161 @@
   <a href="docs/roadmap.md"><img src="docs/imgs/assets/roadmap.svg" width="16" height="16" style="vertical-align: middle;"> Roadmap </a> |
   <a href="https://join.slack.com/t/dlslime/shared_invite/zt-3e9zvercw-a89KI_Ig8N1UTaol_q6MXg"><img src="docs/imgs/assets/slack.svg" width="16" height="16" style="vertical-align: middle;"> Slack </a> |
   <a href="docs/imgs/assets/wechat_qrcode.jpg"><img src="docs/imgs/assets/wechat.svg" width="16" height="16" style="vertical-align: middle;"> WeChat Group </a> |
-  <a href="https://zhuanlan.zhihu.com/p/1950701795149067622"><img src="docs/imgs/assets/zhihu.svg" width="16" height="16" style="vertical-align: middle;"> Zhihu </a>
+  <a href="https://zhuanlan.zhihu.com/p/1950701795149067622"><img src="docs/imgs/assets/zhihu.svg" width="16" height="16" style="vertical-align: middle;"> Zhihu </a> |
+  <a href="README.md">English</a> |
+  <a href="README_zh.md">中文</a>
 </p>
 <h2 align="center"> Flexible & Efficient Heterogeneous Transfer Toolkit </h2>
 
-DLSlime is a layered communication and microservice toolkit for distributed
-AI systems. It starts from heterogeneous device transports such as RDMA, NVLink,
-and Ascend Direct, wraps them in endpoint and assignment APIs, then builds
-PeerAgent coordination, SlimeRPC, and DLSlimeCache on top. NanoCtrl provides the
-control plane for service registration, discovery, liveness, and PeerAgent/RDMA
-metadata.
+DLSlime is a PeerAgent-centered communication and microservice toolkit for
+distributed AI systems. PeerAgent is the runtime hub: application services such
+as SlimeRPC and DLSlimeCache build on it, NanoCtrl supplies service governance
+and coordination metadata around it, and endpoint APIs below it drive
+heterogeneous transports such as RDMA, NVLink, and Ascend Direct.
 
 The goal is to let systems compose high-performance data movement without tying
 application logic to one transport, one topology, or one service layout.
 
-## Layered Architecture
+## PeerAgent-Centered Architecture
 
-DLSlime is organized as a stack. Lower layers move bytes and expose device
-capabilities; upper layers coordinate peers and provide service-shaped building
-blocks.
+DLSlime is organized around PeerAgent. Lower layers move bytes and expose device
+capabilities; PeerAgent turns those capabilities into peer-to-peer runtime
+connections; upper layers reuse the same PeerAgent data plane as
+service-shaped building blocks.
 
 | Layer                     | Components                                             | Responsibility                                                                                           |
 | ------------------------- | ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
 | Application services      | DLSlimeCache, SlimeRPC services, user systems          | Use DLSlime as a service substrate for cache, RPC, and custom distributed components                     |
 | Service governance        | NanoCtrl                                               | Register services, discover by `kind`, maintain heartbeat TTLs, scope isolation, publish Redis addresses |
-| Peer coordination         | PeerAgent, desired topology, MR registry               | Discover peers, register memory regions, establish directed connections, clean stale state               |
+| PeerAgent runtime         | PeerAgent, coordination metadata                       | Discover peers, register memory regions, establish directed connections, clean stale state               |
 | Endpoint API              | `RDMAEndpoint`, `NVLinkEndpoint`, Ascend endpoints     | Register local/remote memory and issue read/write/send-recv operations                                   |
 | Transfer engines          | RDMA RC, NVLink, Ascend Direct, optional torch backend | Execute transport-specific data movement                                                                 |
 | Device and topology layer | NIC/GPU/NPU discovery, resource records                | Describe available devices, ports, link types, and placement hints                                       |
 
-```mermaid
-graph TB
-    subgraph App[Application services]
-        User[User systems]
-        Cache[DLSlimeCache]
-        RPC[SlimeRPC service/proxy]
-    end
-
-    subgraph Ctrl[Service governance]
-        NanoCtrl[NanoCtrl]
-        Redis[(Redis)]
-    end
-
-    subgraph Peer[Peer coordination]
-        AgentA[PeerAgent A]
-        AgentB[PeerAgent B]
-        MR[MR registry]
-        Topology[Desired topology]
-    end
-
-    subgraph Endpoint[Endpoint API]
-        RDMAEndpoint[RDMAEndpoint]
-        NVLinkEndpoint[NVLinkEndpoint]
-        AscendEndpoint[Ascend Direct endpoint]
-    end
-
-    subgraph Transport[Transfer engines]
-        RDMA[RDMA RC]
-        NVLink[NVLink]
-        Ascend[Ascend Direct]
-        Torch[Torch backend]
-    end
-
-    subgraph Device[Device and topology]
-        NIC[NICs / IB ports]
-        GPU[GPUs]
-        NPU[Ascend NPUs]
-    end
-
-    User --> RPC
-    User --> Cache
-    Cache --> AgentA
-    RPC --> AgentA
-    AgentA --> NanoCtrl
-    AgentB --> NanoCtrl
-    NanoCtrl <--> Redis
-    NanoCtrl --> MR
-    NanoCtrl --> Topology
-    AgentA --> RDMAEndpoint
-    AgentB --> RDMAEndpoint
-    AgentA --> NVLinkEndpoint
-    RDMAEndpoint --> RDMA
-    NVLinkEndpoint --> NVLink
-    AscendEndpoint --> Ascend
-    RDMA --> NIC
-    NVLink --> GPU
-    Ascend --> NPU
-    Torch --> GPU
-```
+<p align="center">
+  <img src="docs/imgs/dlslime_arch.png" alt="DLSlime PeerAgent-centered architecture" width="92%">
+</p>
 
 ## How The Layers Work Together
 
 1. A service starts and registers itself with NanoCtrl as a generic entity, for
    example `kind=cache` or `kind=rpc-worker`.
-2. A PeerAgent registers its resource record and memory regions with NanoCtrl.
-3. Clients discover services by `kind` and scope, then connect to the service or
+2. Each service attaches to a PeerAgent instead of managing transport state
+   directly.
+3. PeerAgents register their resource records and memory regions with NanoCtrl.
+4. Clients discover services by `kind` and scope, then reach the service through
    its PeerAgent.
-4. PeerAgents exchange connection intent and memory-region metadata through
+5. PeerAgents exchange connection intent and memory-region metadata through
    NanoCtrl/Redis.
-5. Endpoint objects issue the actual transfer through RDMA, NVLink, Ascend
+6. Endpoint objects issue the actual transfer through RDMA, NVLink, Ascend
    Direct, or the selected backend.
-6. Higher-level components such as SlimeRPC and DLSlimeCache reuse the same
-   data plane instead of inventing separate transfer paths.
+
+## Usage Scenarios
+
+### Direct Endpoint Access
+
+Use the Endpoint API directly when the application already controls peer
+placement, metadata exchange, and memory lifetime. This is the lowest-level path
+through DLSlime: it avoids NanoCtrl and PeerAgent, and maps application transfer
+logic straight onto endpoint-to-endpoint data movement.
+
+<p align="center">
+  <img src="docs/imgs/endpoint2endpoint.png" alt="Direct endpoint-to-endpoint access" width="88%">
+</p>
+
+Typical examples are two-process RDMA read/write tests, NVLink transfer checks,
+and backend bring-up where explicit setup is more useful than service discovery.
+
+Example: [p2p_rdma_rc_read.py](examples/python/p2p_rdma_rc_read.py),
+[p2p_rdma_rc_write.py](examples/python/p2p_rdma_rc_write.py),
+[p2p_nvlink.py](examples/python/p2p_nvlink.py), and
+[p2p_ascend_read.py](examples/python/p2p_ascend_read.py).
+
+### PeerAgent-to-PeerAgent Access
+
+Use PeerAgent when the application wants peer-to-peer data movement without
+managing connection setup, memory-region discovery, and stale-state cleanup by
+itself. Each process owns a PeerAgent, registers its resources through NanoCtrl,
+and then uses the PeerAgent facade to read or write remote memory through the
+selected endpoint.
+
+This path keeps the same endpoint data plane as direct access, but moves
+coordination into NanoCtrl and PeerAgent. It is the right starting point for
+multi-process services, dynamic peer discovery, and higher-level components such
+as SlimeRPC and DLSlimeCache.
+
+<p align="center">
+  <img src="docs/imgs/peer2peer.png" alt="PeerAgent-to-PeerAgent access" width="88%">
+</p>
+
+Example:
+[p2p_rdma_rc_read_ctrl_plane.py](examples/python/p2p_rdma_rc_read_ctrl_plane.py)
+and
+[p2p_rdma_multi_agents_ctrl_plane.py](examples/python/p2p_rdma_multi_agents_ctrl_plane.py).
+
+### DLSlimeCache Service
+
+Use DLSlimeCache when multiple PeerAgent clients need a shared RDMA-backed cache
+service. PeerAgent A and PeerAgent B discover the Cache Service through
+NanoCtrl, fetch cache assignment metadata from the service, and then read or
+write cache slabs through the same PeerAgent and endpoint data plane.
+
+In this path, NanoCtrl keeps the Cache Service discoverable as a registered
+service, the Cache Service owns the cache memory region and assignment
+manifests, and PeerAgent clients perform the data movement without embedding
+cache placement logic into each application process.
+
+<p align="center">
+  <img src="docs/imgs/cacheService.png" alt="DLSlimeCache service access" width="88%">
+</p>
+
+Example: [cache_client_example.py](examples/python/cache_client_example.py) and
+[dlslime-cache design](docs/design/dlslime-cache.md).
+
+### SlimeRPC Service
+
+Use SlimeRPC when application logic should call a Python service while keeping
+the transport and peer coordination inside DLSlime. A client process uses a
+SlimeRPC proxy on top of its PeerAgent, the service process serves Python
+methods through a SlimeRPC server on top of its own PeerAgent, and NanoCtrl keeps
+the RPC service discoverable.
+
+RPC request and response messages are carried by the PeerAgent transport rather
+than the control plane. This keeps service invocation at the application layer
+while reusing the same PeerAgent, endpoint, and mailbox data path as lower-level
+peer-to-peer flows.
+
+<p align="center">
+  <img src="docs/imgs/slimeRPC.png" alt="SlimeRPC service access" width="88%">
+</p>
+
+Example: [rpc_example.py](examples/python/rpc_example.py) and
+[rpc_flatbuf_example.py](examples/python/rpc_flatbuf_example.py).
+
+### Disaggregated Inference Service
+
+Use DLSlime for disaggregated inference when prefill and decode run as separate
+serving roles. This follows the same pattern used by LMDeploy DistServe:
+a proxy routes requests to dedicated Prefill and Decode workers, Prefill
+computes prompt KV cache, Decode generates tokens, and a migration/data-plane
+backend transfers KV cache between the two roles.
+
+In DLSlime terms, each Prefill or Decode worker can be modeled as a service with
+its own PeerAgent. NanoCtrl keeps the worker roles discoverable by `kind`, stores
+resource and memory metadata for the PeerAgents, and lets the serving proxy or
+workers build the required prefill-to-decode connections. The KV cache transfer
+then uses the PeerAgent and endpoint data plane instead of going through the
+control plane.
+
+<p align="center">
+  <img src="docs/imgs/PDDisagg.png" alt="Disaggregated inference service" width="88%">
+</p>
+
+LMDeploy reference: [DistServe HTTP endpoints](https://lmdeploy.readthedocs.io/en/v0.12.2/http-routingtable.html#distserve) and [DistServe with MooncakeTransferEngine](https://kvcache-ai.github.io/Mooncake/getting_started/examples/lmdeploy-integration-v0.9.html).
+
+### RL Service
+
+Coming soon.
 
 ## Component Map
 

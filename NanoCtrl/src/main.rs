@@ -1,8 +1,8 @@
-//! NanoCtrl: Control plane server for NanoInfra
+//! NanoCtrl: Control plane server for DLSlime microservice governance.
 //!
 //! NanoCtrl is stateless and supports multiple scopes sharing the same instance.
-//! Scope is determined by clients (NanoRoute, EngineServer, peer_agent) via
-//! `NANOCTRL_SCOPE` env var.
+//! Scope is determined by clients such as DLSlimeCache, PeerAgent, and future
+//! DLSlime services via `NANOCTRL_SCOPE`.
 
 mod error;
 mod handlers;
