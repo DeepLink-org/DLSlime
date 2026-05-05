@@ -2,32 +2,39 @@
 Example: P2P RDMA RC Read using Control Plane (Declarative Topology).
 
 Uses the declarative model:
-- set_desired_topology(target_peers=[...]) to declare desired connections
-- TopologyReconciler converges Actual State to Desired State (Symmetric Rendezvous)
+- set_desired_topology(peer, ...) to declare one directed connection
 - wait_for_peers() blocks until connections are established
+- PeerAgent.read/write perform I/O through the established endpoint
 """
+
+import json
 
 import torch
 from dlslime import start_peer_agent
+
+
+def print_topology_discovery(agent, label, peer_aliases):
+    print(f"\nTopology discovery ({label} view):")
+    print("Active agents:", agent.query_active_agent())
+    for alias in peer_aliases:
+        resource = agent.query_resource(alias)
+        print(f"Resource[{alias}]:")
+        if resource is None:
+            print("  <unavailable>")
+        else:
+            print(json.dumps(resource, indent=2, sort_keys=True))
+
 
 # Start two peer agents (NanoCtrl auto-generates unique names)
 # In a real distributed scenario, these would run on different machines
 initiator_agent = start_peer_agent(
     # alias=None (default) - NanoCtrl will auto-generate unique name
     server_url="http://127.0.0.1:3000",
-    device=None,  # Auto-select
-    ib_port=1,
-    link_type="RoCE",
-    qp_num=1,
 )
 
 target_agent = start_peer_agent(
     # alias=None (default) - NanoCtrl will auto-generate unique name
     server_url="http://127.0.0.1:3000",
-    device=None,  # Auto-select (will use same device if only one available)
-    ib_port=1,
-    link_type="RoCE",
-    qp_num=1,
 )
 
 # Get allocated names
@@ -37,11 +44,20 @@ print(f"Allocated names: initiator={initiator_name}, target={target_name}")
 
 # Query available peers
 print("Available peers:", initiator_agent.query())
+print_topology_discovery(
+    initiator_agent,
+    "initiator",
+    [initiator_name, target_name],
+)
+print_topology_discovery(
+    target_agent,
+    "target",
+    [initiator_name, target_name],
+)
 
-# Declarative: set desired topology (both sides want to connect to each other)
+# Declarative: set one directed connection; the target accepts it passively.
 print("Setting desired topology...")
-initiator_agent.set_desired_topology(target_peers=[target_name])
-target_agent.set_desired_topology(target_peers=[initiator_name])
+initiator_agent.set_desired_topology(target_name, ib_port=1, qp_num=1)
 
 # Wait for reconciliation to establish connections
 print("Waiting for connections...")
@@ -66,21 +82,9 @@ target_agent.register_memory_region(
     remote_tensor.numel() * remote_tensor.itemsize,
 )
 
-# Resolve remote MR handle through the control plane (fetches MR info and
-# registers it with the local endpoint in one step).
-print("Resolving remote MR handle...")
-hremote_on_initiator = initiator_agent.get_remote_handle(target_name, "kv")
-
-# Perform RDMA read via the agent's one-shot facade (forwards to the
-# target peer's endpoint).
+# Perform RDMA read via the PeerAgent I/O facade.
 print("Performing RDMA read...")
-slot = initiator_agent.read(
-    target_name,
-    [
-        (handler, hremote_on_initiator, 0, 8, 8),
-    ],
-    None,
-)
+slot = initiator_agent.read(target_name, [("kv", 8, 0, 8)])
 slot.wait()
 
 # Verify results

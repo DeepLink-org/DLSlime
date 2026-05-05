@@ -13,7 +13,6 @@
 #include <optional>
 
 #include "dlslime/csrc/engine/assignment.h"
-#include "dlslime/csrc/engine/dlpack.h"
 
 #ifdef BUILD_NVLINK
 #include "dlslime/csrc/engine/nvlink/memory_pool.h"
@@ -65,6 +64,7 @@ void bind_cache(pybind11::module_& m);
 #include "dlslime/csrc/common/json.hpp"
 #include "dlslime/csrc/common/pybind_json/pybind_json.hpp"
 #include "dlslime/csrc/logging.h"
+#include "dlslime/csrc/topology.h"
 
 using json = nlohmann::json;
 
@@ -105,6 +105,13 @@ PYBIND11_MODULE(_slime_c, m)
     // DLSlimeCache (V0): always-on, no extra build flag — the V0 server
     // is pure metadata and pulls in zero RDMA / GPU dependencies.
     bind_cache(m);
+    m.def("discover_topology",
+          &dlslime::topology::discoverTopology,
+          py::arg("preferred_device")    = std::nullopt,
+          py::arg("ib_port")             = 1,
+          py::arg("preferred_link_type") = std::nullopt,
+          py::arg("sysfs_root")          = "/sys",
+          py::arg("devices")             = std::nullopt);
 
     py::enum_<dlslime::OpCode>(m, "OpCode")
         .value("READ", dlslime::OpCode::READ)
