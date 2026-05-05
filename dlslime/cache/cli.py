@@ -29,6 +29,8 @@ from .service import (
 PROGRAM_NAME = "dlslime-cache"
 INTERNAL_RUN_COMMAND = "__run"
 DEFAULT_CTRL = "http://127.0.0.1:3000"
+MIN_SLAB_SIZE = 128 * 1024
+MAX_SLAB_SIZE = 1024**3
 
 
 def parse_size(value) -> int:
@@ -61,6 +63,13 @@ def parse_size(value) -> int:
     return int(text)
 
 
+def parse_slab_size(value) -> int:
+    size = parse_size(value)
+    if size < MIN_SLAB_SIZE or size > MAX_SLAB_SIZE:
+        raise ValueError("--slab-size must be in [128K, 1G]")
+    return size
+
+
 def _add_service_args(parser: ArgumentParser) -> None:
     parser.add_argument(
         "--config", action=ActionConfigFile, help="Path to a jsonargparse config file."
@@ -69,9 +78,9 @@ def _add_service_args(parser: ArgumentParser) -> None:
     parser.add_argument("--port", type=int, default=8765, help="Bind port.")
     parser.add_argument(
         "--slab-size",
-        type=int,
-        default=DEFAULT_SLAB_SIZE,
-        help="Maximum assignment slab bytes.",
+        type=str,
+        default=str(DEFAULT_SLAB_SIZE),
+        help="Maximum assignment slab bytes in [128K, 1G]. Supports K/M/G suffixes.",
     )
     parser.add_argument(
         "--memory-size",
@@ -335,6 +344,7 @@ def print_recent_log(path: Path, start_offset: int = 0, max_lines: int = 80) -> 
 
 def internal_run_argv_from_cfg(cfg) -> list[str]:
     memory_size = parse_size(cfg.memory_size)
+    slab_size = parse_slab_size(cfg.slab_size)
     argv = [
         INTERNAL_RUN_COMMAND,
         "--host",
@@ -342,7 +352,7 @@ def internal_run_argv_from_cfg(cfg) -> list[str]:
         "--port",
         str(cfg.port),
         "--slab-size",
-        str(cfg.slab_size),
+        str(slab_size),
         "--memory-size",
         str(memory_size),
     ]
@@ -395,13 +405,20 @@ def _make_peer_agent(cfg):
 
 
 def service_mode_error(cfg) -> str | None:
+    try:
+        slab_size = parse_slab_size(cfg.slab_size)
+        memory_size = parse_size(cfg.memory_size)
+    except ValueError as exc:
+        return str(exc)
     if cfg.metadata_only:
         return None
-    if parse_size(cfg.memory_size) <= 0:
+    if memory_size <= 0:
         return (
             "dlslime-cache data mode requires --memory-size > 0. "
             "Use --metadata-only only for metadata/control-plane tests."
         )
+    if memory_size % slab_size != 0:
+        return "dlslime-cache --memory-size must be a multiple of --slab-size"
     if cfg.ctrl is None and cfg.peer_agent_ctrl is None:
         return (
             "dlslime-cache data mode requires NanoCtrl. "
@@ -416,11 +433,12 @@ def cmd_run_foreground(cfg) -> int:
         return 2
 
     memory_size = parse_size(cfg.memory_size)
+    slab_size = parse_slab_size(cfg.slab_size)
     peer_agent = _make_peer_agent(cfg)
     server = CacheHttpServer(
         (cfg.host, cfg.port),
         peer_agent,
-        slab_size=cfg.slab_size,
+        slab_size=slab_size,
         memory_size=memory_size,
         cache_mr_name=cfg.cache_mr_name,
         quiet=cfg.quiet,
@@ -446,7 +464,7 @@ def cmd_run_foreground(cfg) -> int:
 
     print(
         f"DLSlimeCache serving on http://{cfg.host}:{cfg.port} "
-        f"(slab_size={cfg.slab_size}, memory_size={memory_size})",
+        f"(slab_size={slab_size}, memory_size={memory_size})",
         flush=True,
     )
     if registration is not None:

@@ -10,6 +10,7 @@ from dlslime.cache.cli import (
     internal_run_argv_from_cfg,
     meta_file,
     parse_size,
+    parse_slab_size,
     pid_file,
     runtime_dir,
     service_mode_error,
@@ -33,7 +34,7 @@ def test_start_parser_defaults():
     assert cfg.subcommand == "start"
     assert start.host == "127.0.0.1"
     assert start.port == 8765
-    assert start.slab_size == 256 * 1024
+    assert parse_slab_size(start.slab_size) == 256 * 1024
     assert parse_size(start.memory_size) == 0
     assert start.ctrl == DEFAULT_CTRL
     assert start.service_id == "cache:0"
@@ -48,7 +49,7 @@ def test_start_parser_accepts_peer_agent_and_nanoctrl_args():
             "start",
             "--host=0.0.0.0",
             "--port=9000",
-            "--slab-size=131072",
+            "--slab-size=128K",
             "--memory-size=1G",
             "--ctrl=127.0.0.1:3000",
             "--scope=s0",
@@ -64,7 +65,7 @@ def test_start_parser_accepts_peer_agent_and_nanoctrl_args():
 
     assert start.host == "0.0.0.0"
     assert start.port == 9000
-    assert start.slab_size == 131072
+    assert parse_slab_size(start.slab_size) == 128 * 1024
     assert parse_size(start.memory_size) == 1024**3
     assert start.ctrl == "127.0.0.1:3000"
     assert start.scope == "s0"
@@ -82,7 +83,7 @@ def test_start_parser_accepts_background_args_and_service_args():
             "start",
             "--host=0.0.0.0",
             "--port=9001",
-            "--slab-size=131072",
+            "--slab-size=128K",
             "--memory-size=512M",
             "--quiet",
             "--ctrl=127.0.0.1:3000",
@@ -98,7 +99,7 @@ def test_start_parser_accepts_background_args_and_service_args():
     assert cfg.subcommand == "start"
     assert start.host == "0.0.0.0"
     assert start.port == 9001
-    assert start.slab_size == 131072
+    assert parse_slab_size(start.slab_size) == 128 * 1024
     assert parse_size(start.memory_size) == 512 * 1024**2
     assert start.quiet is True
     assert start.ctrl == "127.0.0.1:3000"
@@ -157,6 +158,26 @@ def test_start_metadata_only_allows_zero_memory_size():
     assert service_mode_error(cfg) is None
 
 
+def test_start_rejects_slab_size_outside_supported_range():
+    cfg = (
+        build_parser()
+        .parse_args(["start", "--slab-size=64K", "--memory-size=1G"])
+        .start
+    )
+
+    assert "[128K, 1G]" in service_mode_error(cfg)
+
+
+def test_start_rejects_memory_size_not_aligned_to_slab_size():
+    cfg = (
+        build_parser()
+        .parse_args(["start", "--slab-size=256K", "--memory-size=384K"])
+        .start
+    )
+
+    assert "multiple of --slab-size" in service_mode_error(cfg)
+
+
 def test_runtime_dir_env_override(monkeypatch):
     monkeypatch.setenv("DLSLIME_CACHE_RUNTIME_DIR", "/tmp/dlslime-cache-tests")
 
@@ -176,6 +197,22 @@ def test_parse_size_accepts_binary_suffixes():
     assert parse_size("256K") == 256 * 1024
     assert parse_size("4G") == 4 * 1024**3
     assert parse_size("1GiB") == 1024**3
+
+
+def test_parse_slab_size_accepts_supported_range():
+    assert parse_slab_size("128K") == 128 * 1024
+    assert parse_slab_size("256K") == 256 * 1024
+    assert parse_slab_size("1G") == 1024**3
+
+
+def test_parse_slab_size_rejects_out_of_range():
+    for value in ("64K", str(1024**3 + 1)):
+        try:
+            parse_slab_size(value)
+        except ValueError as exc:
+            assert "[128K, 1G]" in str(exc)
+        else:
+            raise AssertionError(f"expected parse_slab_size({value!r}) to fail")
 
 
 def test_status_without_pid_is_human_readable(monkeypatch, capsys):

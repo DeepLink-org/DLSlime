@@ -22,8 +22,6 @@ from .types import (
 AssignmentManifest = ccache.AssignmentManifest
 CacheServer = ccache.CacheServer
 CacheStats = ccache.CacheStats
-Extent = ccache.Extent
-Manifest = ccache.Manifest
 
 __all__ = [
     "AssignmentManifest",
@@ -35,8 +33,6 @@ __all__ = [
     "DEFAULT_CACHE_MR_NAME",
     "DEFAULT_MEMORY_SIZE",
     "DEFAULT_SLAB_SIZE",
-    "Extent",
-    "Manifest",
     "NanoCtrlRegistration",
     "assignment_from_json",
     "assignment_to_json",

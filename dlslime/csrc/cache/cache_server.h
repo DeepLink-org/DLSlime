@@ -1,29 +1,26 @@
 // cache_server.h - In-process cache server state.
 //
-// V0 scope (this file): shallow mode plus assignment-directory metadata.
-//   * store(key, extents)         : record key -> extents as-is
+// Scope (this file): cache-service assignment directory.
 //   * store_assignments(peer, b)  : record peer_agent_id/version -> AssignmentBatch
-//   * load(key)                   : return the stored manifest
 //   * query_assignments(peer, v)  : return the stored AssignmentBatch manifest
-//   * delete(key)                 : drop the mapping
-//   * stats()                     : # keys, # extents, bytes addressed
+//   * delete_assignments(peer, v) : drop one AssignmentBatch manifest
+//   * stats()                     : assignment/slab counters
 //
-// The assignment-directory path is intentionally simple: record the
-// original Engine PeerAgent id and a generated version, then hand back the
-// exact AssignmentBatch needed for the consumer to load through the existing
-// DLSlime endpoint. No page allocator and no extra data-plane abstraction.
+// The assignment-directory path is what the Python cache service uses for
+// real data-plane examples. The client writes bytes into the cache service's
+// registered MR first, then stores the ready-to-run AssignmentBatch under the
+// original Engine PeerAgent id and a generated version. Query hands back the
+// exact batch needed for the consumer to read from the cache MR through the
+// existing DLSlime endpoint. No page allocator and no extra data-plane
+// abstraction live in this C++ directory yet.
 //
-// Thread-safety: the server is designed to be driven by one RPC
-// listener thread today, but the hot-path state (kv_) is protected by a
-// shared_mutex to allow many concurrent loads. Store/delete take the
-// write lock.
+// Thread-safety: the assignment directory is protected by a shared_mutex.
+// Query/stats take the shared lock; store/delete/clear take the write lock.
 //
-// Concurrency note for V1: when deep mode lands we'll need extent pin
-// counts so delete/evict cannot race with in-flight RDMA reads issued
-// by a client against returned extents. For shallow mode this is not a
-// concern because the cache holds no bytes; if the source peer's MR
-// gets recycled while a client still has the manifest, the client's
-// RDMA read is what fails, not the cache.
+// Concurrency note for V1: once slabs are reusable, delete/evict should grow
+// slab leases or pin counts so a manifest cannot be freed while a client has
+// an in-flight RDMA read. Today delete only removes metadata; examples delete
+// after read_future.wait().
 #pragma once
 
 #include <cstdint>
@@ -33,7 +30,6 @@
 #include <unordered_map>
 
 #include "dlslime/csrc/engine/assignment.h"
-#include "extent.h"
 
 namespace dlslime::cache {
 
@@ -52,11 +48,6 @@ struct AssignmentManifest {
 };
 
 struct CacheStats {
-    uint64_t num_keys{0};
-    uint64_t num_shallow_keys{0};
-    uint64_t num_deep_keys{0};
-    uint64_t num_extents{0};
-    uint64_t bytes_addressed{0};  // sum of extent lengths across all manifests
     uint64_t num_assignment_peers{0};
     uint64_t num_assignment_entries{0};
     uint64_t num_assignments{0};
@@ -70,24 +61,12 @@ struct CacheStats {
 
 class CacheServer {
 public:
+    static constexpr uint64_t kMinSlabSize       = 128 * 1024;
+    static constexpr uint64_t kMaxSlabSize       = 1024ULL * 1024 * 1024;
     static constexpr uint64_t kDefaultSlabSize   = 256 * 1024;
     static constexpr uint64_t kDefaultMemorySize = 0;
 
     explicit CacheServer(uint64_t slab_size = kDefaultSlabSize, uint64_t memory_size = kDefaultMemorySize);
-
-    // Record a mapping from `key` to the supplied extents.
-    //
-    // V0: `mode` must be CacheMode::Shallow; Deep is rejected with a
-    // runtime_error. Deep copying is deliberately left out of this path;
-    // the fast route is storing ready-to-run AssignmentBatch manifests.
-    //
-    // Bumps the per-key version monotonically. Returns the resulting
-    // manifest (same extents, same mode, new version) for callers that
-    // want to advertise it downstream without a follow-up load.
-    Manifest store(const std::string& key, std::vector<Extent> extents, CacheMode mode = CacheMode::Shallow);
-
-    // Fetch the manifest for `key`, or nullopt on miss.
-    std::optional<Manifest> load(const std::string& key) const;
 
     uint64_t slab_size() const
     {
@@ -113,9 +92,6 @@ public:
 
     bool erase_assignments(const std::string& peer_agent_id, uint64_t version);
 
-    // Drop the mapping. Returns true if the key existed, false on miss.
-    bool erase(const std::string& key);
-
     CacheStats stats() const;
 
     // Test-only helper: drop every key. Never call this in production.
@@ -123,9 +99,7 @@ public:
 
 private:
     mutable std::shared_mutex                                                         mu_;
-    std::unordered_map<std::string, Manifest>                                         kv_;
     std::unordered_map<std::string, std::unordered_map<uint64_t, AssignmentManifest>> assignment_kv_;
-    uint64_t                                                                          next_version_{1};
     uint64_t                                                                          next_assignment_version_{1};
     uint64_t                                                                          slab_size_{kDefaultSlabSize};
     uint64_t                                                                          memory_size_{kDefaultMemorySize};

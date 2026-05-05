@@ -30,23 +30,31 @@ class DummyPeerAgent:
 
 
 def test_cache_service_store_query_splits_slabs():
-    service = CacheService(DummyPeerAgent(), slab_size=128, memory_size=512)
+    service = CacheService(
+        DummyPeerAgent(), slab_size=128 * 1024, memory_size=512 * 1024
+    )
     assert service.peer_agent.alias == "engine:0"
-    assert service.memory_size == 512
+    assert service.memory_size == 512 * 1024
 
     stored = service.store_assignments(
         "engine:0",
-        [Assignment(1, 2, 0, 4096, 300)],
+        [Assignment(1, 2, 0, 4096, 300 * 1024)],
     )
     queried = service.query_assignments("engine:0", stored.version)
 
     assert queried is not None
     assert queried.peer_agent_id == "engine:0"
-    assert [a.length for a in queried.assignments] == [128, 128, 44]
+    assert [a.length for a in queried.assignments] == [
+        128 * 1024,
+        128 * 1024,
+        44 * 1024,
+    ]
 
 
 def test_cache_service_deletes_assignment_manifest():
-    service = CacheService(DummyPeerAgent(), slab_size=128, memory_size=512)
+    service = CacheService(
+        DummyPeerAgent(), slab_size=128 * 1024, memory_size=512 * 1024
+    )
     stored = service.store_assignments(
         "engine:0",
         [Assignment(1, 2, 0, 0, 64)],
@@ -62,7 +70,9 @@ def test_assignment_to_tuple_matches_rdma_endpoint_order():
 
 
 def test_cache_service_exposes_peer_agent_info():
-    service = CacheService(DummyPeerAgent(), slab_size=128, memory_size=512)
+    service = CacheService(
+        DummyPeerAgent(), slab_size=128 * 1024, memory_size=512 * 1024
+    )
 
     info = service.peer_agent_info()
 
@@ -71,12 +81,12 @@ def test_cache_service_exposes_peer_agent_info():
     assert info["scope"] == "s0"
     assert info["cache_mr_name"] == "cache"
     assert info["cache_mr_handle"] == 123
-    assert info["memory_size"] == 512
+    assert info["memory_size"] == 512 * 1024
     assert info["resource"]["nics"][0]["name"] == "mlx5_0"
 
 
 def test_cache_service_peer_agent_info_requires_cache_mr():
-    service = CacheService(DummyPeerAgent(), slab_size=128, memory_size=0)
+    service = CacheService(DummyPeerAgent(), slab_size=128 * 1024, memory_size=0)
 
     with pytest.raises(RuntimeError, match="preallocated cache memory"):
         service.peer_agent_info()

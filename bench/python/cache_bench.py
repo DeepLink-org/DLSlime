@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
-"""Microbenchmark for DLSlimeCache metadata and assignment-directory paths.
+"""Microbenchmark for the DLSlimeCache assignment-directory path.
 
 This does not benchmark RDMA payload transfer. It measures the in-process
-Python binding cost for:
-  * C++ CacheServer shallow store/load/delete
-  * C++ CacheServer assignment store/query/delete with slab splitting
-  * a pure Python dict baseline for perspective
+Python binding cost for C++ CacheServer assignment store/query/delete with
+slab splitting, plus a pure Python dict baseline for perspective.
 """
 
 from __future__ import annotations
@@ -38,15 +36,6 @@ class Result:
         return self.keys / self.seconds
 
 
-def make_extents(items_per_key: int, item_size: int) -> list[cache.Extent]:
-    return [
-        cache.Extent(
-            peer="worker-a", mr_handle=7, offset=i * item_size, length=item_size
-        )
-        for i in range(items_per_key)
-    ]
-
-
 def make_assignments(items_per_key: int, item_size: int) -> list[Assignment]:
     return [
         Assignment(11, 22, i * item_size, i * item_size, item_size)
@@ -66,31 +55,6 @@ def median_result(results: list[Result]) -> Result:
         key=lambda r: abs(r.seconds - statistics.median(x.seconds for x in results)),
     )
     return best
-
-
-def bench_cpp_shallow(
-    keys: int, items_per_key: int, item_size: int, repeats: int
-) -> list[Result]:
-    extents = make_extents(items_per_key, item_size)
-    results: list[Result] = []
-
-    for _ in range(repeats):
-        srv = cache.CacheServer()
-        store_s = time_once(
-            lambda: [srv.store(f"k{i}", extents, mode="shallow") for i in range(keys)]
-        )
-        load_s = time_once(lambda: [srv.load(f"k{i}") for i in range(keys)])
-        delete_s = time_once(lambda: [srv.delete(f"k{i}") for i in range(keys)])
-
-        results.extend(
-            [
-                Result("cpp-shallow", "store", keys, items_per_key, store_s),
-                Result("cpp-shallow", "load", keys, items_per_key, load_s),
-                Result("cpp-shallow", "delete", keys, items_per_key, delete_s),
-            ]
-        )
-
-    return results
 
 
 def bench_cpp_assignments(
@@ -221,11 +185,6 @@ def main() -> None:
         all_results = []
         all_results.extend(
             bench_python_dict(
-                args.keys, args.items_per_key, args.item_size, args.repeats
-            )
-        )
-        all_results.extend(
-            bench_cpp_shallow(
                 args.keys, args.items_per_key, args.item_size, args.repeats
             )
         )
