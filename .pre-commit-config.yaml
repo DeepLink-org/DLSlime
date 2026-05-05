@@ -45,11 +45,6 @@ repos:
         args: ["--manifest-path", "NanoCtrl/Cargo.toml"]
         files: ^NanoCtrl/
         pass_filenames: false
-      - id: fmt
-        name: fmt (NanoRoute)
-        args: ["--manifest-path", "NanoRoute/Cargo.toml"]
-        files: ^NanoRoute/
-        pass_filenames: false
       # NanoCtrl
       - id: cargo-check
         name: cargo check (NanoCtrl)
@@ -59,15 +54,6 @@ repos:
         name: clippy (NanoCtrl)
         args: ["--manifest-path", "NanoCtrl/Cargo.toml", "--", "-D", "warnings"]
         files: ^NanoCtrl/
-      # NanoRoute
-      - id: cargo-check
-        name: cargo check (NanoRoute)
-        args: ["--manifest-path", "NanoRoute/Cargo.toml"]
-        files: ^NanoRoute/
-      - id: clippy
-        name: clippy (NanoRoute)
-        args: ["--manifest-path", "NanoRoute/Cargo.toml", "--", "-D", "warnings"]
-        files: ^NanoRoute/
 
   - repo: https://github.com/pre-commit/mirrors-clang-format
     rev: v18.1.6
