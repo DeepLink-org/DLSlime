@@ -33,12 +33,13 @@ void bind_cache(py::module_& m)
         .def(py::init<>())
         .def_readwrite("peer_agent_id", &AssignmentManifest::peer_agent_id)
         .def_readwrite("assignments", &AssignmentManifest::assignments)
+        .def_readwrite("slab_ids", &AssignmentManifest::slab_ids)
         .def_readwrite("version", &AssignmentManifest::version)
         .def("total_bytes", &AssignmentManifest::total_bytes)
         .def("__repr__", [](const AssignmentManifest& m) {
             return "AssignmentManifest(peer_agent_id='" + m.peer_agent_id + "', version=" + std::to_string(m.version)
-                   + ", #assignments=" + std::to_string(m.assignments.size())
-                   + ", total_bytes=" + std::to_string(m.total_bytes()) + ")";
+                   + ", #assignments=" + std::to_string(m.assignments.size()) + ", #slabs="
+                   + std::to_string(m.slab_ids.size()) + ", total_bytes=" + std::to_string(m.total_bytes()) + ")";
         });
 
     py::class_<CacheStats>(sub, "CacheStats")
@@ -74,9 +75,9 @@ void bind_cache(py::module_& m)
             R"(Record a PeerAgent-owned AssignmentBatch and return its generated version.
 
 Store-time normalization splits large assignments into slab-sized
-chunks. In the cache service path, the batch points at bytes already
-written into the service's registered cache MR. Query by
-(peer_agent_id, version) to retrieve the batch.)")
+chunks, allocates slab ids, and rewrites cache-side source offsets into
+the service's registered cache MR. Query by (peer_agent_id, version) to
+retrieve the batch.)")
         .def("query_assignments",
              &CacheServer::query_assignments,
              py::arg("peer_agent_id"),

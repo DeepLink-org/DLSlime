@@ -32,8 +32,8 @@ written into the cache service's own registered memory.
 
 - No shallow mode. The old `store(key, extents, mode="shallow")` idea was
   removed because it duplicates PeerAgent's direct P2P path.
-- No page allocator yet. V0 tracks slab-shaped assignment manifests and
-  capacity, but it does not yet manage reusable slab ownership.
+- No tiered allocator yet. V0 manages one fixed slab size per service
+  instance; adaptive per-store slab classes are deferred.
 - No persistence, replication, master election, SSD tier, or distributed
   cache protocol. Placement and replication policy belong in NanoDeploy.
 - No server-side RDMA read on query. Clients issue their own RDMA reads
@@ -78,8 +78,11 @@ The cache service composes a real `PeerAgent`:
 3. `GET /peer-agent` tells clients the cache PeerAgent id, NanoCtrl address,
    cache MR name, slab size, memory size, and resource info.
 4. A client connects to the cache PeerAgent through NanoCtrl.
-5. The client writes bytes into the cache MR with normal RDMA write.
-6. The client stores a read manifest with `POST /store`.
+5. The client stores a read manifest with `POST /store`; the service
+   allocates cache slabs and rewrites cache-side offsets in the returned
+   manifest.
+6. The client writes bytes into the allocated cache MR offsets with normal
+   RDMA write.
 7. A consumer queries the manifest with `POST /query`.
 8. The consumer feeds the returned assignments to `agent.read(...)`.
 9. The client removes the manifest with `POST /delete` when done.
@@ -161,6 +164,7 @@ Response:
   "peer_agent_id": "engine-a",
   "version": 1,
   "total_bytes": 655360,
+  "slab_ids": [0, 1, 2],
   "assignments": [
     {
       "mr_key": 11,
@@ -174,6 +178,9 @@ Response:
 ```
 
 Large assignments are split into chunks no larger than `slab_size`.
+When preallocated memory is enabled, each returned assignment owns one
+slab id, and `source_offset` points at `slab_id * slab_size` inside the
+cache MR.
 
 ### `POST /query`
 
@@ -253,14 +260,14 @@ NanoCtrl information advertised by `/peer-agent`.
 - `query_assignments()` and `stats()` take a shared lock.
 - `store_assignments()`, `delete_assignments()`, and `clear()` take the
   write lock.
-- Delete currently removes only the manifest. It does not fence or cancel
-  RDMA reads that a client has already issued.
+- Delete removes the manifest and returns its slab ids to the free list.
+  It does not fence or cancel RDMA reads that a client has already issued.
 - Callers should delete after `read_future.wait()` if they want the same
   correctness property as the example.
 
-This is enough for V0 because slabs are not reused by an allocator yet.
-Once slabs become reusable, delete/evict must grow a lease or pin-count
-mechanism so memory cannot be recycled while a client has an in-flight read.
+Because slabs are reusable, delete/evict must grow a lease or pin-count
+mechanism before production use so memory cannot be recycled while a client
+has an in-flight read.
 
 ## Slab Semantics
 
@@ -271,14 +278,14 @@ mechanism so memory cannot be recycled while a client has an in-flight read.
 - `memory_size / slab_size` gives the number of logical slabs.
 - If `memory_size > 0`, store rejects manifests that would exceed the
   configured logical slab count.
-- `used_slabs` is the total number of stored assignment chunks.
+- Store allocates slab ids from a free list and rewrites returned
+  assignment `source_offset` values to cache MR slab offsets.
+- Delete returns slab ids to the free list.
+- `used_slabs` and `free_slabs` come from allocator state.
 
-V0 does not yet map each logical slab to a free-list entry or perform slab
-reuse. The client example writes to offset 0 of the cache MR and stores the
-corresponding read manifest; future allocator work should assign offsets.
-Per-store adaptive slab sizing is deferred until real slab ownership/leases
-exist; changing the slab unit per manifest would make capacity accounting
-ambiguous in the current V0 directory.
+Per-store adaptive slab sizing is deferred until tiered capacity accounting
+and leases exist; changing the slab unit per manifest would make lifecycle
+semantics ambiguous in the current V0 directory.
 
 ## Implementation Status
 
@@ -291,7 +298,7 @@ ambiguous in the current V0 directory.
 | `dlslime-cache start/status/stop` | Landed      |
 | Real RDMA client example          | Landed      |
 | HTTP delete path                  | Landed      |
-| Slab allocator / reuse            | Not started |
+| Fixed slab allocator / reuse      | Landed      |
 | Leases / pin counts               | Not started |
 | NanoDeploy placement integration  | Not started |
 
@@ -337,14 +344,12 @@ dlslime-cache stop
 
 ## Next Steps
 
-1. Add a real slab allocator that hands out cache MR offsets instead of
-   relying on client-selected offsets.
-2. Add tiered slab sizing, e.g. `128K..1G`, so each store can choose the
+1. Add tiered slab sizing, e.g. `128K..1G`, so each store can choose the
    smallest fitting slab class once capacity accounting is backed by real
    slab ownership instead of a single fixed startup unit.
-3. Add slab leases or pin counts so delete/evict cannot race with
+2. Add slab leases or pin counts so delete/evict cannot race with
    in-flight reads.
-4. Add metrics for assignment entries, bytes, logical slab pressure, and
+3. Add metrics for assignment entries, bytes, logical slab pressure, and
    failed stores.
-5. Integrate NanoDeploy placement policy on top of the cache client.
-6. Add multi-client stress tests around store/query/delete/read ordering.
+4. Integrate NanoDeploy placement policy on top of the cache client.
+5. Add multi-client stress tests around store/query/delete/read ordering.

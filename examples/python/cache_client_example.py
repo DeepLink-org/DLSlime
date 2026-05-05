@@ -12,9 +12,9 @@ Then run this client:
     python examples/python/cache_client_example.py --url http://127.0.0.1:8765
 
 The client asks the cache service for its PeerAgent, creates a local
-PeerAgent, connects over an available RDMA NIC, writes bytes into the
-server's cache MR, stores a generated read manifest, then queries the
-same (peer_agent_id, version) back and RDMA-reads the bytes.
+PeerAgent, connects over an available RDMA NIC, stores a generated read
+manifest to allocate cache slabs, writes bytes into those cache MR offsets,
+then queries the same (peer_agent_id, version) back and RDMA-reads the bytes.
 Stop the service when finished:
 
     dlslime-cache stop
@@ -120,13 +120,6 @@ def main() -> None:
         args.length,
     )
 
-    print("writing bytes into cache service...")
-    write_future = agent.write(
-        server_peer,
-        [(source_name, cache_mr_name, 0, 0, args.length)],
-    )
-    write_future.wait()
-
     cache_remote_handle = agent.get_remote_handle(server_peer, cache_mr_name)
 
     try:
@@ -139,7 +132,24 @@ def main() -> None:
             f"version={stored['version']}",
             f"assignments={len(stored['assignments'])}",
             f"total_bytes={stored['total_bytes']}",
+            f"slabs={stored['slab_ids']}",
         )
+
+        print("writing bytes into allocated cache slabs...")
+        write_future = agent.write(
+            server_peer,
+            [
+                (
+                    source_name,
+                    cache_mr_name,
+                    item["target_offset"],
+                    item["source_offset"],
+                    item["length"],
+                )
+                for item in stored["assignments"]
+            ],
+        )
+        write_future.wait()
 
         queried = client.load(stored["peer_agent_id"], stored["version"])
         print(

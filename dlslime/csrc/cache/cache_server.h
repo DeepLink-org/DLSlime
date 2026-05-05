@@ -11,16 +11,15 @@
 // registered MR first, then stores the ready-to-run AssignmentBatch under the
 // original Engine PeerAgent id and a generated version. Query hands back the
 // exact batch needed for the consumer to read from the cache MR through the
-// existing DLSlime endpoint. No page allocator and no extra data-plane
-// abstraction live in this C++ directory yet.
+// existing DLSlime endpoint. A fixed-size slab free list owns offsets inside
+// the preallocated cache MR; no extra data-plane abstraction lives here.
 //
 // Thread-safety: the assignment directory is protected by a shared_mutex.
 // Query/stats take the shared lock; store/delete/clear take the write lock.
 //
-// Concurrency note for V1: once slabs are reusable, delete/evict should grow
-// slab leases or pin counts so a manifest cannot be freed while a client has
-// an in-flight RDMA read. Today delete only removes metadata; examples delete
-// after read_future.wait().
+// Concurrency note for V1: delete/evict should grow slab leases or pin counts
+// so a manifest cannot be freed while a client has an in-flight RDMA read.
+// Today examples delete after read_future.wait().
 #pragma once
 
 #include <cstdint>
@@ -28,6 +27,7 @@
 #include <shared_mutex>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #include "dlslime/csrc/engine/assignment.h"
 
@@ -36,6 +36,7 @@ namespace dlslime::cache {
 struct AssignmentManifest {
     std::string              peer_agent_id;
     dlslime::AssignmentBatch assignments;
+    std::vector<uint64_t>    slab_ids;
     uint64_t                 version{0};
 
     uint64_t total_bytes() const
@@ -85,7 +86,8 @@ public:
     // Returns a generated version; clients query by (peer_agent_id, version)
     // and then feed the returned batch to the existing endpoint read path.
     // Store-time normalization splits large assignments into slab-sized
-    // chunks so query() always returns a batch ready for direct I/O.
+    // chunks, allocates slab ids, and rewrites cache-side source_offset values
+    // to slab offsets so query() always returns a batch ready for direct I/O.
     AssignmentManifest store_assignments(const std::string& peer_agent_id, dlslime::AssignmentBatch assignments);
 
     std::optional<AssignmentManifest> query_assignments(const std::string& peer_agent_id, uint64_t version) const;
@@ -100,6 +102,7 @@ public:
 private:
     mutable std::shared_mutex                                                         mu_;
     std::unordered_map<std::string, std::unordered_map<uint64_t, AssignmentManifest>> assignment_kv_;
+    std::vector<uint64_t>                                                             free_slabs_;
     uint64_t                                                                          next_assignment_version_{1};
     uint64_t                                                                          slab_size_{kDefaultSlabSize};
     uint64_t                                                                          memory_size_{kDefaultMemorySize};

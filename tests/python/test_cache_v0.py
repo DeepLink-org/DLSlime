@@ -43,7 +43,9 @@ def test_slab_size_must_be_in_supported_range():
 
 def test_assignment_store_rejects_when_preallocated_slabs_are_full():
     srv = cache.CacheServer(slab_size=128 * 1024, memory_size=256 * 1024)
-    srv.store_assignments("engine-a", [Assignment(1, 2, 0, 0, 256 * 1024)])
+    m = srv.store_assignments("engine-a", [Assignment(1, 2, 0, 0, 256 * 1024)])
+    assert m.slab_ids == [0, 1]
+    assert [a.source_offset for a in m.assignments] == [0, 128 * 1024]
 
     s = srv.stats()
     assert s.used_slabs == 2
@@ -51,6 +53,11 @@ def test_assignment_store_rejects_when_preallocated_slabs_are_full():
 
     with pytest.raises(RuntimeError, match="not enough preallocated cache slabs"):
         srv.store_assignments("engine-b", [Assignment(1, 2, 0, 0, 1)])
+
+    assert srv.delete_assignments("engine-a", m.version) is True
+    assert srv.stats().free_slabs == 2
+    reused = srv.store_assignments("engine-b", [Assignment(1, 2, 0, 0, 1)])
+    assert reused.slab_ids == [1]
 
 
 def test_assignment_store_query_roundtrip():
@@ -88,30 +95,33 @@ def test_assignment_query_miss():
 
 def test_assignment_store_splits_into_configured_slabs():
     slab = 256 * 1024
-    srv = cache.CacheServer(slab_size=slab)
+    srv = cache.CacheServer(slab_size=slab, memory_size=slab * 4)
     batch = [Assignment(1, 2, 10, 20, slab * 2 + 123)]
 
     m = srv.store_assignments("engine-a", batch)
     got = srv.query_assignments("engine-a", m.version)
 
     assert got is not None
+    assert got.slab_ids == [0, 1, 2]
     assert [(a.target_offset, a.source_offset, a.length) for a in got.assignments] == [
-        (10, 20, slab),
-        (10 + slab, 20 + slab, slab),
-        (10 + 2 * slab, 20 + 2 * slab, 123),
+        (10, 0, slab),
+        (10 + slab, slab, slab),
+        (10 + 2 * slab, 2 * slab, 123),
     ]
 
 
 def test_assignment_store_uses_custom_slab_size():
-    srv = cache.CacheServer(slab_size=128 * 1024)
+    srv = cache.CacheServer(slab_size=128 * 1024, memory_size=512 * 1024)
     m = srv.store_assignments("engine-a", [Assignment(1, 2, 0, 0, 300 * 1024)])
     got = srv.query_assignments("engine-a", m.version)
     assert got is not None
+    assert got.slab_ids == [0, 1, 2]
     assert [a.length for a in got.assignments] == [128 * 1024, 128 * 1024, 44 * 1024]
+    assert [a.source_offset for a in got.assignments] == [0, 128 * 1024, 256 * 1024]
 
 
 def test_assignment_stats_and_delete():
-    srv = cache.CacheServer(slab_size=128 * 1024)
+    srv = cache.CacheServer(slab_size=128 * 1024, memory_size=1024 * 1024)
     m0 = srv.store_assignments("engine-a", [Assignment(1, 2, 0, 0, 300 * 1024)])
     m1 = srv.store_assignments("engine-a", [Assignment(1, 2, 0, 0, 64 * 1024)])
     srv.store_assignments("engine-b", [Assignment(3, 4, 0, 0, 32 * 1024)])
@@ -121,11 +131,15 @@ def test_assignment_stats_and_delete():
     assert s.num_assignment_entries == 3
     assert s.num_assignments == 5  # 300 -> 3 slabs, then 64 and 32
     assert s.assignment_bytes == (300 + 64 + 32) * 1024
+    assert s.used_slabs == 5
+    assert s.free_slabs == 3
 
     assert srv.delete_assignments("engine-a", m0.version) is True
     assert srv.delete_assignments("engine-a", m0.version) is False
     assert srv.query_assignments("engine-a", m0.version) is None
     assert srv.query_assignments("engine-a", m1.version) is not None
+    assert srv.stats().used_slabs == 2
+    assert srv.stats().free_slabs == 6
 
 
 def test_assignment_store_rejects_empty_peer():

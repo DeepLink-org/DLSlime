@@ -61,10 +61,12 @@ def bench_cpp_assignments(
     keys: int, items_per_key: int, item_size: int, slab_size: int, repeats: int
 ) -> list[Result]:
     batch = make_assignments(items_per_key, item_size)
+    chunks_per_key = sum((a.length + slab_size - 1) // slab_size for a in batch)
+    memory_size = slab_size * chunks_per_key * keys
     results: list[Result] = []
 
     for _ in range(repeats):
-        srv = cache.CacheServer(slab_size=slab_size)
+        srv = cache.CacheServer(slab_size=slab_size, memory_size=memory_size)
         versions: list[int] = []
         store_s = time_once(
             lambda: [

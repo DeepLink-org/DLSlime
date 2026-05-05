@@ -42,6 +42,7 @@ def manifest_to_json(m: _cache.AssignmentManifest) -> dict[str, Any]:
         "peer_agent_id": m.peer_agent_id,
         "version": int(m.version),
         "total_bytes": int(m.total_bytes()),
+        "slab_ids": [int(slab_id) for slab_id in m.slab_ids],
         "assignments": [assignment_to_json(a) for a in m.assignments],
     }
 

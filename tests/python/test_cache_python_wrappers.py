@@ -2,7 +2,12 @@
 
 import pytest
 from dlslime._slime_c import Assignment
-from dlslime.cache import assignment_to_tuple, CacheClient, CacheService
+from dlslime.cache import (
+    assignment_to_tuple,
+    CacheClient,
+    CacheService,
+    manifest_to_json,
+)
 
 
 class DummyPeerAgent:
@@ -44,11 +49,18 @@ def test_cache_service_store_query_splits_slabs():
 
     assert queried is not None
     assert queried.peer_agent_id == "engine:0"
+    assert queried.slab_ids == [0, 1, 2]
     assert [a.length for a in queried.assignments] == [
         128 * 1024,
         128 * 1024,
         44 * 1024,
     ]
+    assert [a.source_offset for a in queried.assignments] == [
+        0,
+        128 * 1024,
+        256 * 1024,
+    ]
+    assert manifest_to_json(queried)["slab_ids"] == [0, 1, 2]
 
 
 def test_cache_service_deletes_assignment_manifest():
