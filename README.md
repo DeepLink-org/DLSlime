@@ -9,7 +9,7 @@
   <a href="README.md">English</a> |
   <a href="README_zh.md">中文</a>
 </p>
-<h2 align="center"> Flexible & Efficient Heterogeneous Transfer Toolkit </h2>
+<h2 align="center"> PeerAgent-Centered Data Plane for Distributed AI Services </h2>
 
 DLSlime is a PeerAgent-centered communication and microservice toolkit for
 distributed AI systems. PeerAgent is the runtime hub: application services such
@@ -22,19 +22,11 @@ application logic to one transport, one topology, or one service layout.
 
 ## PeerAgent-Centered Architecture
 
-DLSlime is organized around PeerAgent. Lower layers move bytes and expose device
-capabilities; PeerAgent turns those capabilities into peer-to-peer runtime
-connections; upper layers reuse the same PeerAgent data plane as
-service-shaped building blocks.
-
-| Layer                     | Components                                             | Responsibility                                                                                           |
-| ------------------------- | ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
-| Application services      | DLSlimeCache, SlimeRPC services, user systems          | Use DLSlime as a service substrate for cache, RPC, and custom distributed components                     |
-| Service governance        | NanoCtrl                                               | Register services, discover by `kind`, maintain heartbeat TTLs, scope isolation, publish Redis addresses |
-| PeerAgent runtime         | PeerAgent, coordination metadata                       | Discover peers, register memory regions, establish directed connections, clean stale state               |
-| Endpoint API              | `RDMAEndpoint`, `NVLinkEndpoint`, Ascend endpoints     | Register local/remote memory and issue read/write/send-recv operations                                   |
-| Transfer engines          | RDMA RC, NVLink, Ascend Direct, optional torch backend | Execute transport-specific data movement                                                                 |
-| Device and topology layer | NIC/GPU/NPU discovery, resource records                | Describe available devices, ports, link types, and placement hints                                       |
+DLSlime is organized around PeerAgent. Application services attach to
+PeerAgent, NanoCtrl provides service governance and coordination metadata, and
+endpoint APIs drive the underlying transfer engines and devices. The diagram
+below shows these layers without requiring applications to bind themselves to one
+transport or topology.
 
 <p align="center">
   <img src="docs/imgs/dlslime_arch.png" alt="DLSlime PeerAgent-centered architecture" width="92%">
@@ -75,6 +67,18 @@ Example: [p2p_rdma_rc_read.py](examples/python/p2p_rdma_rc_read.py),
 [p2p_nvlink.py](examples/python/p2p_nvlink.py), and
 [p2p_ascend_read.py](examples/python/p2p_ascend_read.py).
 
+```bash
+python examples/python/p2p_rdma_rc_read.py
+python examples/python/p2p_rdma_rc_write.py
+python examples/python/p2p_rdma_rc_write_with_imm_data.py
+python examples/python/p2p_rdma_rc_send_recv_gdr.py
+torchrun --nproc_per_node=2 examples/python/p2p_nvlink.py
+python examples/python/p2p_ascend_read.py
+```
+
+Ascend Direct setup details live in
+[docs/huawei_ascend/README.md](docs/huawei_ascend/README.md).
+
 ### PeerAgent-to-PeerAgent Access
 
 Use PeerAgent when the application wants peer-to-peer data movement without
@@ -97,6 +101,11 @@ Example:
 and
 [p2p_rdma_multi_agents_ctrl_plane.py](examples/python/p2p_rdma_multi_agents_ctrl_plane.py).
 
+```bash
+nanoctrl start
+python examples/python/p2p_rdma_rc_read_ctrl_plane.py --ctrl http://127.0.0.1:3000
+```
+
 ### DLSlimeCache Service
 
 Use DLSlimeCache when multiple PeerAgent clients need a shared RDMA-backed cache
@@ -115,6 +124,16 @@ cache placement logic into each application process.
 
 Example: [cache_client_example.py](examples/python/cache_client_example.py) and
 [dlslime-cache design](docs/design/dlslime-cache.md).
+
+```bash
+nanoctrl start
+dlslime-cache start --ctrl http://127.0.0.1:3000 \
+  --host 127.0.0.1 --port 8765 --memory-size 1G
+
+python examples/python/cache_client_example.py --url http://127.0.0.1:8765
+
+dlslime-cache stop
+```
 
 ### SlimeRPC Service
 
@@ -135,6 +154,11 @@ peer-to-peer flows.
 
 Example: [rpc_example.py](examples/python/rpc_example.py) and
 [rpc_flatbuf_example.py](examples/python/rpc_flatbuf_example.py).
+
+```bash
+nanoctrl start
+python examples/python/rpc_example.py --ctrl http://127.0.0.1:3000
+```
 
 ### Disaggregated Inference Service
 
@@ -206,65 +230,6 @@ cmake --build build
 | `BUILD_BENCH`         |                                    `OFF` | Build C++ transfer-engine benchmarks                   |
 | `BUILD_TEST`          |                                    `OFF` | Build C++ tests                                        |
 | `USE_MACA`            |                                    `OFF` | Enable Metax platform support for torch backend builds |
-
-## Quick Start
-
-### RDMA Endpoint
-
-The low-level endpoint API registers local memory regions, exchanges endpoint
-metadata out of band, connects peers, and issues RDMA operations.
-
-```bash
-python examples/python/p2p_rdma_rc_read.py
-python examples/python/p2p_rdma_rc_write.py
-python examples/python/p2p_rdma_rc_write_with_imm_data.py
-python examples/python/p2p_rdma_rc_send_recv_gdr.py
-```
-
-The examples use `available_nic()` to find RDMA devices and `RDMAEndpoint` to
-register local and remote memory regions.
-
-### PeerAgent and SlimeRPC
-
-PeerAgent adds control-plane based discovery and connection management. Start a
-NanoCtrl instance first, then run the RPC example:
-
-```bash
-nanoctrl start
-python examples/python/rpc_example.py --ctrl http://127.0.0.1:3000
-```
-
-The example defines a Python service, serves it on a worker PeerAgent, and
-calls it from a driver PeerAgent through the SlimeRPC proxy API.
-
-### DLSlimeCache
-
-DLSlimeCache owns a preallocated memory region and stores assignment manifests
-so clients can write bytes into cache slabs and read them back through normal
-RDMA operations.
-
-```bash
-nanoctrl start
-dlslime-cache start --ctrl http://127.0.0.1:3000 \
-  --host 127.0.0.1 --port 8765 --memory-size 1G
-
-python examples/python/cache_client_example.py --url http://127.0.0.1:8765
-
-dlslime-cache stop
-```
-
-See [docs/design/dlslime-cache.md](docs/design/dlslime-cache.md) for the cache
-service design and API.
-
-### NVLink and Ascend
-
-```bash
-torchrun --nproc_per_node=2 examples/python/p2p_nvlink.py
-python examples/python/p2p_ascend_read.py
-```
-
-Ascend Direct setup details live in
-[docs/huawei_ascend/README.md](docs/huawei_ascend/README.md).
 
 ## Benchmarks
 
