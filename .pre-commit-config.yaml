@@ -3,6 +3,9 @@ repos:
     rev: v2.9.0
     hooks:
       - id: ufmt
+        additional_dependencies:
+          - black==25.9.0
+          - usort==1.0.8.post1
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
@@ -32,7 +35,7 @@ repos:
         args: ["-L", "CANN,cann,crate"]
         exclude: >
           (?x)^(
-              .*/docs/imgs/.*|
+              (?:.*/)?docs/imgs/.*|
               .*/json\.hpp|
               .*/pybind_json\.hpp
           )$
@@ -45,11 +48,6 @@ repos:
         args: ["--manifest-path", "NanoCtrl/Cargo.toml"]
         files: ^NanoCtrl/
         pass_filenames: false
-      - id: fmt
-        name: fmt (NanoRoute)
-        args: ["--manifest-path", "NanoRoute/Cargo.toml"]
-        files: ^NanoRoute/
-        pass_filenames: false
       # NanoCtrl
       - id: cargo-check
         name: cargo check (NanoCtrl)
@@ -59,15 +57,6 @@ repos:
         name: clippy (NanoCtrl)
         args: ["--manifest-path", "NanoCtrl/Cargo.toml", "--", "-D", "warnings"]
         files: ^NanoCtrl/
-      # NanoRoute
-      - id: cargo-check
-        name: cargo check (NanoRoute)
-        args: ["--manifest-path", "NanoRoute/Cargo.toml"]
-        files: ^NanoRoute/
-      - id: clippy
-        name: clippy (NanoRoute)
-        args: ["--manifest-path", "NanoRoute/Cargo.toml", "--", "-D", "warnings"]
-        files: ^NanoRoute/
 
   - repo: https://github.com/pre-commit/mirrors-clang-format
     rev: v18.1.6

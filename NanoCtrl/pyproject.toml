@@ -1,0 +1,18 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "nanoctrl"
+version = "0.0.7"
+description = "Shared NanoCtrl lifecycle client for NanoInfra services"
+requires-python = ">=3.10"
+dependencies = ["httpx>=0.24"]
+
+[project.urls]
+Repository = "https://github.com/JimyMa/NanoDeploy"
+
+[tool.maturin]
+bindings = "bin"
+python-source = "."
+exclude = ["nanoctrl/__pycache__/*", "nanoctrl.egg-info/*"]

@@ -471,7 +471,7 @@ def cmd_run_foreground(cfg) -> int:
         advertised = cfg.advertise_host or resolve_host_for_registration(cfg.host)
         print(
             f"registered with NanoCtrl {cfg.ctrl}: service_id={cfg.service_id} "
-            f"role=cache endpoint=http://{advertised}:{cfg.port}",
+            f"kind=cache endpoint=http://{advertised}:{cfg.port}",
             flush=True,
         )
     if peer_agent is not None:

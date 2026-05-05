@@ -31,7 +31,7 @@ dependencies = [
   "pyzmq>=25.0",
   "redis>=4.0",
   "httpx>=0.24",
-  "nanoctrl>=0.0.6",
+  "nanoctrl>=0.0.7",
   "jsonargparse>=4.27",
   # for --build-no-isolation
   "scikit-build-core>=0.10",

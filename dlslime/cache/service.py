@@ -225,7 +225,7 @@ class CacheHttpServer(ThreadingHTTPServer):
 
 
 class NanoCtrlRegistration:
-    """Register a cache HTTP service as a NanoCtrl ``role=cache`` engine."""
+    """Register a cache HTTP service in NanoCtrl's generic service registry."""
 
     def __init__(
         self,
@@ -267,13 +267,13 @@ class NanoCtrlRegistration:
     def _register(self) -> None:
         ok = self.client.register(
             self.service_id,
-            {
-                "role": "cache",
-                "world_size": 1,
-                "num_blocks": 0,
+            "cache",
+            endpoint={
                 "host": self.advertise_host,
                 "port": self.port,
-                "peer_addrs": [],
+                "protocol": "http",
+            },
+            metadata={
                 "p2p_host": self.advertise_host,
                 "p2p_port": self.port,
             },
