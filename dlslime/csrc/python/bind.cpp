@@ -43,6 +43,10 @@
 #include "dlslime/csrc/rpc/rpc_session.h"
 #endif
 
+// Forward declaration: cache bindings live in a separate translation
+// unit (cache/bindings.cpp) so they can be developed independently.
+void bind_cache(pybind11::module_& m);
+
 // Ops moved to NanoCCL - these includes are commented out
 // #if defined(BUILD_INTRA_OPS) || defined(BUILD_INTER_OPS)
 // #include <torch/torch.h>
@@ -115,7 +119,16 @@ PYBIND11_MODULE(_slime_c, m)
 
     py::class_<dlslime::Assignment>(m, "Assignment")
         .def(py::init<const uintptr_t&, uint64_t, uint64_t, uint64_t>())
-        .def(py::init<const uintptr_t&, const uintptr_t&, uint64_t, uint64_t, uint64_t>());
+        .def(py::init<const uintptr_t&, const uintptr_t&, uint64_t, uint64_t, uint64_t>())
+        .def_readwrite("mr_key", &dlslime::Assignment::mr_key)
+        .def_readwrite("remote_mr_key", &dlslime::Assignment::remote_mr_key)
+        .def_readwrite("target_offset", &dlslime::Assignment::target_offset)
+        .def_readwrite("source_offset", &dlslime::Assignment::source_offset)
+        .def_readwrite("length", &dlslime::Assignment::length);
+
+    // DLSlimeCache is always on. Its peer/version directory reuses the
+    // public Assignment binding above, so bind it after Assignment.
+    bind_cache(m);
 
     py::class_<dlslime::device::DeviceSignal, std::shared_ptr<dlslime::device::DeviceSignal>>(m, "DeviceSignal")
         .def("wait", &dlslime::device::DeviceSignal::wait_comm_done_cpu);
