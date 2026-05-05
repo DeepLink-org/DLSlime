@@ -1,8 +1,26 @@
 add_subdirectory(device)
 add_subdirectory(engine)
 
+add_library(
+    _slime_topology
+    SHARED
+    topology.cpp
+)
+
+set_target_properties(
+    _slime_topology
+    PROPERTIES
+    BUILD_WITH_INSTALL_RPATH TRUE
+    INSTALL_RPATH "\${ORIGIN}"
+)
+
+target_include_directories(_slime_topology PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>
+    $<INSTALL_INTERFACE:include/dlslime>
+)
+
 add_library(dlslime INTERFACE)
-target_link_libraries(dlslime INTERFACE _slime_engine _slime_device)
+target_link_libraries(dlslime INTERFACE _slime_engine _slime_device _slime_topology)
 
 if(BUILD_RDMA)
     target_link_libraries(dlslime INTERFACE _slime_rdma)
@@ -19,6 +37,18 @@ endif()
 install(
     TARGETS dlslime
     EXPORT dlslimeTargets
+)
+
+install(
+    TARGETS
+    _slime_topology
+    EXPORT dlslimeTargets
+    LIBRARY DESTINATION ${DLSLIME_INSTALL_PATH}
+)
+
+install(
+    FILES topology.h
+    DESTINATION include/dlslime/csrc
 )
 
 if(BUILD_PYTHON)
