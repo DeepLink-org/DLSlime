@@ -23,6 +23,7 @@ pybind11_add_module(
 
 set(_slime_c_link_libraries "")
 set(BIND_INSTALL_RPATH "\${ORIGIN}")
+list(APPEND _slime_c_link_libraries _slime_topology)
 
 if (BUILD_NVLINK)
     target_compile_definitions(_slime_c PRIVATE BUILD_NVLINK)

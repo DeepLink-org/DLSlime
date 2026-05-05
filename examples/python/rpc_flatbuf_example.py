@@ -143,10 +143,10 @@ def main(ctrl_url: str):
 
     # --- driver agent ---
     driver = PeerAgent(alias="driver:0", server_url=ctrl_url)
-    conn = driver.set_desired_topology("worker:0", ib_port=1, qp_num=1)
+    driver.set_desired_topology("worker:0", ib_port=1, qp_num=1)
 
     # wait for both sides to connect
-    conn.wait()
+    driver.wait_for_peers(["worker:0"])
     worker.wait_for_peers(["driver:0"])
     print("Connected.")
 

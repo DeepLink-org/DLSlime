@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import inspect
 import json
-import os
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -27,7 +26,7 @@ except ImportError as e:
 
 from nanoctrl import NanoCtrlClient
 
-from dlslime import available_nic, RDMAContext, RDMAEndpoint, RDMAMemoryPool
+from dlslime import discover_topology, RDMAContext, RDMAEndpoint, RDMAMemoryPool
 from ._mailbox import StreamMailbox
 from ._obs import _tlog
 
@@ -59,7 +58,7 @@ class MaterializedMemoryRegion:
 
 
 class DirectedConnection:
-    """Connection-level handle returned by PeerAgent.set_desired_topology()."""
+    """Internal connection metadata for one directed PeerAgent endpoint."""
 
     def __init__(
         self,
@@ -79,7 +78,6 @@ class DirectedConnection:
         self.endpoint: Optional[RDMAEndpoint] = None
         self.memory_pool: Optional[RDMAMemoryPool] = None
         self.state = "connecting"
-        self._ready = threading.Event()
 
     @property
     def conn_id(self) -> str:
@@ -97,73 +95,9 @@ class DirectedConnection:
 
     def mark_connected(self) -> None:
         self.state = "connected"
-        self._ready.set()
 
     def mark_failed(self) -> None:
         self.state = "failed"
-        self._ready.set()
-
-    def wait(self, timeout_sec: Optional[float] = None) -> "DirectedConnection":
-        if not self._ready.wait(timeout=timeout_sec):
-            raise TimeoutError(f"Timed out waiting for connection {self.conn_id}")
-        if self.state != "connected":
-            raise RuntimeError(f"Connection {self.conn_id} is {self.state}")
-        return self
-
-    def _endpoint(self) -> RDMAEndpoint:
-        if self.endpoint is None:
-            self.endpoint = self._agent.ensure_local_endpoint_created(self.peer_alias)
-        return self.endpoint
-
-    def read(self, region_or_assign, *args, stream=None, **kwargs):
-        endpoint = self._endpoint()
-        if not isinstance(region_or_assign, str):
-            actual_stream = args[0] if args else stream
-            return endpoint.read(region_or_assign, actual_stream)
-
-        region = region_or_assign
-        local_offset = kwargs.get("local_offset", args[0] if len(args) > 0 else 0)
-        remote_offset = kwargs.get("remote_offset", args[1] if len(args) > 1 else 0)
-        length = kwargs.get("length", args[2] if len(args) > 2 else None)
-        remote_region = kwargs.get("remote_region", region)
-        if length is None:
-            raise TypeError("conn.read(region, ...) requires length")
-        local_handle = self._agent.get_local_handle(region, self.local_key)
-        remote_handle = self._agent.get_remote_handle(
-            self.peer_alias,
-            remote_region,
-            resource_key=self.peer_key,
-            endpoint=endpoint,
-        )
-        return endpoint.read(
-            [(local_handle, remote_handle, local_offset, remote_offset, length)],
-            stream,
-        )
-
-    def write(self, region_or_assign, *args, stream=None, **kwargs):
-        endpoint = self._endpoint()
-        if not isinstance(region_or_assign, str):
-            actual_stream = args[0] if args else stream
-            return endpoint.write(region_or_assign, actual_stream)
-
-        region = region_or_assign
-        local_offset = kwargs.get("local_offset", args[0] if len(args) > 0 else 0)
-        remote_offset = kwargs.get("remote_offset", args[1] if len(args) > 1 else 0)
-        length = kwargs.get("length", args[2] if len(args) > 2 else None)
-        remote_region = kwargs.get("remote_region", region)
-        if length is None:
-            raise TypeError("conn.write(region, ...) requires length")
-        local_handle = self._agent.get_local_handle(region, self.local_key)
-        remote_handle = self._agent.get_remote_handle(
-            self.peer_alias,
-            remote_region,
-            resource_key=self.peer_key,
-            endpoint=endpoint,
-        )
-        return endpoint.write(
-            [(local_handle, remote_handle, local_offset, remote_offset, length)],
-            stream,
-        )
 
 
 class PeerAgent:
@@ -324,42 +258,6 @@ class PeerAgent:
             return "IB"
         return value
 
-    def _read_sysfs_port(self, device: str, ib_port: int) -> Dict[str, Any]:
-        port_dir = f"/sys/class/infiniband/{device}/ports/{ib_port}"
-
-        def read_file(name: str) -> Optional[str]:
-            try:
-                with open(os.path.join(port_dir, name), "r", encoding="utf-8") as f:
-                    return f.read().strip()
-            except OSError:
-                return None
-
-        state_raw = read_file("state")
-        state = "UNKNOWN"
-        if state_raw:
-            if "ACTIVE" in state_raw.upper():
-                state = "ACTIVE"
-            elif "DOWN" in state_raw.upper():
-                state = "DOWN"
-            else:
-                state = state_raw.split(":", 1)[-1].strip().upper()
-
-        link_type = self._normalize_link_type(read_file("link_layer"))
-        active_mtu_raw = read_file("active_mtu")
-        try:
-            active_mtu = int(active_mtu_raw) if active_mtu_raw else None
-        except ValueError:
-            active_mtu = None
-
-        port: Dict[str, Any] = {
-            "port": ib_port,
-            "state": state,
-            "link_type": link_type,
-        }
-        if active_mtu is not None:
-            port["active_mtu"] = active_mtu
-        return port
-
     def _discover_local_resource(
         self,
         *,
@@ -367,56 +265,11 @@ class PeerAgent:
         preferred_ib_port: int,
         preferred_link_type: Optional[str],
     ) -> Dict[str, Any]:
-        devices = available_nic()
-        if preferred_device and preferred_device not in devices:
-            devices = [preferred_device] + [d for d in devices if d != preferred_device]
-        elif preferred_device:
-            devices = [preferred_device] + [d for d in devices if d != preferred_device]
-        if not devices:
-            raise RuntimeError("No RDMA devices available")
-
-        nics: List[Dict[str, Any]] = []
-        for dev in devices:
-            port = self._read_sysfs_port(dev, preferred_ib_port)
-            if port["link_type"] == "UNKNOWN":
-                port["link_type"] = self._normalize_link_type(preferred_link_type)
-            if port["state"] == "UNKNOWN":
-                port["state"] = "ACTIVE"
-
-            numa_node = -1
-            try:
-                real = os.path.realpath(f"/sys/class/infiniband/{dev}/device")
-                with open(os.path.join(real, "numa_node"), "r", encoding="utf-8") as f:
-                    numa_node = int(f.read().strip())
-            except (OSError, ValueError):
-                pass
-
-            pci_bus_id = ""
-            try:
-                pci_bus_id = os.path.basename(
-                    os.path.realpath(f"/sys/class/infiniband/{dev}/device")
-                )
-            except OSError:
-                pass
-
-            nics.append(
-                {
-                    "name": dev,
-                    "health": "AVAILABLE" if port["state"] == "ACTIVE" else "DEGRADED",
-                    "numa_node": numa_node,
-                    "pci_bus_id": pci_bus_id,
-                    "ports": [port],
-                }
-            )
-
-        return {
-            "schema_version": 1,
-            "host": {"hostname": self.address, "address": self.address},
-            "nics": nics,
-            "accelerators": [],
-            "memory_keys": [],
-            "topology_epoch": int(time.time()),
-        }
+        return discover_topology(
+            preferred_device,
+            preferred_ib_port,
+            preferred_link_type,
+        )
 
     def _first_usable_resource_key(
         self,
@@ -810,7 +663,8 @@ class PeerAgent:
                     raise RuntimeError(
                         f"Multiple directed connections to {peer_alias} are not "
                         "supported by the first PeerAgent implementation. "
-                        "Pass the existing connection handle to data-plane APIs."
+                        "Use query_endpoint(peer, local_device, peer_device, ...) "
+                        "to select an established data-plane endpoint."
                     )
                 return existing
 
@@ -976,10 +830,10 @@ class PeerAgent:
                                  ib_port=1, qp_num=1)
 
         Old list/keyword form is accepted for examples and benches while they
-        migrate; it returns a list of DirectedConnection handles.
+        migrate.
         """
         if target_peers is not None:
-            return [
+            for p in target_peers:
                 self.set_desired_topology(
                     p,
                     local_device=local_device,
@@ -988,10 +842,9 @@ class PeerAgent:
                     qp_num=qp_num,
                     min_bw=min_bw,
                 )
-                for p in target_peers
-            ]
+            return None
         if isinstance(peer_alias, list):
-            return [
+            for p in peer_alias:
                 self.set_desired_topology(
                     p,
                     local_device=local_device,
@@ -1000,8 +853,7 @@ class PeerAgent:
                     qp_num=qp_num,
                     min_bw=min_bw,
                 )
-                for p in peer_alias
-            ]
+            return None
         if peer_alias is None:
             raise TypeError("set_desired_topology() requires peer_alias")
 
@@ -1035,9 +887,8 @@ class PeerAgent:
             qp_num=qp_num or self.qp_num,
         )
 
-        # Pre-create the local endpoint asynchronously. The returned
-        # DirectedConnection is the synchronization handle; callers can wait on
-        # it when they need the endpoint to be usable.
+        # Pre-create the local endpoint asynchronously. DirectedConnection is
+        # only internal state; callers use wait_for_peers() and query_endpoint().
         future = self._endpoint_creation_pool.submit(
             self.ensure_local_endpoint_created, peer_alias
         )
@@ -1063,7 +914,7 @@ class PeerAgent:
         if result.get("status") != "ok":
             raise RuntimeError(f"set_desired_topology failed: {result}")
 
-        return conn
+        return None
 
     def query(self) -> Dict[str, Dict[str, Any]]:
         """Query all registered peer agents."""
@@ -1263,7 +1114,7 @@ class PeerAgent:
     ) -> int:
         """Register remote memory region."""
         if endpoint is None:
-            endpoint = self.get_endpoint(peer_alias)
+            endpoint = self.query_endpoint(peer_alias)
         return endpoint.register_remote_memory_region(mr_name, mr_info)
 
     def get_remote_handle(
@@ -1300,7 +1151,7 @@ class PeerAgent:
     # ------------------------------------------------------------------
     # I/O
     # ------------------------------------------------------------------
-    def get_connection(self, peer_alias: str) -> DirectedConnection:
+    def _get_connection(self, peer_alias: str) -> DirectedConnection:
         with self._connections_lock:
             conn = self._connections.get(peer_alias)
         if conn is None:
@@ -1310,44 +1161,151 @@ class PeerAgent:
             )
         return conn
 
-    def get_endpoint(self, peer_alias) -> RDMAEndpoint:
-        """Get RDMA endpoint for peer (must be connected)."""
-        if isinstance(peer_alias, DirectedConnection):
-            ep = peer_alias.endpoint
-            if ep is None:
-                return self.ensure_local_endpoint_created(peer_alias.peer_alias)
-            return ep
+    def query_endpoint(
+        self,
+        peer_alias: str,
+        local_device: Optional[str] = None,
+        peer_device: Optional[str] = None,
+        ib_port: Optional[int] = None,
+        qp_num: Optional[int] = None,
+    ) -> RDMAEndpoint:
+        """Return the established RDMAEndpoint selected by a directed topology."""
+        conn = self._get_connection(peer_alias)
+        if local_device is not None and conn.local_key.device != local_device:
+            raise RuntimeError(
+                f"Endpoint for {peer_alias} uses local device "
+                f"{conn.local_key.device}, not {local_device}"
+            )
+        if peer_device is not None and conn.peer_key.device != peer_device:
+            raise RuntimeError(
+                f"Endpoint for {peer_alias} uses peer device "
+                f"{conn.peer_key.device}, not {peer_device}"
+            )
+        if ib_port is not None and conn.local_key.ib_port != int(ib_port):
+            raise RuntimeError(
+                f"Endpoint for {peer_alias} uses ib_port "
+                f"{conn.local_key.ib_port}, not {ib_port}"
+            )
+        if qp_num is not None and conn.qp_num != int(qp_num):
+            raise RuntimeError(
+                f"Endpoint for {peer_alias} uses qp_num {conn.qp_num}, not {qp_num}"
+            )
+
+        if conn.endpoint is not None:
+            return conn.endpoint
+
         with self._endpoints_lock:
-            if peer_alias not in self._endpoints:
+            endpoint = self._endpoints.get(peer_alias)
+            if endpoint is None:
                 raise RuntimeError(
                     f"Endpoint for {peer_alias} not found. "
-                    "Ensure set_desired_topology(peer, ...) was called and wait for the returned connection."
+                    "Call set_desired_topology(peer, ...), then wait_for_peers([...])."
                 )
-            return self._endpoints[peer_alias]
+            if conn.endpoint is None:
+                _, pool = self._get_context_and_pool(conn.local_key)
+                conn.attach_endpoint(endpoint, pool)
+            return endpoint
 
-    # One-shot I/O forwarders (convenience facade over get_endpoint().op()).
-    #
-    # Cost: one dict lookup + one Python lock acquire per call; O(1) per
-    # submission, not O(n) per assignment. Hot loops should still cache
-    # the endpoint once (ep = agent.get_endpoint(peer)) and call
-    # ep.<op>(...) directly.
+    def _is_named_io_assign(self, value: Any) -> bool:
+        return (
+            isinstance(value, (list, tuple))
+            and bool(value)
+            and isinstance(value[0], str)
+        )
+
+    def _is_named_io_batch(self, assign: Any) -> bool:
+        if self._is_named_io_assign(assign):
+            return True
+        return (
+            isinstance(assign, (list, tuple))
+            and bool(assign)
+            and self._is_named_io_assign(assign[0])
+        )
+
+    def _iter_named_io_assign(self, assign: Any):
+        if self._is_named_io_assign(assign):
+            yield assign
+            return
+        yield from assign
+
+    def _endpoint_assign(
+        self, conn: DirectedConnection, endpoint: RDMAEndpoint, assign
+    ):
+        endpoint_assign = []
+        for item in self._iter_named_io_assign(assign):
+            if len(item) == 4:
+                local_region, local_offset, remote_offset, length = item
+                remote_region = local_region
+            elif len(item) == 5:
+                local_region, remote_region, local_offset, remote_offset, length = item
+            else:
+                raise TypeError(
+                    "named RDMA assign must be "
+                    "(region, local_offset, remote_offset, length) or "
+                    "(local_region, remote_region, local_offset, remote_offset, length)"
+                )
+            local_handle = self.get_local_handle(str(local_region), conn.local_key)
+            remote_handle = self.get_remote_handle(
+                conn.peer_alias,
+                str(remote_region),
+                resource_key=conn.peer_key,
+                endpoint=endpoint,
+            )
+            endpoint_assign.append(
+                (
+                    local_handle,
+                    remote_handle,
+                    int(remote_offset),
+                    int(local_offset),
+                    int(length),
+                )
+            )
+        return endpoint_assign
+
+    def _maybe_endpoint_assign(
+        self, conn: DirectedConnection, endpoint: RDMAEndpoint, assign
+    ):
+        if self._is_named_io_batch(assign):
+            return self._endpoint_assign(conn, endpoint, assign)
+        return assign
+
+    # One-shot I/O forwarders. Named batches use PeerAgent memory-key
+    # resolution; numeric assignments are passed through to the raw endpoint.
     def read(self, peer_alias: str, assign, stream=None):
-        return self.get_endpoint(peer_alias).read(assign, stream)
+        conn = self._get_connection(peer_alias)
+        endpoint = self.query_endpoint(peer_alias)
+        return endpoint.read(
+            self._maybe_endpoint_assign(conn, endpoint, assign), stream
+        )
 
     def write(self, peer_alias: str, assign, stream=None):
-        return self.get_endpoint(peer_alias).write(assign, stream)
+        conn = self._get_connection(peer_alias)
+        endpoint = self.query_endpoint(peer_alias)
+        return endpoint.write(
+            self._maybe_endpoint_assign(conn, endpoint, assign), stream
+        )
 
-    def write_with_imm(self, peer_alias: str, assign, imm_data: int = 0, stream=None):
-        return self.get_endpoint(peer_alias).write_with_imm(assign, imm_data, stream)
+    def write_with_imm(
+        self,
+        peer_alias: str,
+        assign,
+        imm_data: int = 0,
+        stream=None,
+    ):
+        conn = self._get_connection(peer_alias)
+        endpoint = self.query_endpoint(peer_alias)
+        return endpoint.write_with_imm(
+            self._maybe_endpoint_assign(conn, endpoint, assign), imm_data, stream
+        )
 
     def send(self, peer_alias: str, chunk, stream=None):
-        return self.get_endpoint(peer_alias).send(chunk, stream)
+        return self.query_endpoint(peer_alias).send(chunk, stream)
 
     def recv(self, peer_alias: str, chunk, stream=None):
-        return self.get_endpoint(peer_alias).recv(chunk, stream)
+        return self.query_endpoint(peer_alias).recv(chunk, stream)
 
     def imm_recv(self, peer_alias: str, stream=None):
-        return self.get_endpoint(peer_alias).imm_recv(stream)
+        return self.query_endpoint(peer_alias).imm_recv(stream)
 
     # ------------------------------------------------------------------
     # Shutdown
@@ -1471,7 +1429,8 @@ def start_peer_agent(
     Returns:
         PeerAgent instance
 
-    Use set_desired_topology(target_peers=[...]) to declare which peers to connect to.
+    Use set_desired_topology(peer_alias, ...) to declare a directed connection,
+    then wait_for_peers([...]) before data-plane I/O.
     """
     return PeerAgent(
         alias=alias,

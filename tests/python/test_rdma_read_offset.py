@@ -40,8 +40,8 @@ def test_rdma_read_offset_order():
 
     # Declarative connection
     print("\n2. Setting desired topology and waiting for connection...")
-    conn = agent1.set_desired_topology("test_agent_2", ib_port=1, qp_num=1)
-    conn.wait()
+    agent1.set_desired_topology("test_agent_2", ib_port=1, qp_num=1)
+    agent1.wait_for_peers(["test_agent_2"])
     agent2.wait_for_peers(["test_agent_1"])
     print("   Connection established")
 
@@ -85,8 +85,8 @@ def test_rdma_read_offset_order():
 
     # Get endpoint
     print("\n5. Getting endpoint...")
-    endpoint_1 = agent1.get_endpoint("test_agent_2")
-    endpoint_2 = agent2.get_endpoint("test_agent_1")
+    endpoint_1 = agent1.query_endpoint("test_agent_2")
+    endpoint_2 = agent2.query_endpoint("test_agent_1")
     print("   Endpoints obtained")
 
     # Test Case 1: Read from remote offset 0 to local offset 0

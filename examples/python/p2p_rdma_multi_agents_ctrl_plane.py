@@ -6,6 +6,7 @@ Uses set_desired_topology() and TopologyReconciler for declarative connection se
 """
 
 import contextlib
+import json
 import threading
 import time
 
@@ -33,6 +34,49 @@ def run_parallel(agents, func):
         threads.append(t)
     for t in threads:
         t.join()
+
+
+def describe_resource(alias, resource):
+    if resource is None:
+        return f"{alias}: <unavailable>"
+
+    host = resource.get("host", {})
+    host_addr = host.get("address") if isinstance(host, dict) else host
+    nic_parts = []
+    for nic in resource.get("nics") or []:
+        port_parts = []
+        for port in nic.get("ports") or []:
+            port_parts.append(
+                "port={port} link={link_type} state={state}".format(
+                    port=port.get("port", 1),
+                    link_type=port.get("link_type", "UNKNOWN"),
+                    state=port.get("state", "UNKNOWN"),
+                )
+            )
+        nic_parts.append(
+            "{name} health={health} [{ports}]".format(
+                name=nic.get("name", "<unknown>"),
+                health=nic.get("health", "UNKNOWN"),
+                ports=", ".join(port_parts) or "no ports",
+            )
+        )
+
+    return "  {alias}: host={host} nics={nics} memory_keys={memory_keys}".format(
+        alias=alias,
+        host=host_addr,
+        nics="; ".join(nic_parts) or "<none>",
+        memory_keys=resource.get("memory_keys", []),
+    )
+
+
+def print_topology_discovery(observer_alias, observer_agent, aliases):
+    print(f"Observer: {observer_alias}")
+    print("Active agents:", observer_agent.query_active_agent())
+    for alias in aliases:
+        resource = observer_agent.query_resource(alias)
+        print(describe_resource(alias, resource))
+        if verbose and resource is not None:
+            print(json.dumps(resource, indent=2, sort_keys=True))
 
 
 # Start multiple peer agents
@@ -68,6 +112,12 @@ with contextlib.ExitStack() as stack:
         peers = agent.query()
         if verbose:
             print(f"{alias} sees: {list(peers.keys())}")
+
+    print("\n" + "=" * 60)
+    print("Topology discovery:")
+    print("=" * 60)
+    observer_alias, observer_agent = next(iter(agents.items()))
+    print_topology_discovery(observer_alias, observer_agent, list(agents.keys()))
 
     # Declarative: set desired topology (mesh - each agent connects to all others)
     print("\n" + "=" * 60)
