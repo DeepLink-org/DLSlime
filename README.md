@@ -161,21 +161,6 @@ LMDeploy reference: [DistServe HTTP endpoints](https://lmdeploy.readthedocs.io/e
 
 Coming soon.
 
-## Component Map
-
-| Component                           | Layer                     | What it does                                                                                                           |
-| ----------------------------------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `NanoCtrl/`                         | Service governance        | Rust control-plane server and Python client for service registry, heartbeat, PeerAgent coordination, and RDMA metadata |
-| `dlslime.peer_agent`                | Peer coordination         | Python PeerAgent abstraction for discovery, connection management, memory registration, and read/write facade          |
-| `dlslime.rpc`                       | Application service       | Service/proxy RPC helpers built over PeerAgent mailbox transport                                                       |
-| `dlslime.cache`                     | Application service       | Cache service/client wrappers around assignment manifests and RDMA cache slabs                                         |
-| `dlslime._slime_c`                  | Endpoint and C++ bindings | Python bindings for endpoint, assignment, cache, and transport primitives                                              |
-| `dlslime/csrc/engine`               | Transfer abstraction      | Common assignment and transfer-engine interfaces                                                                       |
-| `dlslime/csrc/engine/rdma`          | Transfer engine           | RDMA RC endpoint implementation                                                                                        |
-| `dlslime/csrc/engine/nvlink`        | Transfer engine           | NVLink endpoint implementation                                                                                         |
-| `dlslime/csrc/engine/ascend_direct` | Transfer engine           | Ascend Direct endpoint implementation                                                                                  |
-| `dlslime/csrc/device`               | Device layer              | Device API, futures, signals, and platform-specific helpers                                                            |
-
 ## Common Use Cases
 
 | Use case                           | Start here                                                    |
