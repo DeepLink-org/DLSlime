@@ -9,22 +9,130 @@
 </p>
 <h2 align="center"> Flexible & Efficient Heterogeneous Transfer Toolkit </h2>
 
-DLSlime is a heterogeneous transfer toolkit for distributed deep learning
-systems. It provides Python and C++ APIs for peer-to-peer data movement across
-RDMA, NVLink, Ascend Direct, and torch-distributed style backends, with higher
-level PeerAgent, SlimeRPC, and cache-service utilities built on top of the same
-data plane.
+DLSlime is a layered communication and microservice toolkit for distributed
+AI systems. It starts from heterogeneous device transports such as RDMA, NVLink,
+and Ascend Direct, wraps them in endpoint and assignment APIs, then builds
+PeerAgent coordination, SlimeRPC, and DLSlimeCache on top. NanoCtrl provides the
+control plane for service registration, discovery, liveness, and PeerAgent/RDMA
+metadata.
 
-## Highlights
+The goal is to let systems compose high-performance data movement without tying
+application logic to one transport, one topology, or one service layout.
 
-| Area              | What DLSlime Provides                                                    |
-| ----------------- | ------------------------------------------------------------------------ |
-| P2P transfer      | RDMA RC read/write/send-recv, NVLink transfer, Ascend Direct transfer    |
-| Python control    | `RDMAEndpoint`, `PeerAgent`, memory-region registration, async futures   |
-| RPC               | SlimeRPC service/proxy helpers over PeerAgent mailbox transport          |
-| Cache service     | `dlslime-cache` service for assignment-directory backed RDMA cache slabs |
-| Torch integration | Optional torch backend and torchrun examples                             |
-| Benchmarks        | Transfer, endpoint, cache, and RPC microbenchmarks under `bench/`        |
+## Layered Architecture
+
+DLSlime is organized as a stack. Lower layers move bytes and expose device
+capabilities; upper layers coordinate peers and provide service-shaped building
+blocks.
+
+| Layer                     | Components                                             | Responsibility                                                                                           |
+| ------------------------- | ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| Application services      | DLSlimeCache, SlimeRPC services, user systems          | Use DLSlime as a service substrate for cache, RPC, and custom distributed components                     |
+| Service governance        | NanoCtrl                                               | Register services, discover by `kind`, maintain heartbeat TTLs, scope isolation, publish Redis addresses |
+| Peer coordination         | PeerAgent, desired topology, MR registry               | Discover peers, register memory regions, establish directed connections, clean stale state               |
+| Endpoint API              | `RDMAEndpoint`, `NVLinkEndpoint`, Ascend endpoints     | Register local/remote memory and issue read/write/send-recv operations                                   |
+| Transfer engines          | RDMA RC, NVLink, Ascend Direct, optional torch backend | Execute transport-specific data movement                                                                 |
+| Device and topology layer | NIC/GPU/NPU discovery, resource records                | Describe available devices, ports, link types, and placement hints                                       |
+
+```mermaid
+graph TB
+    subgraph App[Application services]
+        User[User systems]
+        Cache[DLSlimeCache]
+        RPC[SlimeRPC service/proxy]
+    end
+
+    subgraph Ctrl[Service governance]
+        NanoCtrl[NanoCtrl]
+        Redis[(Redis)]
+    end
+
+    subgraph Peer[Peer coordination]
+        AgentA[PeerAgent A]
+        AgentB[PeerAgent B]
+        MR[MR registry]
+        Topology[Desired topology]
+    end
+
+    subgraph Endpoint[Endpoint API]
+        RDMAEndpoint[RDMAEndpoint]
+        NVLinkEndpoint[NVLinkEndpoint]
+        AscendEndpoint[Ascend Direct endpoint]
+    end
+
+    subgraph Transport[Transfer engines]
+        RDMA[RDMA RC]
+        NVLink[NVLink]
+        Ascend[Ascend Direct]
+        Torch[Torch backend]
+    end
+
+    subgraph Device[Device and topology]
+        NIC[NICs / IB ports]
+        GPU[GPUs]
+        NPU[Ascend NPUs]
+    end
+
+    User --> RPC
+    User --> Cache
+    Cache --> AgentA
+    RPC --> AgentA
+    AgentA --> NanoCtrl
+    AgentB --> NanoCtrl
+    NanoCtrl <--> Redis
+    NanoCtrl --> MR
+    NanoCtrl --> Topology
+    AgentA --> RDMAEndpoint
+    AgentB --> RDMAEndpoint
+    AgentA --> NVLinkEndpoint
+    RDMAEndpoint --> RDMA
+    NVLinkEndpoint --> NVLink
+    AscendEndpoint --> Ascend
+    RDMA --> NIC
+    NVLink --> GPU
+    Ascend --> NPU
+    Torch --> GPU
+```
+
+## How The Layers Work Together
+
+1. A service starts and registers itself with NanoCtrl as a generic entity, for
+   example `kind=cache` or `kind=rpc-worker`.
+2. A PeerAgent registers its resource record and memory regions with NanoCtrl.
+3. Clients discover services by `kind` and scope, then connect to the service or
+   its PeerAgent.
+4. PeerAgents exchange connection intent and memory-region metadata through
+   NanoCtrl/Redis.
+5. Endpoint objects issue the actual transfer through RDMA, NVLink, Ascend
+   Direct, or the selected backend.
+6. Higher-level components such as SlimeRPC and DLSlimeCache reuse the same
+   data plane instead of inventing separate transfer paths.
+
+## Component Map
+
+| Component                           | Layer                     | What it does                                                                                                           |
+| ----------------------------------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `NanoCtrl/`                         | Service governance        | Rust control-plane server and Python client for service registry, heartbeat, PeerAgent coordination, and RDMA metadata |
+| `dlslime.peer_agent`                | Peer coordination         | Python PeerAgent abstraction for discovery, connection management, memory registration, and read/write facade          |
+| `dlslime.rpc`                       | Application service       | Service/proxy RPC helpers built over PeerAgent mailbox transport                                                       |
+| `dlslime.cache`                     | Application service       | Cache service/client wrappers around assignment manifests and RDMA cache slabs                                         |
+| `dlslime._slime_c`                  | Endpoint and C++ bindings | Python bindings for endpoint, assignment, cache, and transport primitives                                              |
+| `dlslime/csrc/engine`               | Transfer abstraction      | Common assignment and transfer-engine interfaces                                                                       |
+| `dlslime/csrc/engine/rdma`          | Transfer engine           | RDMA RC endpoint implementation                                                                                        |
+| `dlslime/csrc/engine/nvlink`        | Transfer engine           | NVLink endpoint implementation                                                                                         |
+| `dlslime/csrc/engine/ascend_direct` | Transfer engine           | Ascend Direct endpoint implementation                                                                                  |
+| `dlslime/csrc/device`               | Device layer              | Device API, futures, signals, and platform-specific helpers                                                            |
+
+## Common Use Cases
+
+| Use case                           | Start here                                                    |
+| ---------------------------------- | ------------------------------------------------------------- |
+| Direct P2P transfer                | `RDMAEndpoint` examples under `examples/python/p2p_rdma_*`    |
+| Control-plane coordinated transfer | `PeerAgent` examples under `examples/python/*_ctrl_plane.py`  |
+| Python service RPC                 | `examples/python/rpc_example.py` and `dlslime.rpc`            |
+| RDMA-backed cache service          | `dlslime-cache` and `examples/python/cache_client_example.py` |
+| Transport benchmarking             | `bench/README.md`                                             |
+| Ascend integration                 | `docs/huawei_ascend/README.md`                                |
 
 ## Install
 
