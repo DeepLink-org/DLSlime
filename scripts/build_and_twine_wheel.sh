@@ -18,7 +18,7 @@ for py_version in "${PYTHON_VERSIONS[@]}"; do
     export PYTHON_EXE="$PYTHON_PATH/python"
     export PIP_EXE="$PYTHON_PATH/pip"
 
-    $PIP_EXE install cmake pip build twine pybind11-stubgen scikit-build-core pybind11 ninja
+    $PIP_EXE install cmake pip build twine pybind11-stubgen scikit-build-core pybind11 ninja cython
 
     rm -rf build dlslime.egg-info
     # rm -f dlslime/*.pyi
