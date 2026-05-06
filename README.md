@@ -24,6 +24,18 @@ The same layers are exposed as Python/C++ APIs, local services, and HTTP
 control-plane contracts, so DLSlime can be embedded into existing serving,
 inference, cache, or RL systems instead of replacing them.
 
+## Latest News
+
+<details open>
+<summary>2025</summary>
+
+- \[2025/12\] DLSlime was featured at the Global C++ and System Software Technology Conference in the talk “Design and Implementation of a Flexible and Efficient Heterogeneous Transfer Library”. [View the session page](https://cpp-summit.org/speaker/1222?uid=c1046).
+- \[2025/09\] DLSlime was open-sourced as DeepLink's unified communication library for efficient heterogeneous training and inference. [Read the WeChat article](https://mp.weixin.qq.com/s/9K6XkDdul3MpjP3qy6KtRg).
+- \[2025/07\] DLSlime supports the DeepLink ultra-large-scale cross-region hybrid training solution released by Shanghai AI Laboratory, including the “3D parallelism + PS” architecture and kilometer-scale heterogeneous training deployments. [Read the SHLab news](https://www.shlab.org.cn/news/5444093).
+- \[2025/06\] DLSlime provides DeepSeek-V3 PD disaggregation support for [LMDeploy](https://github.com/InternLM/lmdeploy).
+
+</details>
+
 ## PeerAgent-Centered Architecture
 
 DLSlime is organized around PeerAgent. Application services attach to
