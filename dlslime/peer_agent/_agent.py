@@ -112,33 +112,38 @@ class DirectedConnection:
 class PeerConnection:
     """Public handle for one peer connection."""
 
-    def __init__(self, agent: "PeerAgent", peer_alias: str) -> None:
+    def __init__(self, agent: "PeerAgent", conn_id: str) -> None:
         self._agent = agent
-        self.peer_alias = peer_alias
+        self._conn_id = conn_id
 
     def _connection(self) -> DirectedConnection:
         with self._agent._connections_lock:
-            conn = self._agent._connections.get(self.peer_alias)
+            conn = self._agent._connections.get(self._conn_id)
         if conn is None:
             raise RuntimeError(
-                f"Connection for {self.peer_alias} not found. "
+                f"Connection {self._conn_id!r} not found. "
                 "Call connect_to(peer, ...) first."
             )
         return conn
 
+    @property
+    def peer_alias(self) -> str:
+        """Return the peer alias for this connection."""
+        return self._connection().peer_alias
+
     def wait(self, timeout: float = 60.0) -> "PeerConnection":
         """Block until this peer connection is ready."""
-        self._agent._wait_connected(self.peer_alias, timeout_sec=timeout)
+        self._agent._wait_connected(self._conn_id, timeout_sec=timeout)
         return self
 
     def is_connected(self) -> bool:
         """Return whether this peer is connected locally."""
-        return self._agent._is_peer_connected(self.peer_alias)
+        return self._agent._is_connection_connected(self._conn_id)
 
     @property
     def conn_id(self) -> str:
         """Return the stable connection id."""
-        return self._connection().conn_id
+        return self._conn_id
 
     @property
     def local_nic(self) -> str:
@@ -162,7 +167,7 @@ class PeerConnection:
         if conn.endpoint is not None:
             return conn.endpoint
         with self._agent._endpoints_lock:
-            endpoint = self._agent._endpoints.get(self.peer_alias)
+            endpoint = self._agent._endpoints.get(self._conn_id)
         if endpoint is not None:
             _, pool = self._agent._get_context_and_pool(conn.local_key)
             conn.attach_endpoint(endpoint, pool)
@@ -224,11 +229,11 @@ class PeerAgent:
         # unchanged.
         self._connected_peers_cond = threading.Condition(self._connected_peers_lock)
 
-        # Prevents duplicate in-flight connect attempts for the same peer.
+        # Prevents duplicate in-flight connect attempts for the same connection.
         self._connecting_peers: Set[str] = set()
         self._connecting_peers_lock = threading.Lock()
 
-        # Peers we've already XADDed our qp_ready to. Used to suppress
+        # Connections we've already XADDed our qp_ready for. Used to suppress
         # ping-pong: without this, an inbound qp_ready triggers another
         # outbound qp_ready, which triggers another inbound one, etc. —
         # each round walking the mailbox listener's single-threaded queue.
@@ -594,25 +599,37 @@ class PeerAgent:
                             logger.info(
                                 "PeerAgent %s: Cleanup from peer %s", self.alias, peer
                             )
+                            removed = []
                             with self._endpoints_lock:
-                                if peer in self._endpoints:
+                                with self._connections_lock:
+                                    conn_ids = [
+                                        conn_id
+                                        for conn_id, conn in self._connections.items()
+                                        if conn.peer_alias == peer
+                                    ]
+                                for conn_id in conn_ids:
+                                    if conn_id not in self._endpoints:
+                                        continue
                                     # Force-complete any blocked RDMA waits before
                                     # dropping the endpoint reference. Otherwise a
                                     # thread blocked in imm_recv()/wait() can hang
                                     # forever after the remote peer exits.
-                                    endpoint = self._endpoints[peer]
+                                    endpoint = self._endpoints[conn_id]
                                     if hasattr(endpoint, "shutdown"):
                                         endpoint.shutdown()
                                     with self._connected_peers_lock:
-                                        self._connected_peers.discard(peer)
+                                        self._connected_peers.discard(conn_id)
                                         self._connected_peers_cond.notify_all()
-                                    self._clear_peer_notified(peer)
-                                    del self._endpoints[peer]
-                                    logger.info(
-                                        "PeerAgent %s: Removed endpoint for %s",
-                                        self.alias,
-                                        peer,
-                                    )
+                                    self._clear_peer_notified(conn_id)
+                                    del self._endpoints[conn_id]
+                                    removed.append(conn_id)
+                            for conn_id in removed:
+                                logger.info(
+                                    "PeerAgent %s: Removed endpoint %s for %s",
+                                    self.alias,
+                                    conn_id,
+                                    peer,
+                                )
                 except redis.exceptions.ConnectionError:
                     time.sleep(0.1)
                 except Exception as e:
@@ -738,20 +755,20 @@ class PeerAgent:
         profile: str = "default",
     ) -> DirectedConnection:
         with self._connections_lock:
-            existing = self._connections.get(peer_alias)
-            if existing is not None:
-                if local_key is not None and (
-                    existing.local_key != local_key
-                    or (peer_key is not None and existing.peer_key != peer_key)
-                    or (qp_num is not None and existing.qp_num != qp_num)
-                ):
+            peer_connections = [
+                conn
+                for conn in self._connections.values()
+                if conn.peer_alias == peer_alias
+            ]
+            if local_key is None:
+                if len(peer_connections) == 1:
+                    return peer_connections[0]
+                if len(peer_connections) > 1:
                     raise RuntimeError(
-                        f"Multiple directed connections to {peer_alias} are not "
-                        "supported by the first PeerAgent implementation. "
-                        "Use get_connections() to inspect established "
-                        "connections."
+                        f"Multiple connections to {peer_alias} exist. "
+                        "Use query_connection(peer, local_nic=..., remote_nic=...) "
+                        "to select one."
                     )
-                return existing
 
             if local_key is None:
                 local_key = self._first_usable_resource_key(
@@ -765,6 +782,14 @@ class PeerAgent:
                     local_key.ib_port,
                     local_key.link_type,
                 )
+            for conn in peer_connections:
+                if conn.local_key == local_key and conn.peer_key == peer_key:
+                    if qp_num is not None and conn.qp_num != qp_num:
+                        raise RuntimeError(
+                            f"Connection {conn.conn_id} already exists with "
+                            f"qp_num={conn.qp_num}, not {qp_num}."
+                        )
+                    return conn
             conn = DirectedConnection(
                 self,
                 peer_alias,
@@ -773,15 +798,16 @@ class PeerAgent:
                 qp_num or 1,
                 profile=profile,
             )
-            self._connections[peer_alias] = conn
+            self._connections[conn.conn_id] = conn
             return conn
 
-    def _connection_meta(self, peer_alias: str) -> Dict[str, Any]:
-        conn = self._get_or_create_connection(peer_alias)
+    def _connection_meta(self, conn_id: str) -> Dict[str, Any]:
+        with self._connections_lock:
+            conn = self._connections[conn_id]
         return {
             "conn_id": conn.conn_id,
             "src": self.alias,
-            "dst": peer_alias,
+            "dst": conn.peer_alias,
             "src_device": conn.local_key.device,
             "dst_device": conn.peer_key.device,
             "ib_port": conn.local_key.ib_port,
@@ -819,7 +845,7 @@ class PeerAgent:
             profile=str(meta.get("profile") or "default"),
         )
 
-    def _ensure_local_endpoint_created(self, peer_alias: str) -> RDMAEndpoint:
+    def _ensure_local_endpoint_created(self, conn_id: str) -> RDMAEndpoint:
         """
         Idempotent: create endpoint for peer if not exists.
         Returns the endpoint (existing or newly created). Thread-safe.
@@ -832,15 +858,17 @@ class PeerAgent:
         """
         # Fast path: lookup under lock.
         with self._endpoints_lock:
-            ep = self._endpoints.get(peer_alias)
+            ep = self._endpoints.get(conn_id)
             if ep is not None:
-                conn = self._get_or_create_connection(peer_alias)
+                with self._connections_lock:
+                    conn = self._connections[conn_id]
                 if conn.endpoint is None:
                     _, pool = self._get_context_and_pool(conn.local_key)
                     conn.attach_endpoint(ep, pool)
                 return ep
 
-        conn = self._get_or_create_connection(peer_alias)
+        with self._connections_lock:
+            conn = self._connections[conn_id]
         _, pool = self._get_context_and_pool(conn.local_key)
         self._materialize_all_regions_for_key(conn.local_key)
 
@@ -852,13 +880,13 @@ class PeerAgent:
         )
 
         with self._endpoints_lock:
-            existing = self._endpoints.get(peer_alias)
+            existing = self._endpoints.get(conn_id)
             if existing is not None:
                 # Lost the race. `new_ep` goes out of scope; its destructor
                 # releases the QPs we allocated. Cheap in absolute terms
                 # (~14 ms once) and rare in practice.
                 return existing
-            self._endpoints[peer_alias] = new_ep
+            self._endpoints[conn_id] = new_ep
             conn.attach_endpoint(new_ep, pool)
             return new_ep
 
@@ -867,9 +895,9 @@ class PeerAgent:
         result: Dict[str, Dict[str, PeerConnection]] = {}
         with self._connections_lock:
             items = list(self._connections.items())
-        for peer_alias, conn in items:
-            result.setdefault(peer_alias, {})[conn.conn_id] = PeerConnection(
-                self, peer_alias
+        for conn_id, conn in items:
+            result.setdefault(conn.peer_alias, {})[conn_id] = PeerConnection(
+                self, conn_id
             )
         return result
 
@@ -881,45 +909,47 @@ class PeerAgent:
         remote_nic: Optional[str] = None,
     ) -> Optional[PeerConnection]:
         """Return a connection matching peer and optional NIC filters."""
+        matches = []
         with self._connections_lock:
-            conn = self._connections.get(peer_alias)
-        if conn is None:
+            for conn_id, conn in sorted(self._connections.items()):
+                if conn.peer_alias != peer_alias:
+                    continue
+                if local_nic is not None and conn.local_key.device != local_nic:
+                    continue
+                if remote_nic is not None and conn.peer_key.device != remote_nic:
+                    continue
+                matches.append(conn_id)
+        if not matches:
             return None
-        if local_nic is not None and conn.local_key.device != local_nic:
-            return None
-        if remote_nic is not None and conn.peer_key.device != remote_nic:
-            return None
-        return PeerConnection(self, peer_alias)
+        return PeerConnection(self, matches[0])
 
-    def _is_peer_connected(self, peer_alias: str) -> bool:
+    def _is_connection_connected(self, conn_id: str) -> bool:
         with self._connected_peers_lock:
-            return peer_alias in self._connected_peers
+            return conn_id in self._connected_peers
 
-    def _mark_peer_connected(self, peer_alias: str) -> None:
+    def _mark_connection_connected(self, conn_id: str) -> None:
         with self._connections_lock:
-            conn = self._connections.get(peer_alias)
+            conn = self._connections.get(conn_id)
             if conn is not None:
                 conn.mark_connected()
         with self._connected_peers_lock:
-            self._connected_peers.add(peer_alias)
+            self._connected_peers.add(conn_id)
             self._connected_peers_cond.notify_all()
 
-    def _has_notified_peer(self, peer_alias: str) -> bool:
-        """True iff we've already sent our qp_ready to this peer during the
-        current session. Suppresses the redundant outbound qp_ready that
-        would otherwise fire on every qp_ready we *receive*."""
+    def _has_notified_peer(self, conn_id: str) -> bool:
+        """True iff we've already sent qp_ready for this connection."""
         with self._notified_peers_lock:
-            return peer_alias in self._notified_peers
+            return conn_id in self._notified_peers
 
-    def _mark_peer_notified(self, peer_alias: str) -> None:
+    def _mark_peer_notified(self, conn_id: str) -> None:
         with self._notified_peers_lock:
-            self._notified_peers.add(peer_alias)
+            self._notified_peers.add(conn_id)
 
-    def _clear_peer_notified(self, peer_alias: str) -> None:
+    def _clear_peer_notified(self, conn_id: str) -> None:
         """Allow the next handshake cycle to re-notify — called when a
         peer disconnects / is cleaned up so a reconnect works."""
         with self._notified_peers_lock:
-            self._notified_peers.discard(peer_alias)
+            self._notified_peers.discard(conn_id)
 
     # ------------------------------------------------------------------
     # Topology
@@ -970,7 +1000,7 @@ class PeerAgent:
         # Pre-create the local endpoint asynchronously. DirectedConnection is
         # only internal state; callers use the returned PeerConnection handle.
         future = self._endpoint_creation_pool.submit(
-            self._ensure_local_endpoint_created, peer_alias
+            self._ensure_local_endpoint_created, conn.conn_id
         )
 
         def _mark_failed_on_error(f):
@@ -996,9 +1026,9 @@ class PeerAgent:
         if result.get("status") != "ok":
             raise RuntimeError(f"connect_to failed: {result}")
 
-        return PeerConnection(self, peer_alias)
+        return PeerConnection(self, conn.conn_id)
 
-    def _wait_connected(self, peer_alias: str, timeout_sec: float = 60.0) -> None:
+    def _wait_connected(self, conn_id: str, timeout_sec: float = 60.0) -> None:
         """Block until one peer connection is ready.
 
         Event-driven: mark_peer_connected notifies the condition variable,
@@ -1006,31 +1036,31 @@ class PeerAgent:
         of the reconciler's mark — no polling interval floor.
         """
         with self._connections_lock:
-            unknown = peer_alias not in self._connections
+            unknown = conn_id not in self._connections
             known = sorted(self._connections)
         if unknown:
             raise ValueError(
-                f"wait() got peer with no connection: {peer_alias!r}. "
-                f"Known peers: {known}. Call connect_to(peer, ...) first; "
+                f"wait() got unknown connection: {conn_id!r}. "
+                f"Known connections: {known}. Call connect_to(peer, ...) first; "
                 "device names belong in connect_to(), not wait()."
             )
 
-        _tlog(f"{self.alias}: wait({peer_alias}) ENTER")
+        _tlog(f"{self.alias}: wait({conn_id}) ENTER")
         t0 = time.perf_counter()
         deadline = time.monotonic() + timeout_sec
         with self._connected_peers_cond:
             while True:
-                if peer_alias in self._connected_peers:
+                if conn_id in self._connected_peers:
                     _tlog(
-                        f"{self.alias}: wait({peer_alias}) DONE "
+                        f"{self.alias}: wait({conn_id}) DONE "
                         f"+{(time.perf_counter() - t0) * 1000:.3f}ms"
                     )
                     return
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     raise TimeoutError(
-                        f"Timeout waiting for peer {peer_alias!r}. "
-                        f"Connected: {sorted(self._connected_peers)}"
+                        f"Timeout waiting for connection {conn_id!r}. "
+                        f"Connected connections: {sorted(self._connected_peers)}"
                     )
                 self._connected_peers_cond.wait(timeout=remaining)
 
@@ -1236,15 +1266,34 @@ class PeerAgent:
     # ------------------------------------------------------------------
     # I/O
     # ------------------------------------------------------------------
-    def _get_connection(self, peer_alias: str) -> DirectedConnection:
+    def _get_connection(
+        self,
+        peer_alias: str,
+        local_device: Optional[str] = None,
+        peer_device: Optional[str] = None,
+        ib_port: Optional[int] = None,
+        qp_num: Optional[int] = None,
+    ) -> DirectedConnection:
+        matches = []
         with self._connections_lock:
-            conn = self._connections.get(peer_alias)
-        if conn is None:
+            for _, conn in sorted(self._connections.items()):
+                if conn.peer_alias != peer_alias:
+                    continue
+                if local_device is not None and conn.local_key.device != local_device:
+                    continue
+                if peer_device is not None and conn.peer_key.device != peer_device:
+                    continue
+                if ib_port is not None and conn.local_key.ib_port != int(ib_port):
+                    continue
+                if qp_num is not None and conn.qp_num != int(qp_num):
+                    continue
+                matches.append(conn)
+        if not matches:
             raise RuntimeError(
                 f"Connection for {peer_alias} not found. "
                 "Call connect_to(peer, ...) first."
             )
-        return conn
+        return matches[0]
 
     def _get_endpoint(
         self,
@@ -1255,7 +1304,13 @@ class PeerAgent:
         qp_num: Optional[int] = None,
     ) -> RDMAEndpoint:
         """Return the established RDMAEndpoint selected by a directed topology."""
-        conn = self._get_connection(peer_alias)
+        conn = self._get_connection(
+            peer_alias,
+            local_device=local_device,
+            peer_device=peer_device,
+            ib_port=ib_port,
+            qp_num=qp_num,
+        )
         if local_device is not None and conn.local_key.device != local_device:
             raise RuntimeError(
                 f"Endpoint for {peer_alias} uses local device "
@@ -1280,7 +1335,7 @@ class PeerAgent:
             return conn.endpoint
 
         with self._endpoints_lock:
-            endpoint = self._endpoints.get(peer_alias)
+            endpoint = self._endpoints.get(conn.conn_id)
             if endpoint is None:
                 raise RuntimeError(
                     f"Endpoint for {peer_alias} not found. "
@@ -1358,16 +1413,40 @@ class PeerAgent:
 
     # One-shot I/O forwarders. Named batches use PeerAgent memory-key
     # resolution; numeric assignments are passed through to the raw endpoint.
-    def read(self, peer_alias: str, assign, stream=None):
-        conn = self._get_connection(peer_alias)
-        endpoint = self._get_endpoint(peer_alias)
+    def read(
+        self,
+        peer_alias: str,
+        assign,
+        stream=None,
+        *,
+        local_nic: Optional[str] = None,
+        remote_nic: Optional[str] = None,
+    ):
+        conn = self._get_connection(
+            peer_alias, local_device=local_nic, peer_device=remote_nic
+        )
+        endpoint = self._get_endpoint(
+            peer_alias, local_device=local_nic, peer_device=remote_nic
+        )
         return endpoint.read(
             self._maybe_endpoint_assign(conn, endpoint, assign), stream
         )
 
-    def write(self, peer_alias: str, assign, stream=None):
-        conn = self._get_connection(peer_alias)
-        endpoint = self._get_endpoint(peer_alias)
+    def write(
+        self,
+        peer_alias: str,
+        assign,
+        stream=None,
+        *,
+        local_nic: Optional[str] = None,
+        remote_nic: Optional[str] = None,
+    ):
+        conn = self._get_connection(
+            peer_alias, local_device=local_nic, peer_device=remote_nic
+        )
+        endpoint = self._get_endpoint(
+            peer_alias, local_device=local_nic, peer_device=remote_nic
+        )
         return endpoint.write(
             self._maybe_endpoint_assign(conn, endpoint, assign), stream
         )
@@ -1378,21 +1457,57 @@ class PeerAgent:
         assign,
         imm_data: int = 0,
         stream=None,
+        *,
+        local_nic: Optional[str] = None,
+        remote_nic: Optional[str] = None,
     ):
-        conn = self._get_connection(peer_alias)
-        endpoint = self._get_endpoint(peer_alias)
+        conn = self._get_connection(
+            peer_alias, local_device=local_nic, peer_device=remote_nic
+        )
+        endpoint = self._get_endpoint(
+            peer_alias, local_device=local_nic, peer_device=remote_nic
+        )
         return endpoint.write_with_imm(
             self._maybe_endpoint_assign(conn, endpoint, assign), imm_data, stream
         )
 
-    def send(self, peer_alias: str, chunk, stream=None):
-        return self._get_endpoint(peer_alias).send(chunk, stream)
+    def send(
+        self,
+        peer_alias: str,
+        chunk,
+        stream=None,
+        *,
+        local_nic: Optional[str] = None,
+        remote_nic: Optional[str] = None,
+    ):
+        return self._get_endpoint(
+            peer_alias, local_device=local_nic, peer_device=remote_nic
+        ).send(chunk, stream)
 
-    def recv(self, peer_alias: str, chunk, stream=None):
-        return self._get_endpoint(peer_alias).recv(chunk, stream)
+    def recv(
+        self,
+        peer_alias: str,
+        chunk,
+        stream=None,
+        *,
+        local_nic: Optional[str] = None,
+        remote_nic: Optional[str] = None,
+    ):
+        return self._get_endpoint(
+            peer_alias, local_device=local_nic, peer_device=remote_nic
+        ).recv(chunk, stream)
 
-    def imm_recv(self, peer_alias: str, stream=None):
-        return self._get_endpoint(peer_alias).imm_recv(stream)
+    def imm_recv(
+        self,
+        peer_alias: str,
+        stream=None,
+        *,
+        local_nic: Optional[str] = None,
+        remote_nic: Optional[str] = None,
+    ):
+        return self._get_endpoint(
+            peer_alias, local_device=local_nic, peer_device=remote_nic
+        ).imm_recv(stream)
 
     # ------------------------------------------------------------------
     # Shutdown
@@ -1428,11 +1543,22 @@ class PeerAgent:
         prefix = f"{self._redis_key_prefix}:" if self._redis_key_prefix else ""
         if self._redis_client is not None:
             with self._endpoints_lock:
-                for peer in list(self._endpoints.keys()):
+                with self._connections_lock:
+                    endpoint_peers = {
+                        conn_id: self._connections[conn_id].peer_alias
+                        for conn_id in self._endpoints
+                        if conn_id in self._connections
+                    }
+                for conn_id, peer in endpoint_peers.items():
                     exchange_key_out = f"{prefix}exchange:{self.alias}:{peer}"
                     exchange_key_in = f"{prefix}exchange:{peer}:{self.alias}"
+                    exchange_key_out_conn = (
+                        f"{prefix}exchange:{self.alias}:{peer}:{conn_id}"
+                    )
                     try:
-                        self._redis_client.delete(exchange_key_out, exchange_key_in)
+                        self._redis_client.delete(
+                            exchange_key_out, exchange_key_in, exchange_key_out_conn
+                        )
                     except Exception as e:
                         logger.warning(
                             "PeerAgent %s: Exchange key cleanup warning: %s",

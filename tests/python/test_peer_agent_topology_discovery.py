@@ -3,7 +3,7 @@ import threading
 import pytest
 from dlslime import discover_topology
 from dlslime.peer_agent import _agent as peer_agent_mod
-from dlslime.peer_agent._agent import PeerAgent, RdmaResourceKey
+from dlslime.peer_agent._agent import DirectedConnection, PeerAgent, RdmaResourceKey
 
 
 def _bare_agent(address: str = "10.1.2.3") -> PeerAgent:
@@ -28,12 +28,19 @@ def _bare_agent(address: str = "10.1.2.3") -> PeerAgent:
 
 def _bare_agent_with_connections(*, connected=()):
     agent = _bare_agent()
-    agent._connections = {"peer": object()}
+    conn = DirectedConnection(
+        agent=agent,
+        peer_alias="peer",
+        local_key=RdmaResourceKey("mlx5_0", 1, "RoCE"),
+        peer_key=RdmaResourceKey("mlx5_1", 1, "RoCE"),
+        qp_num=1,
+    )
+    agent._connections = {conn.conn_id: conn}
     agent._connections_lock = threading.Lock()
-    agent._connected_peers = set(connected)
+    agent._connected_peers = {conn.conn_id for peer in connected if peer == "peer"}
     agent._connected_peers_lock = threading.Lock()
     agent._connected_peers_cond = threading.Condition(agent._connected_peers_lock)
-    return agent
+    return agent, conn.conn_id
 
 
 class FakeRedis:
@@ -57,14 +64,14 @@ class FakeRedis:
 
 
 def test_peer_connection_wait_accepts_single_peer():
-    agent = _bare_agent_with_connections(connected={"peer"})
-    conn = peer_agent_mod.PeerConnection(agent, "peer")
+    agent, conn_id = _bare_agent_with_connections(connected={"peer"})
+    conn = peer_agent_mod.PeerConnection(agent, conn_id)
 
     assert conn.wait() is conn
 
 
 def test_peer_connection_wait_rejects_names_without_connection():
-    agent = _bare_agent_with_connections()
+    agent, _ = _bare_agent_with_connections()
     conn = peer_agent_mod.PeerConnection(agent, "mlx5_0")
 
     with pytest.raises(ValueError, match="device names belong"):

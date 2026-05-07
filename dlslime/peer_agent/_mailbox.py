@@ -225,28 +225,41 @@ class StreamMailbox:
         Attempt symmetric rendezvous with peer.
         Idempotent: safe to call multiple times.
         """
-        # Skip if already connected or a connection attempt is in progress.
-        if self._agent._is_peer_connected(peer):
-            return
-        with self._agent._connecting_peers_lock:
-            if peer in self._agent._connecting_peers:
-                return
-            self._agent._connecting_peers.add(peer)
+        if conn_meta:
+            conn = self._agent._ensure_connection_from_meta(peer, conn_meta)
+            connections = [conn]
+        else:
+            with self._agent._connections_lock:
+                connections = [
+                    conn
+                    for conn in self._agent._connections.values()
+                    if conn.peer_alias == peer
+                ]
+            if not connections:
+                connections = [self._agent._get_or_create_connection(peer)]
 
-        try:
-            self._try_connect_peer_inner(peer, peer_qp_info, conn_meta or {})
-        finally:
-            # Always release the in-flight guard. A rendezvous attempt may return
-            # early when the peer has not published its QP info yet; later
-            # connect_peer / qp_ready messages must be allowed to retry.
+        for conn in connections:
+            conn_id = conn.conn_id
+            if self._agent._is_connection_connected(conn_id):
+                continue
             with self._agent._connecting_peers_lock:
-                self._agent._connecting_peers.discard(peer)
+                if conn_id in self._agent._connecting_peers:
+                    continue
+                self._agent._connecting_peers.add(conn_id)
+
+            try:
+                self._try_connect_peer_inner(conn, peer_qp_info)
+            finally:
+                # Always release the in-flight guard. A rendezvous attempt may
+                # return early when the peer has not published its QP info yet;
+                # later connect_peer / qp_ready messages must be allowed to retry.
+                with self._agent._connecting_peers_lock:
+                    self._agent._connecting_peers.discard(conn_id)
 
     def _try_connect_peer_inner(
         self,
-        peer: str,
+        conn,
         peer_qp_info: Optional[Dict[str, Any]] = None,
-        conn_meta: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Core rendezvous logic (called with connecting-guard held).
 
@@ -258,19 +271,18 @@ class StreamMailbox:
         protocol. Keeps this version interoperable with older peers that
         don't embed QP info in their stream messages.
         """
+        peer = conn.peer_alias
+        conn_id = conn.conn_id
         t_enter = time.perf_counter()
         _tlog(
-            f"{self._agent.alias}: _try_connect_peer_inner({peer}) "
+            f"{self._agent.alias}: _try_connect_peer_inner({conn_id}) "
             f"has_qp_info={peer_qp_info is not None}"
         )
 
-        if conn_meta:
-            self._agent._ensure_connection_from_meta(peer, conn_meta)
-
         # A. Create local endpoint and get QP info
-        endpoint = self._agent._ensure_local_endpoint_created(peer)
+        endpoint = self._agent._ensure_local_endpoint_created(conn_id)
         my_qp_info = endpoint.endpoint_info()
-        my_conn_meta = self._agent._connection_meta(peer)
+        my_conn_meta = self._agent._connection_meta(conn_id)
         _tlog(
             f"{self._agent.alias}: [A] ensure_endpoint+endpoint_info "
             f"+{(time.perf_counter() - t_enter) * 1000:.3f}ms"
@@ -285,7 +297,7 @@ class StreamMailbox:
         # of the handshake with zero Redis GETs. The _has_notified_peer
         # guard prevents a qp_ready → qp_ready → qp_ready ping-pong when
         # both sides are racing through this method.
-        if not self._agent._has_notified_peer(peer):
+        if not self._agent._has_notified_peer(conn_id):
             t_b = time.perf_counter()
             peer_stream_key = f"{prefix}stream:{peer}"
             try:
@@ -301,7 +313,7 @@ class StreamMailbox:
                     maxlen=1000,
                     approximate=True,
                 )
-                self._agent._mark_peer_notified(peer)
+                self._agent._mark_peer_notified(conn_id)
             except Exception as e:
                 logger.warning(
                     "StreamMailbox %s: Failed to notify %s: %s",
@@ -314,14 +326,14 @@ class StreamMailbox:
                 f"+{(time.perf_counter() - t_b) * 1000:.3f}ms"
             )
         else:
-            _tlog(f"{self._agent.alias}: [B] skip XADD (already notified {peer})")
+            _tlog(f"{self._agent.alias}: [B] skip XADD (already notified {conn_id})")
 
         # C. Resolve peer's QP info. Fast path: we already have it from the
         # incoming qp_ready message. Interop path: fall back to the Redis
         # exchange-key protocol for older peers.
         if peer_qp_info is None:
             t_c = time.perf_counter()
-            exchange_key_out = f"{prefix}exchange:{self._agent.alias}:{peer}"
+            exchange_key_out = f"{prefix}exchange:{self._agent.alias}:{peer}:{conn_id}"
             self._agent._redis_client.set(
                 exchange_key_out,
                 json.dumps(my_qp_info, default=str),
@@ -336,7 +348,7 @@ class StreamMailbox:
             if peer_qp_info_str is None:
                 # Peer hasn't published yet; their qp_ready will trigger us.
                 _tlog(
-                    f"{self._agent.alias}: _try_connect_peer_inner({peer}) "
+                    f"{self._agent.alias}: _try_connect_peer_inner({conn_id}) "
                     f"RETURN (peer not published yet) "
                     f"total={(time.perf_counter() - t_enter) * 1000:.3f}ms"
                 )
@@ -358,9 +370,9 @@ class StreamMailbox:
             f"{self._agent.alias}: [D] endpoint.connect({peer}) "
             f"+{(time.perf_counter() - t_d) * 1000:.3f}ms"
         )
-        self._agent._mark_peer_connected(peer)
+        self._agent._mark_connection_connected(conn_id)
         _tlog(
-            f"{self._agent.alias}: [E] _mark_peer_connected({peer}) DONE "
+            f"{self._agent.alias}: [E] _mark_connection_connected({conn_id}) DONE "
             f"total={(time.perf_counter() - t_enter) * 1000:.3f}ms"
         )
         logger.info("Link Established: initiator=%s target=%s", self._agent.alias, peer)
