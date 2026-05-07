@@ -15,7 +15,7 @@ Wire protocol (stream:{agent_alias}):
 The listener runs on a single background thread. Heavy work
 (`RDMAEndpoint(...)` allocation, QP state transitions) happens inline
 on that thread, so per-message cost directly affects the scale-out tail.
-``PeerAgent`` pre-creates endpoints eagerly from ``set_desired_topology``
+``PeerAgent`` pre-creates endpoints eagerly from ``connect_to``
 to keep the listener fast path a dict lookup.
 """
 
@@ -28,7 +28,10 @@ from typing import Any, Dict, Optional, TYPE_CHECKING
 
 import redis
 
+from dlslime.logging import get_logger
 from ._obs import _tlog
+
+logger = get_logger("peer_agent.mailbox")
 
 if TYPE_CHECKING:
     from ._agent import PeerAgent
@@ -55,16 +58,17 @@ class StreamMailbox:
         """Start the stream listener thread."""
         # Delete any stale stream messages from a previous run before listening.
         prefix = (
-            f"{self._agent.redis_key_prefix}:" if self._agent.redis_key_prefix else ""
+            f"{self._agent._redis_key_prefix}:" if self._agent._redis_key_prefix else ""
         )
         stream_key = f"{prefix}stream:{self._agent.alias}"
-        self._agent.redis_client.delete(stream_key)
+        self._agent._redis_client.delete(stream_key)
 
         self._thread = threading.Thread(target=self._listen_loop, daemon=True)
         self._thread.start()
-        print(
-            f"StreamMailbox {self._agent.alias}: Started listening to stream "
-            f"(block={self._stream_block_ms}ms)"
+        logger.info(
+            "StreamMailbox %s: Started listening to stream (block=%sms)",
+            self._agent.alias,
+            self._stream_block_ms,
         )
 
     def stop(self) -> None:
@@ -72,26 +76,28 @@ class StreamMailbox:
         self._stop_event.set()
         if self._thread:
             self._thread.join(timeout=2)
-        print(f"StreamMailbox {self._agent.alias}: Stopped")
+        logger.info("StreamMailbox %s: Stopped", self._agent.alias)
 
     def _listen_loop(self) -> None:
         """Main event loop: blocking XREAD on agent's stream mailbox."""
         prefix = (
-            f"{self._agent.redis_key_prefix}:" if self._agent.redis_key_prefix else ""
+            f"{self._agent._redis_key_prefix}:" if self._agent._redis_key_prefix else ""
         )
         stream_key = f"{prefix}stream:{self._agent.alias}"
 
         # Start from the beginning of the (now-freshly-cleared) stream.
         last_id = "0-0"
 
-        print(
-            f"StreamMailbox {self._agent.alias}: Listening to {stream_key} (from beginning)"
+        logger.info(
+            "StreamMailbox %s: Listening to %s (from beginning)",
+            self._agent.alias,
+            stream_key,
         )
 
         while not self._stop_event.is_set():
             try:
                 # XREAD with blocking
-                result = self._agent.redis_client.xread(
+                result = self._agent._redis_client.xread(
                     {stream_key: last_id},
                     block=self._stream_block_ms,
                     count=100,  # Batch up to 100 messages
@@ -115,21 +121,21 @@ class StreamMailbox:
                         try:
                             self._handle_message(fields)
                         except Exception as e:
-                            print(
-                                f"StreamMailbox {self._agent.alias}: Error handling message: {e}"
+                            logger.exception(
+                                "StreamMailbox %s: Error handling message: %s",
+                                self._agent.alias,
+                                e,
                             )
-                            import traceback
-
-                            traceback.print_exc()
                         last_id = msg_id
 
             except redis.exceptions.ConnectionError:
                 time.sleep(0.1)
             except Exception as e:
-                print(f"StreamMailbox {self._agent.alias}: Error in listen loop: {e}")
-                import traceback
-
-                traceback.print_exc()
+                logger.exception(
+                    "StreamMailbox %s: Error in listen loop: %s",
+                    self._agent.alias,
+                    e,
+                )
                 time.sleep(0.1)
 
     def _handle_message(self, fields: Dict[str, str]) -> None:
@@ -144,13 +150,16 @@ class StreamMailbox:
             # to complete the handshake.
             peer = fields.get("peer")
             if peer:
-                print(
-                    f"StreamMailbox {self._agent.alias}: Received connect_peer -> {peer}"
+                logger.info(
+                    "StreamMailbox %s: Received connect_peer -> %s",
+                    self._agent.alias,
+                    peer,
                 )
                 self._try_connect_peer(peer)
             else:
-                print(
-                    f"StreamMailbox {self._agent.alias}: connect_peer missing 'peer' field"
+                logger.warning(
+                    "StreamMailbox %s: connect_peer missing 'peer' field",
+                    self._agent.alias,
                 )
 
         elif msg_type == "qp_ready":
@@ -167,34 +176,43 @@ class StreamMailbox:
                     try:
                         peer_qp_info = json.loads(qp_info_str)
                     except json.JSONDecodeError:
-                        print(
-                            f"StreamMailbox {self._agent.alias}: "
-                            f"malformed qp_info from {peer}, falling back to GET"
+                        logger.warning(
+                            "StreamMailbox %s: malformed qp_info from %s, "
+                            "falling back to GET",
+                            self._agent.alias,
+                            peer,
                         )
                 meta_str = fields.get("conn_meta")
                 if meta_str:
                     try:
                         conn_meta = json.loads(meta_str)
                     except json.JSONDecodeError:
-                        print(
-                            f"StreamMailbox {self._agent.alias}: "
-                            f"malformed conn_meta from {peer}, using defaults"
+                        logger.warning(
+                            "StreamMailbox %s: malformed conn_meta from %s, "
+                            "using defaults",
+                            self._agent.alias,
+                            peer,
                         )
-                print(
-                    f"StreamMailbox {self._agent.alias}: Received qp_ready from {peer}"
-                    f"{' (with embedded qp_info)' if peer_qp_info else ''}"
+                logger.info(
+                    "StreamMailbox %s: Received qp_ready from %s%s",
+                    self._agent.alias,
+                    peer,
+                    " (with embedded qp_info)" if peer_qp_info else "",
                 )
                 self._try_connect_peer(
                     peer, peer_qp_info=peer_qp_info, conn_meta=conn_meta
                 )
             else:
-                print(
-                    f"StreamMailbox {self._agent.alias}: qp_ready missing 'peer' field"
+                logger.warning(
+                    "StreamMailbox %s: qp_ready missing 'peer' field",
+                    self._agent.alias,
                 )
 
         else:
-            print(
-                f"StreamMailbox {self._agent.alias}: Unknown message type: {msg_type}"
+            logger.warning(
+                "StreamMailbox %s: Unknown message type: %s",
+                self._agent.alias,
+                msg_type,
             )
 
     def _try_connect_peer(
@@ -208,7 +226,7 @@ class StreamMailbox:
         Idempotent: safe to call multiple times.
         """
         # Skip if already connected or a connection attempt is in progress.
-        if self._agent.is_peer_connected(peer):
+        if self._agent._is_peer_connected(peer):
             return
         with self._agent._connecting_peers_lock:
             if peer in self._agent._connecting_peers:
@@ -247,10 +265,10 @@ class StreamMailbox:
         )
 
         if conn_meta:
-            self._agent.ensure_connection_from_meta(peer, conn_meta)
+            self._agent._ensure_connection_from_meta(peer, conn_meta)
 
         # A. Create local endpoint and get QP info
-        endpoint = self._agent.ensure_local_endpoint_created(peer)
+        endpoint = self._agent._ensure_local_endpoint_created(peer)
         my_qp_info = endpoint.endpoint_info()
         my_conn_meta = self._agent._connection_meta(peer)
         _tlog(
@@ -259,19 +277,19 @@ class StreamMailbox:
         )
 
         prefix = (
-            f"{self._agent.redis_key_prefix}:" if self._agent.redis_key_prefix else ""
+            f"{self._agent._redis_key_prefix}:" if self._agent._redis_key_prefix else ""
         )
 
         # B. Notify the peer that our QP info is ready — once. Carrying the
         # QP info in the message itself lets the peer complete their half
-        # of the handshake with zero Redis GETs. The has_notified_peer
+        # of the handshake with zero Redis GETs. The _has_notified_peer
         # guard prevents a qp_ready → qp_ready → qp_ready ping-pong when
         # both sides are racing through this method.
-        if not self._agent.has_notified_peer(peer):
+        if not self._agent._has_notified_peer(peer):
             t_b = time.perf_counter()
             peer_stream_key = f"{prefix}stream:{peer}"
             try:
-                self._agent.redis_client.xadd(
+                self._agent._redis_client.xadd(
                     peer_stream_key,
                     {
                         "type": "qp_ready",
@@ -283,10 +301,13 @@ class StreamMailbox:
                     maxlen=1000,
                     approximate=True,
                 )
-                self._agent.mark_peer_notified(peer)
+                self._agent._mark_peer_notified(peer)
             except Exception as e:
-                print(
-                    f"StreamMailbox {self._agent.alias}: Failed to notify {peer}: {e}"
+                logger.warning(
+                    "StreamMailbox %s: Failed to notify %s: %s",
+                    self._agent.alias,
+                    peer,
+                    e,
                 )
             _tlog(
                 f"{self._agent.alias}: [B] XADD qp_ready->{peer} "
@@ -301,12 +322,12 @@ class StreamMailbox:
         if peer_qp_info is None:
             t_c = time.perf_counter()
             exchange_key_out = f"{prefix}exchange:{self._agent.alias}:{peer}"
-            self._agent.redis_client.set(
+            self._agent._redis_client.set(
                 exchange_key_out,
                 json.dumps(my_qp_info, default=str),
             )
             exchange_key_in = f"{prefix}exchange:{peer}:{self._agent.alias}"
-            peer_qp_info_str = self._agent.redis_client.get(exchange_key_in)
+            peer_qp_info_str = self._agent._redis_client.get(exchange_key_in)
             _tlog(
                 f"{self._agent.alias}: [C-interop] SET+GET exchange "
                 f"+{(time.perf_counter() - t_c) * 1000:.3f}ms "
@@ -323,9 +344,10 @@ class StreamMailbox:
             try:
                 peer_qp_info = json.loads(peer_qp_info_str)
             except json.JSONDecodeError:
-                print(
-                    f"StreamMailbox {self._agent.alias}: "
-                    f"Failed to parse exchange-key QP info from {peer}"
+                logger.warning(
+                    "StreamMailbox %s: Failed to parse exchange-key QP info from %s",
+                    self._agent.alias,
+                    peer,
                 )
                 return
 
@@ -336,9 +358,9 @@ class StreamMailbox:
             f"{self._agent.alias}: [D] endpoint.connect({peer}) "
             f"+{(time.perf_counter() - t_d) * 1000:.3f}ms"
         )
-        self._agent.mark_peer_connected(peer)
+        self._agent._mark_peer_connected(peer)
         _tlog(
-            f"{self._agent.alias}: [E] mark_peer_connected({peer}) DONE "
+            f"{self._agent.alias}: [E] _mark_peer_connected({peer}) DONE "
             f"total={(time.perf_counter() - t_enter) * 1000:.3f}ms"
         )
-        print(f"Link Established: initiator={self._agent.alias} target={peer}")
+        logger.info("Link Established: initiator=%s target=%s", self._agent.alias, peer)

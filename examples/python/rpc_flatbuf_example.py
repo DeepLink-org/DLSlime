@@ -139,15 +139,16 @@ class CalcServiceFB:
 
 def main(ctrl_url: str):
     # --- worker agent ---
-    worker = PeerAgent(alias="worker:0", server_url=ctrl_url)
+    worker = PeerAgent(nanoctrl_url=ctrl_url, alias="worker:0")
 
     # --- driver agent ---
-    driver = PeerAgent(alias="driver:0", server_url=ctrl_url)
-    driver.set_desired_topology("worker:0", ib_port=1, qp_num=1)
+    driver = PeerAgent(nanoctrl_url=ctrl_url, alias="driver:0")
+    driver_conn = driver.connect_to("worker:0", ib_port=1, qp_num=1)
+    worker_conn = worker.connect_to("driver:0", ib_port=1, qp_num=1)
 
     # wait for both sides to connect
-    driver.wait_for_peers(["worker:0"])
-    worker.wait_for_peers(["driver:0"])
+    driver_conn.wait()
+    worker_conn.wait()
     print("Connected.")
 
     try:

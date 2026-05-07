@@ -77,7 +77,7 @@ def serve(
 
     if channel is None:
         if peer is None:
-            peers = agent.get_connected_peers()
+            peers = set(agent.get_connections().keys())
             if len(peers) != 1:
                 raise ValueError(
                     f"serve() with peer=None requires exactly 1 connected peer, "
@@ -424,7 +424,7 @@ def serve_once(
 
     if channel is None:
         if peer is None:
-            peers = agent.get_connected_peers()
+            peers = set(agent.get_connections().keys())
             if len(peers) != 1:
                 raise ValueError(
                     f"serve_once() with peer=None requires exactly 1 peer, "

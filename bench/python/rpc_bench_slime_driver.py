@@ -114,7 +114,7 @@ def main():
     # Only test sizes that fit in the buffer (payload must be < buffer size)
     sizes = [s for s in SIZES if s < buf_bytes and s <= max_size_bytes]
 
-    driver = PeerAgent(alias="bench-driver", server_url=args.ctrl, scope=args.scope)
+    driver = PeerAgent(nanoctrl_url=args.ctrl, alias="bench-driver", scope=args.scope)
     driver._rpc_buffer_size = buf_bytes
     driver._rpc_max_inflight = max(1, int(getattr(args, "max_inflight", 4)))
 

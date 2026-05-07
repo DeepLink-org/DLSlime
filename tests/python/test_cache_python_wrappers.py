@@ -12,26 +12,32 @@ from dlslime.cache import (
 
 class DummyPeerAgent:
     alias = "engine:0"
-    server_url = "http://127.0.0.1:3000"
-    redis_key_prefix = "s0"
+    nanoctrl_url = "http://127.0.0.1:3000"
+    _redis_key_prefix = "s0"
 
     def __init__(self):
         self.connections = []
+
+    class Connection:
+        def __init__(self, owner):
+            self.owner = owner
+
+        def wait(self, timeout=60.0):
+            self.owner.waited = timeout
+            return self
 
     def register_memory_region(self, name, ptr, offset, length):
         self.registered = (name, ptr, offset, length)
         return 123
 
-    def query_resource(self, alias):
+    def get_resource(self):
         return {
             "nics": [{"name": "mlx5_0", "ports": [{"port": 1, "link_type": "RoCE"}]}]
         }
 
-    def set_desired_topology(self, peer_alias, **kwargs):
+    def connect_to(self, peer_alias, **kwargs):
         self.connections.append((peer_alias, kwargs))
-
-    def wait_for_peers(self, peers, timeout_sec=60.0):
-        self.waited = (peers, timeout_sec)
+        return self.Connection(self)
 
 
 def test_cache_service_store_query_splits_slabs():
@@ -89,7 +95,7 @@ def test_cache_service_exposes_peer_agent_info():
     info = service.peer_agent_info()
 
     assert info["peer_agent_id"] == "engine:0"
-    assert info["ctrl"] == "http://127.0.0.1:3000"
+    assert info["nanoctrl_url"] == "http://127.0.0.1:3000"
     assert info["scope"] == "s0"
     assert info["cache_mr_name"] == "cache"
     assert info["cache_mr_handle"] == 123
@@ -155,7 +161,7 @@ def test_cache_client_connects_to_server_peer_agent(monkeypatch):
         assert path == "/peer-agent"
         return {
             "peer_agent_id": "cache-agent:0",
-            "ctrl": "http://127.0.0.1:3000",
+            "nanoctrl_url": "http://127.0.0.1:3000",
             "scope": "s0",
             "cache_mr_name": "cache",
         }
@@ -178,7 +184,7 @@ def test_cache_client_connects_to_server_peer_agent(monkeypatch):
             },
         )
     ]
-    assert peer_agent.waited == (["cache-agent:0"], 3.0)
+    assert peer_agent.waited == 3.0
 
 
 def test_cache_client_reports_peer_agent_restart_hint(monkeypatch):

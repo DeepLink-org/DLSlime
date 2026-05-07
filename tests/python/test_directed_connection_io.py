@@ -36,42 +36,59 @@ def _agent(endpoint):
         qp_num=1,
     )
     conn.attach_endpoint(endpoint, memory_pool=None)
+    conn.mark_connected()
     agent._connections = {"peer": conn}
+    agent._connected_peers = {"peer"}
+    agent._connected_peers_lock = threading.Lock()
+    agent._endpoints = {"peer": endpoint}
+    agent._endpoints_lock = threading.Lock()
 
-    def get_local_handle(region, resource_key):
-        assert resource_key == RdmaResourceKey("mlx5_0", 1, "RoCE")
-        return {"kv": 11, "scratch": 12}[region]
-
-    def get_remote_handle(peer, region, resource_key=None, endpoint=None):
-        assert peer == "peer"
+    def get_handle(region, peer_alias=None, resource_key=None, endpoint=None):
+        if peer_alias is None:
+            assert resource_key == RdmaResourceKey("mlx5_0", 1, "RoCE")
+            return {"kv": 11, "scratch": 12}[region]
+        assert peer_alias == "peer"
         assert resource_key == RdmaResourceKey("mlx5_1", 1, "RoCE")
         assert isinstance(endpoint, FakeEndpoint)
         return {"kv": 21, "kv_remote": 22, "remote_scratch": 23}[region]
 
-    agent.get_local_handle = get_local_handle
-    agent.get_remote_handle = get_remote_handle
+    agent.get_handle = get_handle
     return agent
 
 
-def test_query_endpoint_returns_selected_endpoint():
+def test_get_connections_returns_selected_connection():
     endpoint = FakeEndpoint()
     agent = _agent(endpoint)
 
-    assert (
-        agent.query_endpoint("peer", "mlx5_0", "mlx5_1", ib_port=1, qp_num=1)
-        is endpoint
-    )
+    connections = agent.get_connections()
+
+    assert list(connections) == ["peer"]
+    connection = next(iter(connections["peer"].values()))
+    assert connection.endpoint is endpoint
+    assert connection.state == "connected"
+    assert connection.local_nic == "mlx5_0"
+    assert connection.remote_nic == "mlx5_1"
 
 
-def test_query_endpoint_rejects_mismatched_selectors():
+def test_query_connection_filters_by_peer_and_nics():
+    endpoint = FakeEndpoint()
+    agent = _agent(endpoint)
+
+    connection = agent.query_connection("peer", local_nic="mlx5_0", remote_nic="mlx5_1")
+    assert connection is not None
+    assert connection.endpoint is endpoint
+    assert agent.query_connection("peer", local_nic="mlx5_2") is None
+
+
+def test_get_endpoint_rejects_mismatched_selectors():
     endpoint = FakeEndpoint()
     agent = _agent(endpoint)
 
     with pytest.raises(RuntimeError, match="local device"):
-        agent.query_endpoint("peer", "mlx5_2", "mlx5_1")
+        agent._get_endpoint("peer", "mlx5_2", "mlx5_1")
 
     with pytest.raises(RuntimeError, match="peer device"):
-        agent.query_endpoint("peer", "mlx5_0", "mlx5_2")
+        agent._get_endpoint("peer", "mlx5_0", "mlx5_2")
 
 
 def test_peer_agent_read_accepts_named_batches():
