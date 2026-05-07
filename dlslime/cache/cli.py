@@ -392,14 +392,11 @@ def _make_peer_agent(cfg):
     peer_agent_alias = cfg.peer_agent_alias
     if peer_agent_alias is None:
         peer_agent_alias = f"{str(cfg.service_id).replace('cache:', 'cache-agent:', 1)}"
-    server_url = cfg.peer_agent_ctrl or cfg.ctrl or "http://127.0.0.1:3000"
+    nanoctrl_url = cfg.peer_agent_ctrl or cfg.ctrl or "http://127.0.0.1:3000"
     return PeerAgent(
+        nanoctrl_url=nanoctrl_url,
         alias=peer_agent_alias,
-        server_url=server_url,
         device=cfg.peer_agent_device,
-        ib_port=cfg.peer_agent_ib_port,
-        link_type=cfg.peer_agent_link_type,
-        qp_num=cfg.peer_agent_qp_num,
         scope=cfg.scope,
     )
 

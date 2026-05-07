@@ -25,7 +25,7 @@ description = "DLSlime Transfer Engine"
 name = "dlslime"
 readme = "README.md"
 requires-python = ">=3.8"
-version = "0.0.3.rc2"
+version = "0.0.3.rc3"
 dependencies = [
   "pydantic>=2.0",
   "pyzmq>=25.0",

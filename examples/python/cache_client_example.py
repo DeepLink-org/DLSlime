@@ -120,7 +120,7 @@ def main() -> None:
         args.length,
     )
 
-    cache_remote_handle = agent.get_remote_handle(server_peer, cache_mr_name)
+    cache_remote_handle = agent.get_handle(cache_mr_name, server_peer)
 
     try:
         stored = client.store(

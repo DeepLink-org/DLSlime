@@ -133,30 +133,28 @@ class CacheClient:
         server_alias = str(info["peer_agent_id"])
         agent = peer_agent or self.peer_agent
 
-        if agent is None or not hasattr(agent, "set_desired_topology"):
-            server_url = ctrl or info.get("ctrl")
-            if not server_url:
+        if agent is None or not hasattr(agent, "connect_to"):
+            nanoctrl_url = ctrl or info.get("nanoctrl_url")
+            if not nanoctrl_url:
                 raise RuntimeError("cache service did not publish a NanoCtrl address")
             from dlslime import PeerAgent
 
             agent = PeerAgent(
+                nanoctrl_url=nanoctrl_url,
                 alias=alias,
-                server_url=server_url,
                 device=local_device,
-                ib_port=ib_port,
-                qp_num=qp_num,
                 scope=scope if scope is not None else info.get("scope"),
             )
         self.peer_agent = agent
 
-        agent.set_desired_topology(
+        conn = agent.connect_to(
             server_alias,
             local_device=local_device,
             peer_device=peer_device,
             ib_port=ib_port,
             qp_num=qp_num,
         )
-        agent.wait_for_peers([server_alias], timeout_sec=timeout_sec)
+        conn.wait(timeout=timeout_sec)
         return info
 
     def default_peer_agent_id(self) -> str:

@@ -3,21 +3,44 @@ import threading
 import pytest
 from dlslime import discover_topology
 from dlslime.peer_agent import _agent as peer_agent_mod
-from dlslime.peer_agent._agent import PeerAgent, RdmaResourceKey
+from dlslime.peer_agent._agent import DirectedConnection, PeerAgent, RdmaResourceKey
 
 
 def _bare_agent(address: str = "10.1.2.3") -> PeerAgent:
     agent = PeerAgent.__new__(PeerAgent)
-    agent.address = address
     agent.alias = "agent_0"
-    agent.redis_key_prefix = ""
-    agent.redis_client = None
+    agent._redis_key_prefix = ""
+    agent._redis_client = None
     agent._logical_regions = {}
     agent._regions_lock = threading.Lock()
     agent._resource_cache = {}
     agent._resource_cache_lock = threading.Lock()
+    agent._local_resource = {
+        "schema_version": 1,
+        "host": {"hostname": address, "address": address},
+        "nics": [],
+        "accelerators": [],
+        "memory_keys": [],
+    }
     agent._shutdown_called = True
     return agent
+
+
+def _bare_agent_with_connections(*, connected=()):
+    agent = _bare_agent()
+    conn = DirectedConnection(
+        agent=agent,
+        peer_alias="peer",
+        local_key=RdmaResourceKey("mlx5_0", 1, "RoCE"),
+        peer_key=RdmaResourceKey("mlx5_1", 1, "RoCE"),
+        qp_num=1,
+    )
+    agent._connections = {conn.conn_id: conn}
+    agent._connections_lock = threading.Lock()
+    agent._connected_peers = {conn.conn_id for peer in connected if peer == "peer"}
+    agent._connected_peers_lock = threading.Lock()
+    agent._connected_peers_cond = threading.Condition(agent._connected_peers_lock)
+    return agent, conn.conn_id
 
 
 class FakeRedis:
@@ -38,6 +61,21 @@ class FakeRedis:
 
     def ttl(self, key):
         return 30 if key in self.hashes else -2
+
+
+def test_peer_connection_wait_accepts_single_peer():
+    agent, conn_id = _bare_agent_with_connections(connected={"peer"})
+    conn = peer_agent_mod.PeerConnection(agent, conn_id)
+
+    assert conn.wait() is conn
+
+
+def test_peer_connection_wait_rejects_names_without_connection():
+    agent, _ = _bare_agent_with_connections()
+    conn = peer_agent_mod.PeerConnection(agent, "mlx5_0")
+
+    with pytest.raises(ValueError, match="device names belong"):
+        conn.wait(timeout=0.01)
 
 
 def _write(path, text):
@@ -245,41 +283,42 @@ def test_first_usable_resource_key_filters_device_port_and_protocol():
         )
 
 
-def test_publish_resource_record_and_query_resource_round_trip():
+def test_publish_resource_record_and_get_resource_round_trip():
     redis_client = FakeRedis()
     writer = _bare_agent(address="10.0.0.1")
     writer.alias = "agent_0"
-    writer.redis_client = redis_client
+    writer._redis_client = redis_client
     writer._logical_regions = {"attn": object(), "kv": object()}
-    writer._local_resource = {
-        "schema_version": 1,
-        "host": {"hostname": "10.0.0.1", "address": "10.0.0.1"},
-        "nics": [
-            {
-                "name": "mlx5_0",
-                "health": "AVAILABLE",
-                "ports": [{"port": 1, "state": "ACTIVE", "link_type": "RoCE"}],
-            }
-        ],
-        "accelerators": [],
-        "memory_keys": [],
-        "topology_epoch": 123,
-    }
+    writer._local_resource.update(
+        {
+            "nics": [
+                {
+                    "name": "mlx5_0",
+                    "health": "AVAILABLE",
+                    "ports": [{"port": 1, "state": "ACTIVE", "link_type": "RoCE"}],
+                }
+            ],
+            "topology_epoch": 123,
+        }
+    )
 
     writer._publish_resource_record()
 
     reader = _bare_agent(address="10.0.0.2")
     reader.alias = "agent_1"
-    reader.redis_client = redis_client
+    reader._redis_client = redis_client
 
-    assert reader.query_active_agent() == ["agent_0"]
-    assert reader.query_mem_keys("agent_0") == ["attn", "kv"]
+    assert reader.list_agents() == ["agent_0"]
+    assert reader.list_mem_keys("agent_0") == ["attn", "kv"]
 
-    resource = reader.query_resource("agent_0")
+    resource = reader.get_resource("agent_0")
     assert resource is not None
     assert resource["host"]["address"] == "10.0.0.1"
     assert resource["memory_keys"] == ["attn", "kv"]
     assert resource["nics"][0]["name"] == "mlx5_0"
+
+    own_resource = writer.get_resource()
+    assert own_resource is writer._local_resource
     assert resource["nics"][0]["ports"][0]["link_type"] == "RoCE"
 
 

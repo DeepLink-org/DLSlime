@@ -129,7 +129,7 @@ Returns the cache service's PeerAgent and cache MR metadata:
   "peer_agent_id": "cache-agent:0",
   "cache_mr_name": "cache",
   "cache_mr_handle": 123,
-  "ctrl": "http://127.0.0.1:3000",
+  "nanoctrl_url": "http://127.0.0.1:3000",
   "scope": null,
   "slab_size": 262144,
   "memory_size": 1073741824,

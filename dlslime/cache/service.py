@@ -98,15 +98,13 @@ class CacheService:
             raise RuntimeError(
                 "cache service was started without preallocated cache memory"
             )
-        resource = None
-        if hasattr(self.peer_agent, "query_resource"):
-            resource = self.peer_agent.query_resource(alias)
+        resource = self.peer_agent.get_resource()
         return {
             "peer_agent_id": alias,
             "cache_mr_name": self.cache_mr_name,
             "cache_mr_handle": self.cache_mr_handle,
-            "ctrl": getattr(self.peer_agent, "server_url", None),
-            "scope": getattr(self.peer_agent, "redis_key_prefix", None) or None,
+            "nanoctrl_url": getattr(self.peer_agent, "nanoctrl_url", None),
+            "scope": getattr(self.peer_agent, "_redis_key_prefix", None) or None,
             "slab_size": self.slab_size,
             "memory_size": self.memory_size,
             "resource": resource,

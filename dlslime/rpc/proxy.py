@@ -68,7 +68,15 @@ def _get_or_create_channel(agent, peer_alias: str) -> Channel:
         if key in _channel_cache:
             return _channel_cache[key]
 
-    endpoint = agent.query_endpoint(peer_alias)
+    connection = agent.query_connection(peer_alias)
+    if connection is None:
+        raise ValueError(f"RPC channel for peer {peer_alias!r} has no connection.")
+    endpoint = connection.endpoint
+    if endpoint is None or not connection.is_connected():
+        raise ValueError(
+            f"RPC channel for peer {peer_alias!r} requires a connected endpoint. "
+            f"Connection {connection.conn_id} is {connection.state!r}."
+        )
     buf_size = int(getattr(agent, "_rpc_buffer_size", 32_000_000))
     slot_count = int(getattr(agent, "_rpc_max_inflight", 0) or 0)
     if slot_count <= 0:

@@ -2,7 +2,7 @@
 Example: Multiple Peer Agents using Control Plane (Declarative Topology).
 
 8 agents, mesh network (each agent connects to all others). Measures timing.
-Uses set_desired_topology() and TopologyReconciler for declarative connection setup.
+Uses connect_to() and TopologyReconciler for connection setup.
 """
 
 import contextlib
@@ -71,9 +71,12 @@ def describe_resource(alias, resource):
 
 def print_topology_discovery(observer_alias, observer_agent, aliases):
     print(f"Observer: {observer_alias}")
-    print("Active agents:", observer_agent.query_active_agent())
+    print("Active agents:", observer_agent.list_agents())
     for alias in aliases:
-        resource = observer_agent.query_resource(alias)
+        if alias == observer_alias:
+            resource = observer_agent.get_resource()
+        else:
+            resource = observer_agent.get_resource(alias)
         print(describe_resource(alias, resource))
         if verbose and resource is not None:
             print(json.dumps(resource, indent=2, sort_keys=True))
@@ -95,7 +98,7 @@ with contextlib.ExitStack() as stack:
             # NanoCtrl auto-generates unique name (no alias parameter)
             agent = start_peer_agent(
                 # alias=None (default) - NanoCtrl will auto-generate unique name
-                server_url="http://127.0.0.1:3000",
+                nanoctrl_url="http://127.0.0.1:3000",
             )
             stack.enter_context(agent)  # Auto-cleanup on exit
             # Use allocated name as key
@@ -109,9 +112,9 @@ with contextlib.ExitStack() as stack:
     print("Available peers:")
     print("=" * 60)
     for alias, agent in agents.items():
-        peers = agent.query()
+        peers = agent.list_agents()
         if verbose:
-            print(f"{alias} sees: {list(peers.keys())}")
+            print(f"{alias} sees: {peers}")
 
     print("\n" + "=" * 60)
     print("Topology discovery:")
@@ -119,34 +122,37 @@ with contextlib.ExitStack() as stack:
     observer_alias, observer_agent = next(iter(agents.items()))
     print_topology_discovery(observer_alias, observer_agent, list(agents.keys()))
 
-    # Declarative: set desired topology (mesh - each agent connects to all others)
+    # Connect mesh - each agent connects to all others.
     print("\n" + "=" * 60)
-    print("Setting desired topology (mesh)...")
+    print("Connecting mesh...")
     print("=" * 60)
+    connections = {}
 
-    def set_topology(agent_alias, agent):
+    def connect_agent(agent_alias, agent):
         target_peers = [p for p in agents.keys() if p != agent_alias]
+        agent_connections = []
         for peer in target_peers:
-            agent.set_desired_topology(peer, ib_port=1, qp_num=1)
+            agent_connections.append(agent.connect_to(peer, ib_port=1, qp_num=1))
+        connections[agent_alias] = agent_connections
         if verbose:
             print(f"  {agent_alias}: target_peers={target_peers}")
 
-    with time_measure("set_desired_topology"):
-        run_parallel(agents, set_topology)
+    with time_measure("connect_to"):
+        run_parallel(agents, connect_agent)
 
     # Wait for TopologyReconciler to establish all connections
     print("\n" + "=" * 60)
     print("Waiting for connections (reconciliation)...")
     print("=" * 60)
 
-    def wait_for_peers(agent_alias, agent):
-        target_peers = [p for p in agents.keys() if p != agent_alias]
-        agent.wait_for_peers(target_peers, timeout_sec=30)
+    def wait_connections(agent_alias, agent):
+        for conn in connections[agent_alias]:
+            conn.wait(timeout=30)
         if verbose:
             print(f"  {agent_alias}: all peers connected")
 
-    with time_measure("wait_for_peers"):
-        run_parallel(agents, wait_for_peers)
+    with time_measure("conn.wait"):
+        run_parallel(agents, wait_connections)
 
     # Register memory regions for each agent
     print("\n" + "=" * 60)
@@ -208,7 +214,7 @@ with contextlib.ExitStack() as stack:
             if peer_alias != agent_alias:
                 try:
                     try:
-                        remote_handler = agent.get_remote_handle(peer_alias, "data")
+                        remote_handler = agent.get_handle("data", peer_alias)
                     except RuntimeError:
                         print(f"  {agent_alias} -> {peer_alias}: MR info not found")
                         continue

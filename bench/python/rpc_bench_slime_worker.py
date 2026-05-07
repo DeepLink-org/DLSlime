@@ -61,7 +61,7 @@ def main():
     )
     args = parser.parse_args()
 
-    worker = PeerAgent(alias="bench-worker", server_url=args.ctrl, scope=args.scope)
+    worker = PeerAgent(nanoctrl_url=args.ctrl, alias="bench-worker", scope=args.scope)
     worker._rpc_buffer_size = args.buf_mb * 1024 * 1024
     # Bench uses single-flight RPCs; cap max_inflight so we don't pin
     # buf_mb * SLIME_RPC_MAX_INFLIGHT bytes of CPU memory needlessly.

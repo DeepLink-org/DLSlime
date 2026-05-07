@@ -27,22 +27,23 @@ def test_rdma_read_offset_order():
     # Start two peer agents
     print("\n1. Starting peer agents...")
     agent1 = start_peer_agent(
+        nanoctrl_url="http://127.0.0.1:3000",
         alias="test_agent_1",
-        server_url="http://127.0.0.1:3000",
     )
 
     agent2 = start_peer_agent(
+        nanoctrl_url="http://127.0.0.1:3000",
         alias="test_agent_2",
-        server_url="http://127.0.0.1:3000",
     )
 
     print("   Agents started")
 
-    # Declarative connection
-    print("\n2. Setting desired topology and waiting for connection...")
-    agent1.set_desired_topology("test_agent_2", ib_port=1, qp_num=1)
-    agent1.wait_for_peers(["test_agent_2"])
-    agent2.wait_for_peers(["test_agent_1"])
+    # PeerAgent connection
+    print("\n2. Connecting peers...")
+    conn1 = agent1.connect_to("test_agent_2", ib_port=1, qp_num=1)
+    conn2 = agent2.connect_to("test_agent_1", ib_port=1, qp_num=1)
+    conn1.wait()
+    conn2.wait()
     print("   Connection established")
 
     # Register local buffers
@@ -70,23 +71,16 @@ def test_rdma_read_offset_order():
 
     # Get remote MR info and register
     print("\n4. Registering remote memory regions...")
-    remote_mr_info_1 = agent1.get_mr_info("test_agent_2", "test_buffer")
-    remote_mr_info_2 = agent2.get_mr_info("test_agent_1", "test_buffer")
-
-    remote_mr_1 = agent1.register_remote_memory_region(
-        "test_agent_2", "test_buffer", remote_mr_info_1
-    )
-    remote_mr_2 = agent2.register_remote_memory_region(
-        "test_agent_1", "test_buffer", remote_mr_info_2
-    )
+    remote_mr_1 = agent1.get_handle("test_buffer", "test_agent_2")
+    remote_mr_2 = agent2.get_handle("test_buffer", "test_agent_1")
 
     print(f"   Agent1 remote MR handler: {remote_mr_1}")
     print(f"   Agent2 remote MR handler: {remote_mr_2}")
 
     # Get endpoint
     print("\n5. Getting endpoint...")
-    endpoint_1 = agent1.query_endpoint("test_agent_2")
-    endpoint_2 = agent2.query_endpoint("test_agent_1")
+    endpoint_1 = agent1.query_connection("test_agent_2").endpoint
+    endpoint_2 = agent2.query_connection("test_agent_1").endpoint
     print("   Endpoints obtained")
 
     # Test Case 1: Read from remote offset 0 to local offset 0
