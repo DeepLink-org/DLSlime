@@ -26,16 +26,36 @@ public:
     int32_t registerRemoteMemoryRegion(const std::string& name, const json& mr_info)
     {
         std::unique_lock<std::mutex> lock(mutex_);
-        if (name_to_handle_.count(name)) {
-            SLIME_LOG_INFO("Remote MR Name ", name, " already registered (Handle: ", name_to_handle_[name], ")");
-            return name_to_handle_[name];
-        }
-
-        uintptr_t addr   = mr_info["addr"].get<uintptr_t>();
-        size_t    length = mr_info["length"].get<size_t>();
-        uint32_t  rkey   = mr_info["rkey"].get<uint32_t>();
+        uintptr_t                    addr   = mr_info["addr"].get<uintptr_t>();
+        size_t                       length = mr_info["length"].get<size_t>();
+        uint32_t                     rkey   = mr_info["rkey"].get<uint32_t>();
 
         remote_mr_t mr(addr, length, rkey);
+
+        if (name_to_handle_.count(name)) {
+            int32_t handle = name_to_handle_[name];
+            if (handle >= 0 && static_cast<size_t>(handle) < handle_to_mr_.size()) {
+                remote_mr_t& existing = handle_to_mr_[handle];
+                if (existing.addr != addr || existing.length != length || existing.rkey != rkey) {
+                    existing = mr;
+                    SLIME_LOG_INFO("Updated Remote MR: Name=",
+                                   name,
+                                   ", Handle=",
+                                   handle,
+                                   ", Addr=",
+                                   (void*)addr,
+                                   ", Len=",
+                                   length,
+                                   ", RKey=",
+                                   rkey);
+                }
+                else {
+                    SLIME_LOG_INFO("Remote MR Name ", name, " already registered (Handle: ", handle, ")");
+                }
+                return handle;
+            }
+            SLIME_LOG_WARN("Remote MR Name ", name, " has stale handle ", handle, "; re-registering");
+        }
 
         int32_t handle = handle_to_mr_.size();
         handle_to_mr_.push_back(mr);
