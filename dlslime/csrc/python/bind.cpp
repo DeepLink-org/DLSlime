@@ -176,6 +176,15 @@ PYBIND11_MODULE(_slime_c, m)
         .def("get_handle",
              static_cast<int32_t (dlslime::RDMAMemoryPool::*)(const std::string&)>(
                  &dlslime::RDMAMemoryPool::get_mr_handle))
+        .def(
+            "unregister_memory_region",
+            [](dlslime::RDMAMemoryPool& self, py::object key) {
+                if (py::isinstance<py::str>(key)) {
+                    return self.unregisterMemoryRegion(key.cast<std::string>());
+                }
+                return self.unregisterMemoryRegion(key.cast<int32_t>());
+            },
+            py::arg("key"))
         .def("mr_info", &dlslime::RDMAMemoryPool::mrInfo);
     py::class_<dlslime::RDMAEndpoint, std::shared_ptr<dlslime::RDMAEndpoint>>(m, "RDMAEndpoint")
         .def(py::init<std::shared_ptr<dlslime::RDMAMemoryPool>, size_t, std::shared_ptr<dlslime::RDMAWorker>>(),

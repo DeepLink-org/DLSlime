@@ -1102,6 +1102,7 @@ class PeerAgent:
             return
         with self._regions_lock:
             memory_keys = sorted(self._logical_regions.keys())
+        self._local_resource["memory_keys"] = memory_keys
         try:
             self._redis_client.hset(
                 self._agent_key(self.alias),
@@ -1120,6 +1121,64 @@ class PeerAgent:
             logger.warning(
                 "PeerAgent %s: Memory key publish warning: %s", self.alias, e
             )
+
+    def unregister_memory_region(self, mr_name: str) -> bool:
+        """Unregister a logical memory region and unpublish its materialized keys."""
+        with self._regions_lock:
+            had_logical = self._logical_regions.pop(mr_name, None) is not None
+            materialized = [
+                region
+                for key, region in self._materialized_regions.items()
+                if key[0] == mr_name
+            ]
+            for region in materialized:
+                self._materialized_regions.pop((mr_name, region.resource_key), None)
+
+        for region in materialized:
+            try:
+                _, pool = self._get_context_and_pool(region.resource_key)
+                if hasattr(pool, "unregister_memory_region"):
+                    pool.unregister_memory_region(region.handler)
+            except Exception as e:
+                logger.warning(
+                    "PeerAgent %s: Memory region unregister warning for %s on %s: %s",
+                    self.alias,
+                    mr_name,
+                    region.resource_key,
+                    e,
+                )
+
+        if self._redis_client is not None and self.alias:
+            prefix = self._redis_prefix()
+            mr_key = f"{prefix}mr:{self.alias}:{mr_name}"
+            keys = [mr_key]
+            keys.extend(
+                f"{mr_key}:{region.resource_key.redis_suffix()}"
+                for region in materialized
+            )
+            try:
+                self._redis_client.delete(*keys)
+            except Exception as e:
+                logger.warning(
+                    "PeerAgent %s: Memory region Redis cleanup warning for %s: %s",
+                    self.alias,
+                    mr_name,
+                    e,
+                )
+
+        with self._mr_info_cache_lock:
+            stale_cache_keys = [
+                key
+                for key in self._mr_info_cache
+                if len(key) >= 2 and key[0] == self.alias and key[1] == mr_name
+            ]
+            for key in stale_cache_keys:
+                self._mr_info_cache.pop(key, None)
+
+        if had_logical or materialized:
+            self._publish_memory_keys()
+            return True
+        return False
 
     def _materialize_all_regions_for_key(self, key: RdmaResourceKey) -> None:
         with self._regions_lock:

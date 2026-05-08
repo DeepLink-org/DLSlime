@@ -115,6 +115,8 @@ public:
     }
 
     int unregisterMemoryRegion(const uintptr_t& mr_key);
+    int unregisterMemoryRegion(int32_t handle);
+    int unregisterMemoryRegion(const std::string& name);
 
     json mrInfo();
 
