@@ -10,8 +10,8 @@ namespace obs {
 // Global counter storage — defined here, extern-declared in obs.h
 // ============================================================
 
-PeerCounters g_peer;
-NicCounters  g_nics[OBS_MAX_NICS];
+PeerCounters            g_peer;
+NicCounters             g_nics[OBS_MAX_NICS];
 static std::atomic<int> g_nic_count{0};
 
 // ============================================================
@@ -92,26 +92,26 @@ nlohmann::json obs_snapshot_json()
         auto& nic = g_nics[i];
 
         // Aggregate across ops for the summary fields
-        uint64_t n_assign    = 0, n_batch = 0, n_sub_bytes = 0;
+        uint64_t n_assign = 0, n_batch = 0, n_sub_bytes = 0;
         uint64_t n_comp_bytes = 0, n_fail_bytes = 0;
-        int64_t  n_pending   = 0;
-        uint64_t n_errors    = 0;
+        int64_t  n_pending    = 0;
+        uint64_t n_errors     = 0;
         uint64_t n_post_batch = 0, n_post_wr = 0, n_post_bytes = 0;
         uint64_t n_post_fail = 0;
 
         json by_op = json::object();
         for (int op = 0; op < OBS_OP_COUNT; ++op) {
-            uint64_t a  = nic.assign_total[op].load(std::memory_order_relaxed);
-            uint64_t b  = nic.batch_total[op].load(std::memory_order_relaxed);
-            uint64_t sb = nic.submitted_bytes_total[op].load(std::memory_order_relaxed);
-            uint64_t cb = nic.completed_bytes_total[op].load(std::memory_order_relaxed);
-            uint64_t fb = nic.failed_bytes_total[op].load(std::memory_order_relaxed);
-            int64_t  p  = nic.pending_ops[op].load(std::memory_order_relaxed);
-            uint64_t e  = nic.error_total[op].load(std::memory_order_relaxed);
-            uint64_t pb = nic.post_batch_total[op].load(std::memory_order_relaxed);
-            uint64_t pw = nic.post_wr_total[op].load(std::memory_order_relaxed);
+            uint64_t a   = nic.assign_total[op].load(std::memory_order_relaxed);
+            uint64_t b   = nic.batch_total[op].load(std::memory_order_relaxed);
+            uint64_t sb  = nic.submitted_bytes_total[op].load(std::memory_order_relaxed);
+            uint64_t cb  = nic.completed_bytes_total[op].load(std::memory_order_relaxed);
+            uint64_t fb  = nic.failed_bytes_total[op].load(std::memory_order_relaxed);
+            int64_t  p   = nic.pending_ops[op].load(std::memory_order_relaxed);
+            uint64_t e   = nic.error_total[op].load(std::memory_order_relaxed);
+            uint64_t pb  = nic.post_batch_total[op].load(std::memory_order_relaxed);
+            uint64_t pw  = nic.post_wr_total[op].load(std::memory_order_relaxed);
             uint64_t pby = nic.post_bytes_total[op].load(std::memory_order_relaxed);
-            uint64_t pf = nic.post_failures_total[op].load(std::memory_order_relaxed);
+            uint64_t pf  = nic.post_failures_total[op].load(std::memory_order_relaxed);
 
             n_assign += a;
             n_batch += b;
@@ -127,13 +127,17 @@ nlohmann::json obs_snapshot_json()
 
             // Include per-op detail if non-zero
             if (a > 0 || b > 0 || sb > 0 || cb > 0) {
-                by_op[obs_op_name(static_cast<ObsOpIndex>(op))] = json{
-                    {"assign", a}, {"batch", b},
-                    {"submitted_bytes", sb}, {"completed_bytes", cb},
-                    {"failed_bytes", fb}, {"pending", p}, {"errors", e},
-                    {"post_batch", pb}, {"post_wr", pw},
-                    {"post_bytes", pby}, {"post_failures", pf}
-                };
+                by_op[obs_op_name(static_cast<ObsOpIndex>(op))] = json{{"assign", a},
+                                                                       {"batch", b},
+                                                                       {"submitted_bytes", sb},
+                                                                       {"completed_bytes", cb},
+                                                                       {"failed_bytes", fb},
+                                                                       {"pending", p},
+                                                                       {"errors", e},
+                                                                       {"post_batch", pb},
+                                                                       {"post_wr", pw},
+                                                                       {"post_bytes", pby},
+                                                                       {"post_failures", pf}};
             }
         }
 

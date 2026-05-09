@@ -544,6 +544,9 @@ PYBIND11_MODULE(_slime_c, m)
     // Observability (always available, independent of backend)
     // =========================================================================
     m.def("obs_enabled", &dlslime::obs::obs_enabled, "Check if observability is enabled (DLSLIME_OBS=1)");
-    m.def("obs_snapshot", []() { return dlslime::obs::obs_snapshot_json(); }, "Return a dict snapshot of all obs counters");
+    m.def(
+        "obs_snapshot",
+        []() { return dlslime::obs::obs_snapshot_json(); },
+        "Return a dict snapshot of all obs counters");
     m.def("obs_reset_for_test", &dlslime::obs::obs_reset_for_test, "Reset all obs counters (testing only)");
 }

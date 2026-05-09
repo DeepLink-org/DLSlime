@@ -255,8 +255,10 @@ int64_t RDMAChannel::post_send_batch(int qpi, RDMAAssign* assign, std::shared_pt
         uint64_t total_bytes = 0;
         for (size_t i = 0; i < batch_size; ++i)
             total_bytes += sge[i].length;
-        obs::obs_record_post_batch(obs_nic_id_, obs::OPCODE_TO_OBS[static_cast<uint8_t>(assign->opcode_)],
-                                   static_cast<uint32_t>(batch_size), total_bytes);
+        obs::obs_record_post_batch(obs_nic_id_,
+                                   obs::OPCODE_TO_OBS[static_cast<uint8_t>(assign->opcode_)],
+                                   static_cast<uint32_t>(batch_size),
+                                   total_bytes);
     }
 
     return 0;
@@ -299,8 +301,7 @@ int64_t RDMAChannel::post_recv_batch(int qpi, RDMAAssign* assign, std::shared_pt
         uint64_t total_bytes = 0;
         for (size_t i = 0; i < batch_size; ++i)
             total_bytes += sge[i].length;
-        obs::obs_record_post_batch(obs_nic_id_, obs::OBS_OP_RECV,
-                                   static_cast<uint32_t>(batch_size), total_bytes);
+        obs::obs_record_post_batch(obs_nic_id_, obs::OBS_OP_RECV, static_cast<uint32_t>(batch_size), total_bytes);
     }
 
     return 0;
@@ -357,8 +358,10 @@ int64_t RDMAChannel::post_rc_oneside_batch(int qpi, RDMAAssign* assign, std::sha
         uint64_t total_bytes = 0;
         for (size_t i = 0; i < batch_size; ++i)
             total_bytes += sge[i].length;
-        obs::obs_record_post_batch(obs_nic_id_, obs::OPCODE_TO_OBS[static_cast<uint8_t>(assign->opcode_)],
-                                   static_cast<uint32_t>(batch_size), total_bytes);
+        obs::obs_record_post_batch(obs_nic_id_,
+                                   obs::OPCODE_TO_OBS[static_cast<uint8_t>(assign->opcode_)],
+                                   static_cast<uint32_t>(batch_size),
+                                   total_bytes);
     }
 
     return 0;

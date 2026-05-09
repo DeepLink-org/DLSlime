@@ -1,7 +1,5 @@
 #include "rdma_context.h"
 
-#include "dlslime/csrc/observability/obs.h"
-
 #include <infiniband/verbs.h>
 #include <numa.h>
 #include <poll.h>
@@ -33,6 +31,7 @@
 #include "dlslime/csrc/engine/rdma/rdma_env.h"
 #include "dlslime/csrc/engine/rdma/rdma_utils.h"
 #include "dlslime/csrc/logging.h"
+#include "dlslime/csrc/observability/obs.h"
 
 namespace dlslime {
 
@@ -235,12 +234,13 @@ int64_t RDMAContext::cq_poll_handle()
 
                 // Observability: record completion or failure using pre-computed fields
                 if (obs::obs_enabled() && assign->obs_is_final) {
-                    auto obs_op     = static_cast<obs::ObsOpIndex>(assign->obs_op);
-                    auto obs_nic    = static_cast<int>(assign->obs_nic_id);
-                    auto obs_bytes  = assign->obs_bytes;
+                    auto obs_op    = static_cast<obs::ObsOpIndex>(assign->obs_op);
+                    auto obs_nic   = static_cast<int>(assign->obs_nic_id);
+                    auto obs_bytes = assign->obs_bytes;
                     if (status_code == RDMAAssign::SUCCESS) {
                         obs::obs_record_complete(obs_nic, obs_op, obs_bytes);
-                    } else {
+                    }
+                    else {
                         obs::obs_record_fail(obs_nic, obs_op, obs_bytes);
                     }
                 }

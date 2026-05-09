@@ -9,12 +9,12 @@ from __future__ import annotations
 
 import inspect
 import json
+import os
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Set, Tuple
-import os
 
 try:
     import httpx
@@ -1639,7 +1639,7 @@ class PeerAgent:
         self._stop_event.set()
 
         # Stop obs reporter first (lightweight, no dependency on endpoints)
-        if getattr(self, '_obs_reporter', None) is not None:
+        if getattr(self, "_obs_reporter", None) is not None:
             self._obs_reporter.stop()
 
         if self._mailbox:

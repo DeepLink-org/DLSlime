@@ -1,7 +1,5 @@
 #include "rdma_endpoint.h"
 
-#include "dlslime/csrc/observability/obs.h"
-
 #include <stdlib.h>
 #include <sys/types.h>
 
@@ -22,6 +20,7 @@
 #include "dlslime/csrc/device/device_api.h"
 #include "dlslime/csrc/engine/assignment.h"
 #include "dlslime/csrc/logging.h"
+#include "dlslime/csrc/observability/obs.h"
 #include "dlslime/csrc/utils.h"
 #include "engine/rdma/memory_pool.h"
 #include "engine/rdma/rdma_channel.h"
@@ -974,7 +973,8 @@ RDMAEndpoint::writeWithImm(const std::vector<assign_tuple_t>& assign, int32_t im
         uint64_t total_bytes = 0;
         for (const auto& a : assign)
             total_bytes += std::get<4>(a);
-        obs::obs_record_submit(obs_nic_id_, obs::OBS_OP_WRITE_WITH_IMM, static_cast<uint32_t>(assign.size()), total_bytes);
+        obs::obs_record_submit(
+            obs_nic_id_, obs::OBS_OP_WRITE_WITH_IMM, static_cast<uint32_t>(assign.size()), total_bytes);
     }
 
     auto op_state = makeOpState((1u << num_qp_) - 1, false, stream, /*trace_start=*/false);

@@ -1,6 +1,7 @@
 """Tests for C++ observability counters via pybind11."""
 
 import os
+
 import pytest
 
 
@@ -13,6 +14,7 @@ def _set_obs_env(monkeypatch):
 def _import_slime_c():
     try:
         import dlslime._slime_c as _c
+
         return _c
     except ImportError:
         pytest.skip("dlslime._slime_c not available (build without RDMA?)")

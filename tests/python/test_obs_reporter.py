@@ -2,14 +2,16 @@
 
 import json
 import os
-import time
 import threading
+import time
+
 import pytest
 
 
 def _try_import_accounting():
     try:
         from dlslime.peer_agent._accounting import ObsReporter
+
         return ObsReporter
     except ImportError:
         pytest.skip("dlslime.peer_agent._accounting not available")
@@ -78,6 +80,7 @@ class TestObsReporterRedis:
     def redis_client(self):
         try:
             import redis as redis_mod
+
             client = redis_mod.Redis(host="127.0.0.1", port=6379, decode_responses=True)
             client.ping()
             yield client
@@ -107,7 +110,9 @@ class TestObsReporterRedis:
         val = redis_client.get(key)
 
         if val is None:
-            pytest.skip("Reporter did not write (obs might not be enabled at C++ level)")
+            pytest.skip(
+                "Reporter did not write (obs might not be enabled at C++ level)"
+            )
 
         snap = json.loads(val)
         assert snap["schema_version"] == 1

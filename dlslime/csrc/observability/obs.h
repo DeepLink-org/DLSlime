@@ -40,12 +40,12 @@ enum ObsOpIndex : uint8_t {
 /// so the hot-path lookup is a single indexed load.
 /// OpCode enum: READ=0, WRITE=1, SEND=2, RECV=3, SEND_WITH_IMM=4, WRITE_WITH_IMM=5
 inline constexpr ObsOpIndex OPCODE_TO_OBS[] = {
-    OBS_OP_READ,          // OpCode::READ          = 0
-    OBS_OP_WRITE,         // OpCode::WRITE         = 1
-    OBS_OP_SEND,          // OpCode::SEND          = 2
-    OBS_OP_RECV,          // OpCode::RECV          = 3
-    OBS_OP_SEND,          // OpCode::SEND_WITH_IMM = 4  (same counter as SEND)
-    OBS_OP_WRITE_WITH_IMM // OpCode::WRITE_WITH_IMM= 5
+    OBS_OP_READ,           // OpCode::READ          = 0
+    OBS_OP_WRITE,          // OpCode::WRITE         = 1
+    OBS_OP_SEND,           // OpCode::SEND          = 2
+    OBS_OP_RECV,           // OpCode::RECV          = 3
+    OBS_OP_SEND,           // OpCode::SEND_WITH_IMM = 4  (same counter as SEND)
+    OBS_OP_WRITE_WITH_IMM  // OpCode::WRITE_WITH_IMM= 5
 };
 
 inline const char* obs_op_name(ObsOpIndex op)

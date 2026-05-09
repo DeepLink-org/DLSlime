@@ -34,7 +34,7 @@ import os
 import socket
 import threading
 import time
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import Any, Dict, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ._agent import PeerAgent
@@ -53,9 +53,7 @@ class ObsReporter:
         self._stop_event = threading.Event()
         self._thread: Optional[threading.Thread] = None
 
-        self._time_step_ms = int(
-            os.environ.get("DLSLIME_OBS_TIME_STEP_MS", "1000")
-        )
+        self._time_step_ms = int(os.environ.get("DLSLIME_OBS_TIME_STEP_MS", "1000"))
         self._redis_enabled = os.environ.get("DLSLIME_OBS_REDIS", "1") != "0"
         self._host = socket.gethostname()
         self._pid = os.getpid()

@@ -1,7 +1,5 @@
 #include "dlslime/csrc/engine/rdma/memory_pool.h"
 
-#include "dlslime/csrc/observability/obs.h"
-
 #include <infiniband/verbs.h>
 #include <sys/types.h>
 
@@ -13,6 +11,7 @@
 #include <unordered_map>
 
 #include "dlslime/csrc/logging.h"
+#include "dlslime/csrc/observability/obs.h"
 
 namespace dlslime {
 

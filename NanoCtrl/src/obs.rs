@@ -76,8 +76,7 @@ pub fn run_obs(args: ObsArgs) -> Result<()> {
 // ────────────────────────── Scan helper ──────────────────────────
 
 fn scan_snapshots(args: &ObsQueryArgs) -> Result<Vec<ObsSnapshot>> {
-    let redis_url =
-        std::env::var("NANOCTRL_REDIS_URL").unwrap_or_else(|_| args.redis_url.clone());
+    let redis_url = std::env::var("NANOCTRL_REDIS_URL").unwrap_or_else(|_| args.redis_url.clone());
     let client = redis::Client::open(redis_url.as_str())?;
     let mut conn = client.get_connection()?;
 
@@ -86,9 +85,7 @@ fn scan_snapshots(args: &ObsQueryArgs) -> Result<Vec<ObsSnapshot>> {
         _ => "obs:peer:*".to_string(),
     };
 
-    let keys: Vec<String> = redis::cmd("KEYS")
-        .arg(&pattern)
-        .query(&mut conn)?;
+    let keys: Vec<String> = redis::cmd("KEYS").arg(&pattern).query(&mut conn)?;
 
     let now_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -294,7 +291,17 @@ fn cmd_peers(args: ObsQueryArgs) -> Result<()> {
     // Table header
     println!(
         "{:<12} {:<15} {:<8} {:<6} {:<6} {:>8} {:>8} {:>10} {:>10} {:>8} {:>7}",
-        "PEER", "HOST", "PID", "AGE", "STATE", "ASSIGN", "BATCH", "BW", "BYTES", "PENDING", "ERRORS"
+        "PEER",
+        "HOST",
+        "PID",
+        "AGE",
+        "STATE",
+        "ASSIGN",
+        "BATCH",
+        "BW",
+        "BYTES",
+        "PENDING",
+        "ERRORS"
     );
 
     for s in &snapshots {
@@ -343,15 +350,22 @@ fn cmd_nics(args: ObsQueryArgs) -> Result<()> {
 
     println!(
         "{:<12} {:<12} {:<6} {:>8} {:>8} {:>10} {:>10} {:>8} {:>7} {:>9} {:>6}",
-        "PEER", "NIC", "AGE", "ASSIGN", "BATCH", "BW(post)", "BYTES", "PENDING", "ERRORS", "POST_FAIL", "CQ_ERR"
+        "PEER",
+        "NIC",
+        "AGE",
+        "ASSIGN",
+        "BATCH",
+        "BW(post)",
+        "BYTES",
+        "PENDING",
+        "ERRORS",
+        "POST_FAIL",
+        "CQ_ERR"
     );
 
     for s in &snapshots {
         for nic in &s.nics {
-            let nic_name = nic
-                .get("nic")
-                .and_then(Value::as_str)
-                .unwrap_or("?");
+            let nic_name = nic.get("nic").and_then(Value::as_str).unwrap_or("?");
             let post_bytes = get_u64(nic, "post_bytes_total");
             // Estimate NIC-level BW from post bytes (rough, since we don't have per-NIC EWMA)
             let nic_bw_str = human_bytes(post_bytes);
