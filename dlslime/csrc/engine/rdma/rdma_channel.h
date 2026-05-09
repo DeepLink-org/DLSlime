@@ -76,5 +76,7 @@ private:
     std::shared_ptr<RDMARemoteMemoryPool> remote_pool_{};
 
     RDMAChannelState state{RDMAChannelState::Destroyed};
+
+    int obs_nic_id_{-1};  // Observability: registered NIC slot index
 };
 }  // namespace dlslime

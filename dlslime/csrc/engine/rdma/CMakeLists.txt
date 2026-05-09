@@ -7,6 +7,7 @@ set(RDMA_SOURCES
     rdma_endpoint.cpp
     rdma_future.cpp
     rdma_worker.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../observability/obs.cpp
 )
 add_library(_slime_rdma SHARED ${RDMA_SOURCES})
 

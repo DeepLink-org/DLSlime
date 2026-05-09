@@ -14,6 +14,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Set, Tuple
+import os
 
 try:
     import httpx
@@ -298,6 +299,15 @@ class PeerAgent:
 
         # Start heartbeat thread (keeps agent alive in NanoCtrl)
         self._start_heartbeat()
+
+        # Start observability reporter (if enabled)
+        self._obs_reporter = None
+        self._scope = scope  # kept for ObsReporter to read
+        if os.environ.get("DLSLIME_OBS", "") not in ("", "0", "false"):
+            from ._accounting import ObsReporter
+
+            self._obs_reporter = ObsReporter(self)
+            self._obs_reporter.start()
 
     # ------------------------------------------------------------------
     # Registration / lifecycle
@@ -1627,6 +1637,11 @@ class PeerAgent:
         logger.info("PeerAgent %s: Shutting down...", self.alias)
 
         self._stop_event.set()
+
+        # Stop obs reporter first (lightweight, no dependency on endpoints)
+        if getattr(self, '_obs_reporter', None) is not None:
+            self._obs_reporter.stop()
+
         if self._mailbox:
             self._mailbox.stop()
 

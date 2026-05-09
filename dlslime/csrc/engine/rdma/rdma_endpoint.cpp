@@ -1,5 +1,7 @@
 #include "rdma_endpoint.h"
 
+#include "dlslime/csrc/observability/obs.h"
+
 #include <stdlib.h>
 #include <sys/types.h>
 
@@ -92,6 +94,11 @@ void RDMAEndpoint::init(std::shared_ptr<RDMAWorker> worker)
 {
     if (not ctx_)
         SLIME_ABORT("No NIC Resources");
+
+    // Observability: register this NIC for counter tracking
+    if (obs::obs_enabled()) {
+        obs_nic_id_ = obs::obs_register_nic(ctx_->device_name_.c_str());
+    }
 
     // Always create a new Remote Pool (Independent)
     remote_pool_ = std::make_shared<RDMARemoteMemoryPool>();
@@ -768,10 +775,30 @@ int32_t RDMAEndpoint::dispatchTask(OpCode                             op_code,
         }
         bool is_final_slot = (req_idx >= total_reqs);
 
+        // Observability: pre-compute total bytes for this slot
+        // (used by CQ-side accounting without re-scanning)
+        uint64_t slot_obs_bytes = 0;
+        if (obs::obs_enabled()) {
+            for (size_t qpi = 0; qpi < num_qp_; ++qpi) {
+                for (const auto& a : ctx->assigns_[qpi].batch_) {
+                    slot_obs_bytes += a.length;
+                }
+            }
+        }
+
         for (size_t qpi = 0; qpi < num_qp_; ++qpi) {
             auto& assign      = ctx->assigns_[qpi];
             assign.opcode_    = slot_op_code;
             assign.is_inline_ = false;
+
+            // Observability: set pre-computed fields for CQ path
+            if (obs::obs_enabled()) {
+                assign.obs_bytes        = slot_obs_bytes;
+                assign.obs_assign_count = static_cast<uint32_t>(current_batch_size);
+                assign.obs_op           = static_cast<uint8_t>(obs::OPCODE_TO_OBS[static_cast<uint8_t>(op_code)]);
+                assign.obs_nic_id       = static_cast<uint16_t>(obs_nic_id_);
+                assign.obs_is_final     = is_final_slot;
+            }
 
             // Capture the exact batch size we charged to the token bucket so
             // the refund on completion is correct. With the free-slot ring
@@ -831,6 +858,9 @@ std::shared_ptr<SendFuture> RDMAEndpoint::send(const chunk_tuple_t& chunk, void*
     auto offset   = std::get<1>(chunk);
     auto length   = std::get<2>(chunk);
 
+    // Observability: record semantic submit
+    obs::obs_record_submit(obs_nic_id_, obs::OBS_OP_SEND, 1, length);
+
     storage_view_t view{data_ptr, offset, length};
     int32_t        handle = local_pool_->registerMemoryRegion(data_ptr, length);
     (void)handle;
@@ -868,6 +898,9 @@ std::shared_ptr<RecvFuture> RDMAEndpoint::recv(const chunk_tuple_t& chunk, void*
     auto offset   = std::get<1>(chunk);
     auto length   = std::get<2>(chunk);
 
+    // Observability: record semantic submit
+    obs::obs_record_submit(obs_nic_id_, obs::OBS_OP_RECV, 1, length);
+
     storage_view_t view{data_ptr, offset, length};
     int32_t        handle = local_pool_->registerMemoryRegion(data_ptr, length);
 
@@ -903,6 +936,14 @@ std::shared_ptr<RecvFuture> RDMAEndpoint::recv(const chunk_tuple_t& chunk, void*
 
 std::shared_ptr<ReadWriteFuture> RDMAEndpoint::read(const std::vector<assign_tuple_t>& assign, void* stream)
 {
+    // Observability: record semantic submit
+    if (obs::obs_enabled()) {
+        uint64_t total_bytes = 0;
+        for (const auto& a : assign)
+            total_bytes += std::get<4>(a);
+        obs::obs_record_submit(obs_nic_id_, obs::OBS_OP_READ, static_cast<uint32_t>(assign.size()), total_bytes);
+    }
+
     auto op_state = makeOpState((1u << num_qp_) - 1, false, stream, /*trace_start=*/false);
     registerInFlight(op_state);
     dispatchTask(OpCode::READ, assign, op_state, 0, stream);
@@ -911,6 +952,14 @@ std::shared_ptr<ReadWriteFuture> RDMAEndpoint::read(const std::vector<assign_tup
 
 std::shared_ptr<ReadWriteFuture> RDMAEndpoint::write(const std::vector<assign_tuple_t>& assign, void* stream)
 {
+    // Observability: record semantic submit
+    if (obs::obs_enabled()) {
+        uint64_t total_bytes = 0;
+        for (const auto& a : assign)
+            total_bytes += std::get<4>(a);
+        obs::obs_record_submit(obs_nic_id_, obs::OBS_OP_WRITE, static_cast<uint32_t>(assign.size()), total_bytes);
+    }
+
     auto op_state = makeOpState((1u << num_qp_) - 1, false, stream, /*trace_start=*/false);
     registerInFlight(op_state);
     dispatchTask(OpCode::WRITE, assign, op_state, 0, stream);
@@ -920,6 +969,14 @@ std::shared_ptr<ReadWriteFuture> RDMAEndpoint::write(const std::vector<assign_tu
 std::shared_ptr<ReadWriteFuture>
 RDMAEndpoint::writeWithImm(const std::vector<assign_tuple_t>& assign, int32_t imm_data, void* stream)
 {
+    // Observability: record semantic submit
+    if (obs::obs_enabled()) {
+        uint64_t total_bytes = 0;
+        for (const auto& a : assign)
+            total_bytes += std::get<4>(a);
+        obs::obs_record_submit(obs_nic_id_, obs::OBS_OP_WRITE_WITH_IMM, static_cast<uint32_t>(assign.size()), total_bytes);
+    }
+
     auto op_state = makeOpState((1u << num_qp_) - 1, false, stream, /*trace_start=*/false);
     registerInFlight(op_state);
     dispatchTask(OpCode::WRITE_WITH_IMM, assign, op_state, imm_data, stream);
@@ -928,6 +985,9 @@ RDMAEndpoint::writeWithImm(const std::vector<assign_tuple_t>& assign, int32_t im
 
 std::shared_ptr<ImmRecvFuture> RDMAEndpoint::immRecv(void* stream)
 {
+    // Observability: record semantic submit (no bytes for immRecv)
+    obs::obs_record_submit(obs_nic_id_, obs::OBS_OP_IMM_RECV, 1, 0);
+
     io_recv_slot_id_.fetch_add(1, std::memory_order_relaxed);
 
     // One user-level receive operation. It may complete immediately from a

@@ -97,6 +97,14 @@ private:
     bool    with_imm_data_{false};
 
     bool is_inline_{false};
+
+    // Observability: pre-computed at submit time, consumed at CQ completion.
+    // Avoids re-scanning the batch on the CQ hot path.
+    uint64_t obs_bytes{0};        // total bytes in this assign
+    uint32_t obs_assign_count{0}; // number of sub-assignments
+    uint8_t  obs_op{0};           // ObsOpIndex
+    uint16_t obs_nic_id{0};       // registered NIC slot
+    bool     obs_is_final{false}; // true if this is the last slot for the user op
 };
 
 }  // namespace dlslime

@@ -1,5 +1,6 @@
 #include "rdma_channel.h"
 
+#include "dlslime/csrc/observability/obs.h"
 #include "memory_pool.h"
 
 namespace dlslime {
@@ -87,6 +88,11 @@ int32_t RDMAChannel::init(std::shared_ptr<RDMAContext> ctx, size_t num_qp, int32
     }
     SLIME_LOG_INFO("RDMA context initialized")
     SLIME_LOG_DEBUG("RDMA context local configuration: ", channelInfo());
+
+    // Observability: register NIC for transport-level post counters
+    if (obs::obs_enabled()) {
+        obs_nic_id_ = obs::obs_register_nic(ctx_->device_name_.c_str());
+    }
 
     state = RDMAChannelState::Initialized;
 
@@ -240,8 +246,19 @@ int64_t RDMAChannel::post_send_batch(int qpi, RDMAAssign* assign, std::shared_pt
     }
     ret = ibv_post_send(qp_[qpi], wr, &bad_wr);
     if (ret) {
+        obs::obs_record_post_failure(obs_nic_id_, obs::OPCODE_TO_OBS[static_cast<uint8_t>(assign->opcode_)]);
         return -1;
     }
+
+    // Observability: record transport-level post (bytes already computed in sge loop)
+    if (obs::obs_enabled()) {
+        uint64_t total_bytes = 0;
+        for (size_t i = 0; i < batch_size; ++i)
+            total_bytes += sge[i].length;
+        obs::obs_record_post_batch(obs_nic_id_, obs::OPCODE_TO_OBS[static_cast<uint8_t>(assign->opcode_)],
+                                   static_cast<uint32_t>(batch_size), total_bytes);
+    }
+
     return 0;
 }
 
@@ -273,7 +290,17 @@ int64_t RDMAChannel::post_recv_batch(int qpi, RDMAAssign* assign, std::shared_pt
     ret = ibv_post_recv(qp_[qpi], wr, &bad_wr);
     if (ret) {
         SLIME_LOG_ERROR("Failed to post RDMA recv : " << strerror(ret));
+        obs::obs_record_post_failure(obs_nic_id_, obs::OBS_OP_RECV);
         return -1;
+    }
+
+    // Observability: record transport-level post
+    if (obs::obs_enabled()) {
+        uint64_t total_bytes = 0;
+        for (size_t i = 0; i < batch_size; ++i)
+            total_bytes += sge[i].length;
+        obs::obs_record_post_batch(obs_nic_id_, obs::OBS_OP_RECV,
+                                   static_cast<uint32_t>(batch_size), total_bytes);
     }
 
     return 0;
@@ -321,8 +348,19 @@ int64_t RDMAChannel::post_rc_oneside_batch(int qpi, RDMAAssign* assign, std::sha
 
     if (ret) {
         SLIME_LOG_ERROR("Failed to post RDMA send : " << strerror(ret), ". Error Assignment: ", assign->dump(), ".");
+        obs::obs_record_post_failure(obs_nic_id_, obs::OPCODE_TO_OBS[static_cast<uint8_t>(assign->opcode_)]);
         return -1;
     }
+
+    // Observability: record transport-level post
+    if (obs::obs_enabled()) {
+        uint64_t total_bytes = 0;
+        for (size_t i = 0; i < batch_size; ++i)
+            total_bytes += sge[i].length;
+        obs::obs_record_post_batch(obs_nic_id_, obs::OPCODE_TO_OBS[static_cast<uint8_t>(assign->opcode_)],
+                                   static_cast<uint32_t>(batch_size), total_bytes);
+    }
+
     return 0;
 }
 

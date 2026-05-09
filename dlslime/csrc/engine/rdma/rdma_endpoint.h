@@ -316,6 +316,8 @@ private:
     std::atomic<int64_t> id_{-1};
     std::atomic<bool>    connected_{false};
 
+    int obs_nic_id_{-1};  // Observability: registered NIC slot index
+
     std::shared_ptr<RDMAContext>          ctx_;
     std::shared_ptr<RDMAMemoryPool>       local_pool_;  // user_pool (shared when from PeerAgent)
     std::shared_ptr<RDMAMemoryPool>       meta_pool_;   // per-endpoint, sys buffers (borrows PD from local_pool_)

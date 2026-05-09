@@ -1,5 +1,7 @@
 #include "dlslime/csrc/engine/rdma/memory_pool.h"
 
+#include "dlslime/csrc/observability/obs.h"
+
 #include <infiniband/verbs.h>
 #include <sys/types.h>
 
@@ -76,6 +78,10 @@ int32_t RDMAMemoryPool::registerMemoryRegion(uintptr_t data_ptr, uint64_t length
     else {
         SLIME_LOG_INFO("Registered Local MR: Handle=", handle, ", Ptr=", (void*)data_ptr);
     }
+
+    // Observability: track MR count and bytes
+    obs::obs_record_mr_register(length, false);
+
     return handle;
 }
 
@@ -126,11 +132,18 @@ int RDMAMemoryPool::unregisterMemoryRegion(int32_t handle)
         return -1;
     }
 
+    // Capture length before deregistration frees the MR struct
+    uint64_t mr_length = handle_to_mr_[handle] ? handle_to_mr_[handle]->length : 0;
+
     int rc = ibv_dereg_mr(handle_to_mr_[handle]);
     if (rc != 0) {
         SLIME_LOG_ERROR("Failed to unregister Local MR handle=", handle, ", rc=", rc, ", errno=", errno);
         return rc;
     }
+
+    // Observability: track MR unregistration
+    obs::obs_record_mr_unregister(mr_length, false);
+
     handle_to_mr_[handle] = nullptr;
 
     for (auto it = name_to_handle_.begin(); it != name_to_handle_.end();) {

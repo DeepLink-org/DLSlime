@@ -1,5 +1,7 @@
 #include "rdma_context.h"
 
+#include "dlslime/csrc/observability/obs.h"
+
 #include <infiniband/verbs.h>
 #include <numa.h>
 #include <poll.h>
@@ -165,6 +167,11 @@ int64_t RDMAContext::init(const std::string& dev_name, uint8_t ib_port, const st
     cq_           = ibv_create_cq(ib_ctx_, actual_cq_depth, NULL, comp_channel_, 0);
     SLIME_ASSERT(cq_, "create CQ failed");
 
+    // Observability: register NIC for CQ-level error/completion counters
+    if (obs::obs_enabled()) {
+        obs_nic_id_ = obs::obs_register_nic(dev_name.c_str());
+    }
+
     launch_future();
     SLIME_LOG_INFO("RDMA Context Initialized");
     return 0;
@@ -217,11 +224,27 @@ int64_t RDMAContext::cq_poll_handle()
                         RDMAAssign* assign = reinterpret_cast<RDMAAssign*>(wc[i].wr_id);
                         SLIME_LOG_ERROR("Failed WR ID: " << (void*)assign);
                     }
+
+                    // Observability: record CQ error (real failure, not flush)
+                    obs::obs_record_cq_error(obs_nic_id_);
                 }
             }
 
             if (wc[i].wr_id != 0) {
                 RDMAAssign* assign = reinterpret_cast<RDMAAssign*>(wc[i].wr_id);
+
+                // Observability: record completion or failure using pre-computed fields
+                if (obs::obs_enabled() && assign->obs_is_final) {
+                    auto obs_op     = static_cast<obs::ObsOpIndex>(assign->obs_op);
+                    auto obs_nic    = static_cast<int>(assign->obs_nic_id);
+                    auto obs_bytes  = assign->obs_bytes;
+                    if (status_code == RDMAAssign::SUCCESS) {
+                        obs::obs_record_complete(obs_nic, obs_op, obs_bytes);
+                    } else {
+                        obs::obs_record_fail(obs_nic, obs_op, obs_bytes);
+                    }
+                }
+
                 if (assign->callback_) {
                     assign->callback_(status_code, wc[i].imm_data);
                 }
