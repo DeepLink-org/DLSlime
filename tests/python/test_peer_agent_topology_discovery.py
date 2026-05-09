@@ -344,18 +344,22 @@ def test_peer_agent_scope_isolates_discovery_namespace():
     same_scope_target._redis_client = redis_client
     same_scope_target._publish_resource_record()
 
-    default_scope_target = _bare_agent(address="10.0.0.3")
-    default_scope_target.alias = "dlslime_default"
-    default_scope_target._redis_key_prefix = ""
-    default_scope_target._redis_client = redis_client
-    default_scope_target._publish_resource_record()
+    default_scope_target_with_same_alias = _bare_agent(address="10.0.0.3")
+    default_scope_target_with_same_alias.alias = "dlslime0"
+    default_scope_target_with_same_alias._redis_key_prefix = ""
+    default_scope_target_with_same_alias._redis_client = redis_client
+    default_scope_target_with_same_alias._publish_resource_record()
 
     assert initiator.list_agents() == ["dlslime0", "dlslime1"]
     assert initiator.get_resource("dlslime0") is not None
-    assert initiator.get_resource("dlslime_default") is None
+    assert initiator.get_resource("dlslime0")["host"]["address"] == "10.0.0.2"
 
-    assert default_scope_target.list_agents() == ["dlslime_default"]
-    assert default_scope_target.get_resource("dlslime1") is None
+    assert default_scope_target_with_same_alias.list_agents() == ["dlslime0"]
+    assert (
+        default_scope_target_with_same_alias.get_resource("dlslime0")["host"]["address"]
+        == "10.0.0.3"
+    )
+    assert default_scope_target_with_same_alias.get_resource("dlslime1") is None
 
 
 def test_discover_topology_requires_at_least_one_nic(tmp_path):

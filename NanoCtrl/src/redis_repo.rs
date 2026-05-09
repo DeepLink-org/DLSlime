@@ -18,6 +18,7 @@ pub const ENTITY_TTL_SECS: usize = 60;
 
 /// Lua scripts embedded once at compile time.
 pub struct LuaScripts {
+    pub register_agent: String,
     pub register_entity: String,
     pub unregister_entity: String,
     pub heartbeat: String,
@@ -27,6 +28,7 @@ impl LuaScripts {
     /// Load all Lua scripts from embedded source.
     pub fn load() -> Result<Self, AppError> {
         Ok(Self {
+            register_agent: include_str!("../lua/register_agent.lua").to_string(),
             register_entity: include_str!("../lua/register_entity.lua").to_string(),
             unregister_entity: include_str!("../lua/unregister_entity.lua").to_string(),
             heartbeat: include_str!("../lua/heartbeat.lua").to_string(),
@@ -118,31 +120,17 @@ impl RedisRepo {
             .to_string();
 
         let mut cmd = redis::cmd("EVAL");
-        cmd.arg(
-            r#"
-            local key = KEYS[1]
-            local ttl = tonumber(ARGV[1])
-            local reject_existing = ARGV[2] == "1"
-            if reject_existing and redis.call("EXISTS", key) == 1 then
-                return 0
-            end
-            for i = 3, #ARGV, 2 do
-                redis.call("HSET", key, ARGV[i], ARGV[i + 1])
-            end
-            redis.call("EXPIRE", key, ttl)
-            return 1
-            "#,
-        )
-        .arg(1)
-        .arg(&key)
-        .arg(ENTITY_TTL_SECS)
-        .arg(if alias_provided { "1" } else { "0" })
-        .arg("addr")
-        .arg(address)
-        .arg("updated_at")
-        .arg(updated_at)
-        .arg("memory_keys")
-        .arg("[]");
+        cmd.arg(&*self.scripts.register_agent)
+            .arg(1)
+            .arg(&key)
+            .arg(ENTITY_TTL_SECS)
+            .arg(if alias_provided { "1" } else { "0" })
+            .arg("addr")
+            .arg(address)
+            .arg("updated_at")
+            .arg(updated_at)
+            .arg("memory_keys")
+            .arg("[]");
         if let Some(device) = device {
             cmd.arg("device").arg(device);
         }
