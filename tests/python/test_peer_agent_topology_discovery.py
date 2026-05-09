@@ -78,6 +78,13 @@ def test_peer_connection_wait_rejects_names_without_connection():
         conn.wait(timeout=0.01)
 
 
+def test_connect_to_rejects_self_alias():
+    agent = _bare_agent()
+
+    with pytest.raises(ValueError, match="cannot target this agent's own alias"):
+        agent.connect_to(agent.alias)
+
+
 def _write(path, text):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
@@ -320,6 +327,35 @@ def test_publish_resource_record_and_get_resource_round_trip():
     own_resource = writer.get_resource()
     assert own_resource is writer._local_resource
     assert resource["nics"][0]["ports"][0]["link_type"] == "RoCE"
+
+
+def test_peer_agent_scope_isolates_discovery_namespace():
+    redis_client = FakeRedis()
+
+    initiator = _bare_agent(address="10.0.0.1")
+    initiator.alias = "dlslime1"
+    initiator._redis_key_prefix = "example_scope"
+    initiator._redis_client = redis_client
+    initiator._publish_resource_record()
+
+    same_scope_target = _bare_agent(address="10.0.0.2")
+    same_scope_target.alias = "dlslime0"
+    same_scope_target._redis_key_prefix = "example_scope"
+    same_scope_target._redis_client = redis_client
+    same_scope_target._publish_resource_record()
+
+    default_scope_target = _bare_agent(address="10.0.0.3")
+    default_scope_target.alias = "dlslime_default"
+    default_scope_target._redis_key_prefix = ""
+    default_scope_target._redis_client = redis_client
+    default_scope_target._publish_resource_record()
+
+    assert initiator.list_agents() == ["dlslime0", "dlslime1"]
+    assert initiator.get_resource("dlslime0") is not None
+    assert initiator.get_resource("dlslime_default") is None
+
+    assert default_scope_target.list_agents() == ["dlslime_default"]
+    assert default_scope_target.get_resource("dlslime1") is None
 
 
 def test_discover_topology_requires_at_least_one_nic(tmp_path):
