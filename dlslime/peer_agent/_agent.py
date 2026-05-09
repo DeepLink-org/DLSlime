@@ -425,6 +425,14 @@ class PeerAgent:
                 httpx.TimeoutException,
                 httpx.HTTPStatusError,
             ) as e:
+                if (
+                    isinstance(e, httpx.HTTPStatusError)
+                    and e.response.status_code == 409
+                ):
+                    raise RuntimeError(
+                        f"PeerAgent {self.alias!r} registration conflict: "
+                        f"{e.response.text}"
+                    ) from e
                 if attempt < max_retries - 1:
                     wait_time = retry_delay * (2**attempt)
                     logger.warning(
@@ -966,6 +974,11 @@ class PeerAgent:
         """Start connecting to a peer and return a connection handle."""
         if not isinstance(peer_alias, str) or not peer_alias:
             raise TypeError("connect_to() requires a non-empty peer alias string")
+        if peer_alias == self.alias:
+            raise ValueError(
+                f"connect_to() cannot target this agent's own alias {peer_alias!r}. "
+                "Start peer agents with distinct aliases."
+            )
 
         _tlog(f"{self.alias}: connect_to({peer_alias}) ENTER")
         t0 = time.perf_counter()

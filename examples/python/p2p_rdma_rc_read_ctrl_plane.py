@@ -13,6 +13,9 @@ import torch
 from dlslime import start_peer_agent
 
 
+EXAMPLE_SCOPE = "ctrl_plane_rc_read_ctrl_plane_example"
+
+
 def print_topology_discovery(agent, label, peer_aliases):
     print(f"\nTopology discovery ({label} view):")
     print("Active agents:", agent.list_agents())
@@ -33,11 +36,15 @@ def print_topology_discovery(agent, label, peer_aliases):
 initiator_agent = start_peer_agent(
     # alias=None (default) - NanoCtrl will auto-generate unique name
     nanoctrl_url="http://127.0.0.1:3000",
+    alias="dlslime0",
+    scope=EXAMPLE_SCOPE,
 )
 
 target_agent = start_peer_agent(
     # alias=None (default) - NanoCtrl will auto-generate unique name
     nanoctrl_url="http://127.0.0.1:3000",
+    alias="dlslime1",
+    scope=EXAMPLE_SCOPE,
 )
 
 # Get allocated names
@@ -57,6 +64,15 @@ print_topology_discovery(
     "target",
     [initiator_name, target_name],
 )
+
+if (
+    target_name not in initiator_agent.list_agents()
+    or initiator_name not in target_agent.list_agents()
+):
+    raise RuntimeError(
+        "Both peer agents must use the same NanoCtrl scope so they can discover "
+        f"each other. scope={EXAMPLE_SCOPE!r}"
+    )
 
 # Connect both sides so each agent has a connection handle to wait on.
 print("Connecting peers...")

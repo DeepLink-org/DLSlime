@@ -18,6 +18,7 @@ pub const ENTITY_TTL_SECS: usize = 60;
 
 /// Lua scripts embedded once at compile time.
 pub struct LuaScripts {
+    pub register_agent: String,
     pub register_entity: String,
     pub unregister_entity: String,
     pub heartbeat: String,
@@ -27,6 +28,7 @@ impl LuaScripts {
     /// Load all Lua scripts from embedded source.
     pub fn load() -> Result<Self, AppError> {
         Ok(Self {
+            register_agent: include_str!("../lua/register_agent.lua").to_string(),
             register_entity: include_str!("../lua/register_entity.lua").to_string(),
             unregister_entity: include_str!("../lua/unregister_entity.lua").to_string(),
             heartbeat: include_str!("../lua/heartbeat.lua").to_string(),
@@ -99,15 +101,15 @@ impl RedisRepo {
     ) -> Result<String, AppError> {
         let mut conn = self.conn().await?;
 
-        let agent_name = if let Some(alias) = alias {
-            alias
+        let (agent_name, alias_provided) = if let Some(alias) = alias {
+            (alias, true)
         } else {
             let counter_key = self.scoped_key(scope, &["agent_name_counter"]);
             let counter: i64 = redis::cmd("INCR")
                 .arg(&counter_key)
                 .query_async(&mut *conn)
                 .await?;
-            format!("{name_prefix}-{counter:x}")
+            (format!("{name_prefix}-{counter:x}"), false)
         };
 
         let key = self.scoped_key(scope, &["agent", &agent_name]);
@@ -116,8 +118,13 @@ impl RedisRepo {
             .map(|d| d.as_secs())
             .unwrap_or_default()
             .to_string();
-        let mut cmd = redis::cmd("HSET");
-        cmd.arg(&key)
+
+        let mut cmd = redis::cmd("EVAL");
+        cmd.arg(&*self.scripts.register_agent)
+            .arg(1)
+            .arg(&key)
+            .arg(ENTITY_TTL_SECS)
+            .arg(if alias_provided { "1" } else { "0" })
             .arg("addr")
             .arg(address)
             .arg("updated_at")
@@ -138,14 +145,12 @@ impl RedisRepo {
             cmd.arg("resource").arg(&resource_json);
             cmd.arg("topology").arg(resource_json);
         }
-        cmd.query_async::<()>(&mut *conn).await?;
-
-        // Set TTL so stale agents expire if heartbeat stops
-        redis::cmd("EXPIRE")
-            .arg(&key)
-            .arg(ENTITY_TTL_SECS)
-            .query_async::<()>(&mut *conn)
-            .await?;
+        let registered: i64 = cmd.query_async(&mut *conn).await?;
+        if registered == 0 {
+            return Err(AppError::Conflict(format!(
+                "Peer agent alias '{agent_name}' already exists in this scope"
+            )));
+        }
 
         tracing::info!("Registered peer agent: {agent_name} (TTL: {ENTITY_TTL_SECS}s)");
         Ok(agent_name)
