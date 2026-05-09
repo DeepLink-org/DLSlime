@@ -103,13 +103,68 @@ int32_t RDMAMemoryPool::get_mr_handle(uintptr_t data_ptr)
 int RDMAMemoryPool::unregisterMemoryRegion(const uintptr_t& mr_key)
 {
     std::unique_lock<std::mutex> lock(mrs_mutex_);
-    if (mrs_.count(mr_key)) {
-        ibv_dereg_mr(mrs_[mr_key]);
-        mrs_.erase(mr_key);
+    auto                         it = mrs_.find(mr_key);
+    if (it == mrs_.end() || it->second == nullptr) {
+        SLIME_LOG_WARN("Attempted to unregister non-existent Local MR key=", mr_key);
+        return -1;
     }
-    // Note: We don't currently support unregistering by name or cleaning up handle_to_mr_ easily
-    // without leaving holes, but for this use case (static topology) it's likely fine.
+
+    int rc = ibv_dereg_mr(it->second);
+    if (rc != 0) {
+        SLIME_LOG_ERROR("Failed to unregister Local MR key=", mr_key, ", rc=", rc, ", errno=", errno);
+        return rc;
+    }
+    mrs_.erase(it);
     return 0;
+}
+
+int RDMAMemoryPool::unregisterMemoryRegion(int32_t handle)
+{
+    std::unique_lock<std::mutex> lock(name_mutex_);
+    if (handle < 0 || static_cast<size_t>(handle) >= handle_to_mr_.size() || handle_to_mr_[handle] == nullptr) {
+        SLIME_LOG_WARN("Attempted to unregister non-existent Local MR handle=", handle);
+        return -1;
+    }
+
+    int rc = ibv_dereg_mr(handle_to_mr_[handle]);
+    if (rc != 0) {
+        SLIME_LOG_ERROR("Failed to unregister Local MR handle=", handle, ", rc=", rc, ", errno=", errno);
+        return rc;
+    }
+    handle_to_mr_[handle] = nullptr;
+
+    for (auto it = name_to_handle_.begin(); it != name_to_handle_.end();) {
+        if (it->second == handle) {
+            it = name_to_handle_.erase(it);
+        }
+        else {
+            ++it;
+        }
+    }
+    for (auto it = ptr_to_handle_.begin(); it != ptr_to_handle_.end();) {
+        if (it->second == handle) {
+            it = ptr_to_handle_.erase(it);
+        }
+        else {
+            ++it;
+        }
+    }
+    return 0;
+}
+
+int RDMAMemoryPool::unregisterMemoryRegion(const std::string& name)
+{
+    int32_t handle = -1;
+    {
+        std::unique_lock<std::mutex> lock(name_mutex_);
+        auto                         it = name_to_handle_.find(name);
+        if (it == name_to_handle_.end()) {
+            SLIME_LOG_WARN("Attempted to unregister non-existent Local MR name=", name);
+            return -1;
+        }
+        handle = it->second;
+    }
+    return unregisterMemoryRegion(handle);
 }
 
 json RDMAMemoryPool::mrInfo()
@@ -118,7 +173,10 @@ json RDMAMemoryPool::mrInfo()
     json                         mr_info;
     for (auto const& [name, handle] : name_to_handle_) {
         struct ibv_mr* mr = handle_to_mr_[handle];
-        mr_info[name]     = {
+        if (mr == nullptr) {
+            continue;
+        }
+        mr_info[name] = {
             {"handle", handle},
             {"addr", (uintptr_t)mr->addr},
             {"rkey", mr->rkey},

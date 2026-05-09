@@ -1102,6 +1102,7 @@ class PeerAgent:
             return
         with self._regions_lock:
             memory_keys = sorted(self._logical_regions.keys())
+        self._local_resource["memory_keys"] = memory_keys
         try:
             self._redis_client.hset(
                 self._agent_key(self.alias),
@@ -1120,6 +1121,79 @@ class PeerAgent:
             logger.warning(
                 "PeerAgent %s: Memory key publish warning: %s", self.alias, e
             )
+
+    def unregister_memory_region(self, mr_name: str) -> bool:
+        """Unregister a local logical memory region.
+
+        This is a local MR lifecycle primitive. The caller must ensure there are
+        no in-flight RDMA operations and no remote peer will continue using a
+        previously published addr/rkey. It does not broadcast invalidation to
+        peers that may have cached old MR metadata.
+        """
+        with self._regions_lock:
+            had_logical = mr_name in self._logical_regions
+            materialized = [
+                region
+                for key, region in self._materialized_regions.items()
+                if key[0] == mr_name
+            ]
+
+        if not had_logical and not materialized:
+            return False
+
+        for region in materialized:
+            try:
+                _, pool = self._get_context_and_pool(region.resource_key)
+                if not hasattr(pool, "unregister_memory_region"):
+                    raise RuntimeError(
+                        "underlying memory pool does not support unregister"
+                    )
+                rc = pool.unregister_memory_region(region.handler)
+                if rc != 0:
+                    raise RuntimeError(
+                        "underlying memory pool returned "
+                        f"{rc} for handle {region.handler}"
+                    )
+            except Exception as e:
+                raise RuntimeError(
+                    f"Failed to unregister memory region {mr_name!r} on "
+                    f"{region.resource_key}: {e}"
+                ) from e
+
+        with self._regions_lock:
+            self._logical_regions.pop(mr_name, None)
+            for region in materialized:
+                self._materialized_regions.pop((mr_name, region.resource_key), None)
+
+        if self._redis_client is not None and self.alias:
+            prefix = self._redis_prefix()
+            mr_key = f"{prefix}mr:{self.alias}:{mr_name}"
+            keys = [mr_key]
+            keys.extend(
+                f"{mr_key}:{region.resource_key.redis_suffix()}"
+                for region in materialized
+            )
+            try:
+                self._redis_client.delete(*keys)
+            except Exception as e:
+                logger.warning(
+                    "PeerAgent %s: Memory region Redis cleanup warning for %s: %s",
+                    self.alias,
+                    mr_name,
+                    e,
+                )
+
+        with self._mr_info_cache_lock:
+            stale_cache_keys = [
+                key
+                for key in self._mr_info_cache
+                if len(key) >= 2 and key[0] == self.alias and key[1] == mr_name
+            ]
+            for key in stale_cache_keys:
+                self._mr_info_cache.pop(key, None)
+
+        self._publish_memory_keys()
+        return True
 
     def _materialize_all_regions_for_key(self, key: RdmaResourceKey) -> None:
         with self._regions_lock:
@@ -1175,11 +1249,14 @@ class PeerAgent:
         peer_alias: str,
         mr_name: str,
         resource_key: Optional[RdmaResourceKey] = None,
+        *,
+        validate_cache: bool = False,
     ) -> Optional[Dict[str, Any]]:
-        """Get remote memory region info (p2p via Redis, persistent cache).
+        """Get remote memory region info (p2p via Redis, local cache).
 
-        MR info is immutable after registration, so cache never expires.
-        Architecture: Redis (source of truth) → PeerAgent cache (0µs hot path).
+        By default this is a cache-first lookup. Transfer paths pass
+        ``validate_cache=True`` so the sender refreshes or invalidates its local
+        cache against Redis immediately before resolving the remote handle.
         """
         cache_key = (
             peer_alias,
@@ -1187,12 +1264,29 @@ class PeerAgent:
             resource_key.redis_suffix() if resource_key else "",
         )
 
-        # Check cache first (fast path: 0µs)
         with self._mr_info_cache_lock:
-            if cache_key in self._mr_info_cache:
-                return self._mr_info_cache[cache_key]
+            cached = self._mr_info_cache.get(cache_key)
+            if cached is not None and not validate_cache:
+                return cached
 
-        # Cache miss: read directly from Redis (p2p, no HTTP)
+        mr_info = self._read_mr_info_from_redis(peer_alias, mr_name, resource_key)
+        if mr_info is None:
+            with self._mr_info_cache_lock:
+                self._mr_info_cache.pop(cache_key, None)
+            return None
+
+        with self._mr_info_cache_lock:
+            if cached is not None and cached == mr_info:
+                return self._mr_info_cache[cache_key]
+            self._mr_info_cache[cache_key] = mr_info
+        return mr_info
+
+    def _read_mr_info_from_redis(
+        self,
+        peer_alias: str,
+        mr_name: str,
+        resource_key: Optional[RdmaResourceKey] = None,
+    ) -> Optional[Dict[str, Any]]:
         prefix = self._redis_prefix()
         mr_key = f"{prefix}mr:{peer_alias}:{mr_name}"
         if resource_key is not None:
@@ -1207,15 +1301,9 @@ class PeerAgent:
             return None
 
         try:
-            mr_info = json.loads(mr_info_str)
+            return json.loads(mr_info_str)
         except json.JSONDecodeError:
             return None
-
-        # Store in cache (persistent, no expiration)
-        with self._mr_info_cache_lock:
-            self._mr_info_cache[cache_key] = mr_info
-
-        return mr_info
 
     def _register_remote_memory_region(
         self,
@@ -1252,7 +1340,12 @@ class PeerAgent:
             key = resource_key or self._default_local_resource_key()
             return self._materialize_region(mr_name, key).handler
 
-        mr_info = self.get_mr_info(peer_alias, mr_name, resource_key=resource_key)
+        mr_info = self.get_mr_info(
+            peer_alias,
+            mr_name,
+            resource_key=resource_key,
+            validate_cache=True,
+        )
         if mr_info is None:
             raise RuntimeError(
                 f"Remote MR '{mr_name}' from peer '{peer_alias}' is not "

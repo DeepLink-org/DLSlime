@@ -1,7 +1,14 @@
+import json
 import threading
 
 import pytest
-from dlslime.peer_agent._agent import DirectedConnection, PeerAgent, RdmaResourceKey
+from dlslime.peer_agent._agent import (
+    DirectedConnection,
+    LogicalMemoryRegion,
+    MaterializedMemoryRegion,
+    PeerAgent,
+    RdmaResourceKey,
+)
 
 
 class FakeEndpoint:
@@ -10,6 +17,7 @@ class FakeEndpoint:
         self.write_calls = []
         self.write_with_imm_calls = []
         self.send_calls = []
+        self.remote_register_calls = []
 
     def read(self, assign, stream=None):
         self.read_calls.append((assign, stream))
@@ -26,6 +34,42 @@ class FakeEndpoint:
     def send(self, chunk, stream=None):
         self.send_calls.append((chunk, stream))
         return "send-future"
+
+    def register_remote_memory_region(self, name, mr_info):
+        self.remote_register_calls.append((name, mr_info))
+        return 31
+
+
+class FakeRedis:
+    def __init__(self):
+        self.values = {}
+        self.hashes = {}
+        self.deleted = []
+
+    def set(self, key, value):
+        self.values[key] = value
+
+    def get(self, key):
+        return self.values.get(key)
+
+    def delete(self, *keys):
+        self.deleted.extend(keys)
+        for key in keys:
+            self.values.pop(key, None)
+            self.hashes.pop(key, None)
+
+    def hset(self, key, mapping):
+        self.hashes.setdefault(key, {}).update(mapping)
+
+
+class FakePool:
+    def __init__(self, rc=0):
+        self.rc = rc
+        self.unregistered = []
+
+    def unregister_memory_region(self, handle):
+        self.unregistered.append(handle)
+        return self.rc
 
 
 def _agent(endpoint):
@@ -59,6 +103,134 @@ def _agent(endpoint):
 
     agent.get_handle = get_handle
     return agent
+
+
+def test_peer_agent_unregister_memory_region_removes_local_and_published_state():
+    agent = PeerAgent.__new__(PeerAgent)
+    agent.alias = "local"
+    agent._shutdown_called = True
+    agent._redis_key_prefix = ""
+    agent._redis_client = FakeRedis()
+    agent._local_resource = {"memory_keys": ["kv"]}
+    agent._logical_regions = {"kv": LogicalMemoryRegion("kv", 1000, 0, 64)}
+    agent._regions_lock = threading.Lock()
+    agent._mr_info_cache = {
+        ("local", "kv", ""): {"rkey": 1},
+        ("peer", "kv", ""): {"rkey": 2},
+    }
+    agent._mr_info_cache_lock = threading.Lock()
+    key = RdmaResourceKey("mlx5_0", 1, "RoCE")
+    agent._materialized_regions = {
+        ("kv", key): MaterializedMemoryRegion("kv", key, 7, {"rkey": 1})
+    }
+    pool = FakePool()
+    agent._get_context_and_pool = lambda resource_key: (object(), pool)
+
+    base_key = "mr:local:kv"
+    specific_key = "mr:local:kv:mlx5_0:1:RoCE"
+    agent._redis_client.set(base_key, "{}")
+    agent._redis_client.set(specific_key, "{}")
+
+    assert agent.unregister_memory_region("kv") is True
+
+    assert agent._logical_regions == {}
+    assert agent._materialized_regions == {}
+    assert pool.unregistered == [7]
+    assert base_key in agent._redis_client.deleted
+    assert specific_key in agent._redis_client.deleted
+    assert agent._redis_client.values == {}
+    assert agent._mr_info_cache == {("peer", "kv", ""): {"rkey": 2}}
+    assert agent._local_resource["memory_keys"] == []
+    assert agent._redis_client.hashes["agent:local"]["memory_keys"] == "[]"
+
+
+def test_peer_agent_unregister_memory_region_reports_missing_region():
+    agent = PeerAgent.__new__(PeerAgent)
+    agent.alias = "local"
+    agent._shutdown_called = True
+    agent._redis_key_prefix = ""
+    agent._redis_client = None
+    agent._logical_regions = {}
+    agent._materialized_regions = {}
+    agent._regions_lock = threading.Lock()
+    agent._mr_info_cache = {}
+    agent._mr_info_cache_lock = threading.Lock()
+
+    assert agent.unregister_memory_region("missing") is False
+
+
+def test_peer_agent_validates_remote_mr_cache_missing_from_redis():
+    agent = PeerAgent.__new__(PeerAgent)
+    agent.alias = "local"
+    agent._shutdown_called = True
+    agent._redis_key_prefix = ""
+    agent._redis_client = FakeRedis()
+    agent._mr_info_cache = {("peer", "kv", ""): {"addr": 100, "length": 64, "rkey": 1}}
+    agent._mr_info_cache_lock = threading.Lock()
+
+    assert agent.get_mr_info("peer", "kv", validate_cache=True) is None
+    assert agent._mr_info_cache == {}
+
+
+def test_peer_agent_get_handle_validates_and_refreshes_remote_mr_cache():
+    agent = PeerAgent.__new__(PeerAgent)
+    agent.alias = "local"
+    agent._shutdown_called = True
+    agent._redis_key_prefix = ""
+    agent._redis_client = FakeRedis()
+    agent._mr_info_cache = {
+        ("peer", "kv", "mlx5_1:1:RoCE"): {"addr": 100, "length": 64, "rkey": 1}
+    }
+    agent._mr_info_cache_lock = threading.Lock()
+    fresh = {"addr": 200, "length": 128, "rkey": 2}
+    agent._redis_client.set("mr:peer:kv:mlx5_1:1:RoCE", json.dumps(fresh))
+    endpoint = FakeEndpoint()
+
+    handle = agent.get_handle(
+        "kv",
+        "peer",
+        resource_key=RdmaResourceKey("mlx5_1", 1, "RoCE"),
+        endpoint=endpoint,
+    )
+
+    assert handle == 31
+    assert endpoint.remote_register_calls == [("kv", fresh)]
+    assert agent._mr_info_cache == {("peer", "kv", "mlx5_1:1:RoCE"): fresh}
+
+
+def test_peer_agent_unregister_memory_region_keeps_metadata_on_pool_failure():
+    agent = PeerAgent.__new__(PeerAgent)
+    agent.alias = "local"
+    agent._shutdown_called = True
+    agent._redis_key_prefix = ""
+    agent._redis_client = FakeRedis()
+    agent._local_resource = {"memory_keys": ["kv"]}
+    region = LogicalMemoryRegion("kv", 1000, 0, 64)
+    agent._logical_regions = {"kv": region}
+    agent._regions_lock = threading.Lock()
+    agent._mr_info_cache = {("local", "kv", ""): {"rkey": 1}}
+    agent._mr_info_cache_lock = threading.Lock()
+    key = RdmaResourceKey("mlx5_0", 1, "RoCE")
+    materialized = MaterializedMemoryRegion("kv", key, 7, {"rkey": 1})
+    agent._materialized_regions = {("kv", key): materialized}
+    pool = FakePool(rc=-1)
+    agent._get_context_and_pool = lambda resource_key: (object(), pool)
+
+    base_key = "mr:local:kv"
+    specific_key = "mr:local:kv:mlx5_0:1:RoCE"
+    agent._redis_client.set(base_key, "{}")
+    agent._redis_client.set(specific_key, "{}")
+
+    with pytest.raises(RuntimeError, match="underlying memory pool returned -1"):
+        agent.unregister_memory_region("kv")
+
+    assert agent._logical_regions == {"kv": region}
+    assert agent._materialized_regions == {("kv", key): materialized}
+    assert pool.unregistered == [7]
+    assert agent._redis_client.deleted == []
+    assert set(agent._redis_client.values) == {base_key, specific_key}
+    assert agent._mr_info_cache == {("local", "kv", ""): {"rkey": 1}}
+    assert agent._local_resource["memory_keys"] == ["kv"]
 
 
 def test_get_connections_returns_selected_connection():
