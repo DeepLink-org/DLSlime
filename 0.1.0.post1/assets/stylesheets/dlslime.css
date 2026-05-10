@@ -10,12 +10,16 @@
 }
 
 .md-typeset .hero {
-  max-width: 48rem;
+  max-width: 64rem;
   margin: 1.5rem 0 2rem;
 }
 
 .md-typeset .hero h1 {
   margin-bottom: 0.6rem;
+}
+
+.md-typeset .hero p {
+  max-width: 58rem;
 }
 
 .md-typeset .feature-grid {
