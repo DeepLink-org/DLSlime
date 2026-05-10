@@ -8,9 +8,6 @@
       应用可以按需采用 Endpoint、PeerAgent、SlimeRPC 和 DLSlimeCache，而不必一次性迁移整套系统。
     </p>
   </div>
-  <div>
-    <img src="../assets/images/dlslime_arch.png" alt="DLSlime 架构">
-  </div>
 </div>
 
 ## 快速入口
