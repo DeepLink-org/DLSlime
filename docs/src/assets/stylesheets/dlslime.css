@@ -10,19 +10,12 @@
 }
 
 .md-typeset .hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(280px, 0.9fr);
-  gap: 2rem;
-  align-items: center;
+  max-width: 48rem;
   margin: 1.5rem 0 2rem;
 }
 
 .md-typeset .hero h1 {
   margin-bottom: 0.6rem;
-}
-
-.md-typeset .hero img {
-  width: 100%;
 }
 
 .md-typeset .feature-grid {
@@ -46,10 +39,4 @@
   border-color: var(--md-accent-fg-color);
   box-shadow: 0 4px 18px rgb(0 0 0 / 8%);
   text-decoration: none;
-}
-
-@media screen and (max-width: 760px) {
-  .md-typeset .hero {
-    grid-template-columns: 1fr;
-  }
 }

@@ -9,9 +9,6 @@
       PeerAgent coordination, SlimeRPC, and DLSlimeCache one layer at a time.
     </p>
   </div>
-  <div>
-    <img src="assets/images/dlslime_arch.png" alt="DLSlime architecture">
-  </div>
 </div>
 
 ## Start Here

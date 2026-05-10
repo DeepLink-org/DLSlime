@@ -2,7 +2,7 @@
   <img src="docs/imgs/assets/logo.png" alt="DLSlime logo" width="44%">
 </div>
 <p align="center">
-  <a href="docs/README.md">Docs</a> |
+  <a href="https://deeplink-org.github.io/DLSlime">Docs</a> |
   <a href="docs/roadmap.md"><img src="docs/imgs/assets/roadmap.svg" width="16" height="16" style="vertical-align: middle;"> Roadmap </a> |
   <a href="https://join.slack.com/t/dlslime/shared_invite/zt-3e9zvercw-a89KI_Ig8N1UTaol_q6MXg"><img src="docs/imgs/assets/slack.svg" width="16" height="16" style="vertical-align: middle;"> Slack </a> |
   <a href="docs/imgs/assets/wechat_qrcode.jpg"><img src="docs/imgs/assets/wechat.svg" width="16" height="16" style="vertical-align: middle;"> WeChat Group </a> |
