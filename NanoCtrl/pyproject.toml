@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "nanoctrl"
-version = "0.0.8"
+version = "0.1.0"
 description = "Shared NanoCtrl lifecycle client for NanoInfra services"
 requires-python = ">=3.10"
 dependencies = ["httpx>=0.24"]

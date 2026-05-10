@@ -1,0 +1,15 @@
+[project]
+name = "dlslime-docs"
+version = "0.1.0"
+description = "Documentation site tooling for DLSlime"
+requires-python = ">=3.10"
+dependencies = [
+  "mkdocs-material>=9.5",
+  "mkdocs-static-i18n>=1.2",
+  "mkdocstrings[python]>=0.25",
+  "mkdocs-linkcheck>=1.0",
+  "mike>=2.1",
+]
+
+[tool.uv]
+package = false
