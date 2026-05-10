@@ -35,8 +35,8 @@ check-links:
 	$(LINKCHECK) src
 
 deploy-dev:
-	$(MIKE) deploy --config-file mkdocs.local.yml --update-aliases dev latest
-	$(MIKE) set-default latest
+	$(MIKE) deploy --config-file mkdocs.local.yml --ignore-remote-status --update-aliases dev latest
+	$(MIKE) set-default --ignore-remote-status latest
 
 deploy-version:
 	test -n "$(VERSION)"
