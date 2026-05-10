@@ -15,6 +15,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: docs-pages
+  cancel-in-progress: false
+
 jobs:
   build:
     name: Deploy docs
@@ -22,6 +26,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -38,12 +44,17 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
+      - name: Fetch existing Pages branch
+        run: |
+          git fetch origin gh-pages:refs/remotes/origin/gh-pages || true
+
       - name: Deploy development docs
         if: github.ref_type == 'branch'
         run: |
           cd docs
-          mike deploy --push --update-aliases dev latest
-          mike set-default --push latest
+          mike deploy --update-aliases dev latest
+          mike set-default latest
+          git push origin gh-pages
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -52,7 +63,8 @@ jobs:
         run: |
           cd docs
           VERSION="${GITHUB_REF_NAME#v}"
-          mike deploy --push --update-aliases "$VERSION" latest
-          mike set-default --push latest
+          mike deploy --update-aliases "$VERSION" latest
+          mike set-default latest
+          git push origin gh-pages
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
