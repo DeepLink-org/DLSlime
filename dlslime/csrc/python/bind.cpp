@@ -549,4 +549,9 @@ PYBIND11_MODULE(_slime_c, m)
         []() { return dlslime::obs::obs_snapshot_json(); },
         "Return a dict snapshot of all obs counters");
     m.def("obs_reset_for_test", &dlslime::obs::obs_reset_for_test, "Reset all obs counters (testing only)");
+    m.def(
+        "obs_register_nic_for_test",
+        [](const std::string& name) { return dlslime::obs::obs_register_nic(name.c_str()); },
+        py::arg("name"),
+        "Register a NIC name and return its slot id (test-only wrapper around obs_register_nic)");
 }

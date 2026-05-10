@@ -40,6 +40,26 @@ struct EndpointOpState {
     // Optional tracing for the imm-recv fast path. Zero if unused.
     std::atomic<uint64_t> trace_start_ns{0};
     std::atomic<uint64_t> trace_end_ns{0};
+
+    // ============================================================
+    // Observability metadata (v0: one-sided read/write/writeWithImm).
+    //
+    // Semantic accounting is anchored here — not on RDMAAssign or CQ
+    // callbacks — so that one user-visible op decrements pending_ops
+    // exactly once regardless of num_qp or slot count.
+    //
+    // obs_enabled is the per-op gate: set to obs::obs_enabled() at
+    // submit time so callbacks can short-circuit cheaply.
+    // obs_completed is the once-only guard: callbacks do
+    //   !obs_completed.exchange(true, acq_rel)
+    // and the winner records completion (success or failure).
+    // ============================================================
+    uint64_t          obs_bytes{0};
+    uint32_t          obs_assign_count{0};
+    uint8_t           obs_op{0};  // ObsOpIndex
+    uint16_t          obs_nic_id{0};
+    bool              obs_enabled{false};
+    std::atomic<bool> obs_completed{false};
 };
 
 }  // namespace dlslime

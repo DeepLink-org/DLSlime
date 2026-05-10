@@ -1,6 +1,7 @@
 """Tests for C++ observability counters via pybind11."""
 
 import os
+import threading
 
 import pytest
 
@@ -61,10 +62,27 @@ class TestObsSnapshot:
             "failed_bytes_total",
             "pending_ops",
             "error_total",
+            # User/sys MR split (new) — with back-compat aliases
+            "user_mr_count",
+            "user_mr_bytes",
+            "sys_mr_count",
+            "sys_mr_bytes",
             "mr_count",
             "mr_bytes",
+            # Aggregated per-op pending (new)
+            "pending_by_op",
         ]:
             assert key in summary, f"Missing summary key: {key}"
+
+        # Back-compat: mr_count/mr_bytes must equal user_mr_count/user_mr_bytes
+        assert summary["mr_count"] == summary["user_mr_count"]
+        assert summary["mr_bytes"] == summary["user_mr_bytes"]
+
+        # pending_by_op shape: at least the one-sided ops must appear
+        pending_by_op = summary["pending_by_op"]
+        assert isinstance(pending_by_op, dict)
+        for op_name in ("read", "write", "write_with_imm"):
+            assert op_name in pending_by_op
 
     def test_reset_for_test(self):
         _c = _import_slime_c()
@@ -80,6 +98,8 @@ class TestObsSnapshot:
         assert summary["submitted_bytes_total"] == 0
         assert summary["completed_bytes_total"] == 0
         assert summary["pending_ops"] == 0
+        for v in summary["pending_by_op"].values():
+            assert v == 0
 
     def test_nics_array(self):
         _c = _import_slime_c()
@@ -96,3 +116,73 @@ class TestObsSnapshot:
             assert "assign_total" in nic
             assert "batch_total" in nic
             assert "cq_errors_total" in nic
+
+
+class TestObsRegisterNicRace:
+    """Concurrent obs_register_nic("mlx5_0") must collapse to a single slot."""
+
+    def test_concurrent_same_name_returns_single_slot(self):
+        _c = _import_slime_c()
+        if not hasattr(_c, "obs_register_nic_for_test"):
+            pytest.skip("obs_register_nic_for_test not exposed")
+        if not _c.obs_enabled():
+            pytest.skip("obs not enabled")
+
+        name = "test_nic_race_mlx5_0"
+        results: list[int] = []
+        lock = threading.Lock()
+        barrier = threading.Barrier(8)
+
+        def worker():
+            barrier.wait()
+            slot = _c.obs_register_nic_for_test(name)
+            with lock:
+                results.append(slot)
+
+        threads = [threading.Thread(target=worker) for _ in range(8)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        # All threads must receive the same slot id.
+        assert len(results) == 8
+        assert all(r == results[0] for r in results), results
+        assert results[0] >= 0
+
+        # The snapshot must contain exactly one entry for this name.
+        snap = _c.obs_snapshot()
+        matching = [n for n in snap.get("nics", []) if n.get("nic") == name]
+        assert len(matching) == 1, matching
+
+
+class TestObsNoTwoSideSubmit:
+    """v0: production code must not call obs_record_submit for send/recv/immRecv."""
+
+    def test_no_twoside_submit_in_rdma_endpoint(self):
+        import pathlib
+
+        src = pathlib.Path(__file__).resolve().parents[2] / (
+            "dlslime/csrc/engine/rdma/rdma_endpoint.cpp"
+        )
+        if not src.exists():
+            pytest.skip(f"source not found at {src}")
+
+        text = src.read_text()
+
+        # obs_record_submit may legitimately appear only inside the three
+        # one-sided functions: read(), write(), writeWithImm(). Detect
+        # by scanning forward from each helper's definition boundary.
+        twoside_defs = [
+            "RDMAEndpoint::send(",
+            "RDMAEndpoint::recv(",
+            "RDMAEndpoint::immRecv(",
+        ]
+        for sig in twoside_defs:
+            start = text.find(sig)
+            assert start != -1, f"expected to find {sig} in rdma_endpoint.cpp"
+            # take a ~2000-char window which comfortably covers one function
+            window = text[start : start + 2000]
+            assert (
+                "obs::obs_record_submit" not in window
+            ), f"{sig} must not call obs::obs_record_submit in v0"

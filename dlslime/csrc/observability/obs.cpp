@@ -2,6 +2,7 @@
 
 #include <cstdlib>
 #include <cstring>
+#include <mutex>
 
 namespace dlslime {
 namespace obs {
@@ -13,6 +14,7 @@ namespace obs {
 PeerCounters            g_peer;
 NicCounters             g_nics[OBS_MAX_NICS];
 static std::atomic<int> g_nic_count{0};
+static std::mutex       g_nic_register_mu;
 
 // ============================================================
 // obs_enabled(): one-shot init from DLSLIME_OBS env var
@@ -29,6 +31,11 @@ bool obs_enabled()
 
 // ============================================================
 // obs_register_nic(): allocate a fixed slot for a NIC device
+//
+// Slow path — concurrent PeerAgent endpoint creation may race on the
+// same device_name. A std::mutex makes the check-then-insert atomic
+// so each device_name maps to exactly one nic_id. The hot path still
+// reads directly from the fixed g_nics[] array via nic_id.
 // ============================================================
 
 int obs_register_nic(const char* device_name)
@@ -36,7 +43,8 @@ int obs_register_nic(const char* device_name)
     if (!device_name)
         return -1;
 
-    // Check if already registered (linear scan, max 16 — init path only)
+    std::lock_guard<std::mutex> lk(g_nic_register_mu);
+
     int count = g_nic_count.load(std::memory_order_acquire);
     for (int i = 0; i < count; ++i) {
         if (g_nics[i].active && std::strncmp(g_nics[i].device_name, device_name, 63) == 0) {
@@ -44,16 +52,18 @@ int obs_register_nic(const char* device_name)
         }
     }
 
-    // Allocate new slot
-    int slot = g_nic_count.fetch_add(1, std::memory_order_acq_rel);
-    if (slot >= OBS_MAX_NICS) {
-        g_nic_count.fetch_sub(1, std::memory_order_relaxed);
+    if (count >= OBS_MAX_NICS) {
         return -1;  // out of slots
     }
 
+    int slot = count;
     std::strncpy(g_nics[slot].device_name, device_name, 63);
     g_nics[slot].device_name[63] = '\0';
     g_nics[slot].active          = true;
+
+    // Publish the new count last so the lock-free readers in
+    // obs_snapshot_json() observe a fully-initialized slot.
+    g_nic_count.store(slot + 1, std::memory_order_release);
 
     return slot;
 }
@@ -79,8 +89,25 @@ nlohmann::json obs_snapshot_json()
     summary["failed_bytes_total"]    = g_peer.failed_bytes_total.load(std::memory_order_relaxed);
     summary["pending_ops"]           = g_peer.pending_ops.load(std::memory_order_relaxed);
     summary["error_total"]           = g_peer.error_total.load(std::memory_order_relaxed);
-    summary["mr_count"]              = g_peer.mr_count.load(std::memory_order_relaxed);
-    summary["mr_bytes"]              = g_peer.mr_bytes.load(std::memory_order_relaxed);
+
+    uint64_t user_mr_count   = g_peer.user_mr_count.load(std::memory_order_relaxed);
+    uint64_t user_mr_bytes   = g_peer.user_mr_bytes.load(std::memory_order_relaxed);
+    summary["user_mr_count"] = user_mr_count;
+    summary["user_mr_bytes"] = user_mr_bytes;
+    summary["sys_mr_count"]  = g_peer.sys_mr_count.load(std::memory_order_relaxed);
+    summary["sys_mr_bytes"]  = g_peer.sys_mr_bytes.load(std::memory_order_relaxed);
+    // Back-compat aliases: mr_count / mr_bytes now mean user-MR counts.
+    summary["mr_count"] = user_mr_count;
+    summary["mr_bytes"] = user_mr_bytes;
+
+    // Peer-level per-op pending breakdown (authoritative, unaffected by
+    // NIC registration state).
+    json pending_by_op = json::object();
+    for (int op = 0; op < OBS_OP_COUNT; ++op) {
+        pending_by_op[obs_op_name(static_cast<ObsOpIndex>(op))] =
+            g_peer.pending_by_op[op].load(std::memory_order_relaxed);
+    }
+    summary["pending_by_op"] = pending_by_op;
 
     // Per-NIC
     json nics_arr = json::array();
@@ -183,8 +210,13 @@ void obs_reset_for_test()
     g_peer.failed_bytes_total.store(0, std::memory_order_relaxed);
     g_peer.pending_ops.store(0, std::memory_order_relaxed);
     g_peer.error_total.store(0, std::memory_order_relaxed);
-    g_peer.mr_count.store(0, std::memory_order_relaxed);
-    g_peer.mr_bytes.store(0, std::memory_order_relaxed);
+    g_peer.user_mr_count.store(0, std::memory_order_relaxed);
+    g_peer.user_mr_bytes.store(0, std::memory_order_relaxed);
+    g_peer.sys_mr_count.store(0, std::memory_order_relaxed);
+    g_peer.sys_mr_bytes.store(0, std::memory_order_relaxed);
+    for (int op = 0; op < OBS_OP_COUNT; ++op) {
+        g_peer.pending_by_op[op].store(0, std::memory_order_relaxed);
+    }
 
     int count = g_nic_count.load(std::memory_order_acquire);
     for (int i = 0; i < count && i < OBS_MAX_NICS; ++i) {

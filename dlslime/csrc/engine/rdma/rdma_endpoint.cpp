@@ -774,30 +774,13 @@ int32_t RDMAEndpoint::dispatchTask(OpCode                             op_code,
         }
         bool is_final_slot = (req_idx >= total_reqs);
 
-        // Observability: pre-compute total bytes for this slot
-        // (used by CQ-side accounting without re-scanning)
-        uint64_t slot_obs_bytes = 0;
-        if (obs::obs_enabled()) {
-            for (size_t qpi = 0; qpi < num_qp_; ++qpi) {
-                for (const auto& a : ctx->assigns_[qpi].batch_) {
-                    slot_obs_bytes += a.length;
-                }
-            }
-        }
-
+        // Transport-level bookkeeping for this slot. Semantic obs fields
+        // live on op_state (set once at submit time); callbacks do not
+        // look at RDMAAssign for obs data.
         for (size_t qpi = 0; qpi < num_qp_; ++qpi) {
             auto& assign      = ctx->assigns_[qpi];
             assign.opcode_    = slot_op_code;
             assign.is_inline_ = false;
-
-            // Observability: set pre-computed fields for CQ path
-            if (obs::obs_enabled()) {
-                assign.obs_bytes        = slot_obs_bytes;
-                assign.obs_assign_count = static_cast<uint32_t>(current_batch_size);
-                assign.obs_op           = static_cast<uint8_t>(obs::OPCODE_TO_OBS[static_cast<uint8_t>(op_code)]);
-                assign.obs_nic_id       = static_cast<uint16_t>(obs_nic_id_);
-                assign.obs_is_final     = is_final_slot;
-            }
 
             // Capture the exact batch size we charged to the token bucket so
             // the refund on completion is correct. With the free-slot ring
@@ -813,6 +796,14 @@ int32_t RDMAEndpoint::dispatchTask(OpCode                             op_code,
                     int32_t expected = RDMAAssign::SUCCESS;
                     op_state->completion_status.compare_exchange_strong(
                         expected, status, std::memory_order_release, std::memory_order_relaxed);
+
+                    // Observability: record failure once per user op.
+                    // Any qpi on any slot can win this exchange; the
+                    // remaining callbacks short-circuit.
+                    if (op_state->obs_enabled && !op_state->obs_completed.exchange(true, std::memory_order_acq_rel)) {
+                        obs::obs_record_fail(
+                            op_state->obs_nic_id, static_cast<obs::ObsOpIndex>(op_state->obs_op), op_state->obs_bytes);
+                    }
                 }
 
                 token_bucket_[qpi].fetch_add(batch_size, std::memory_order_release);
@@ -830,6 +821,17 @@ int32_t RDMAEndpoint::dispatchTask(OpCode                             op_code,
                 uint32_t mask_before = ctx->slot_qp_mask.fetch_or(1u << qpi, std::memory_order_acq_rel);
                 uint32_t mask_after  = mask_before | (1u << qpi);
                 if (mask_after == ctx->slot_qp_expected) {
+                    // Observability: record success once per user op,
+                    // only when the FINAL slot has fully completed. A
+                    // prior failure on any slot already won the exchange
+                    // (op_state->completion_status != SUCCESS), so a
+                    // double record is prevented by obs_completed.
+                    if (is_final_slot && op_state->obs_enabled
+                        && op_state->completion_status.load(std::memory_order_acquire) == RDMAAssign::SUCCESS
+                        && !op_state->obs_completed.exchange(true, std::memory_order_acq_rel)) {
+                        obs::obs_record_complete(
+                            op_state->obs_nic_id, static_cast<obs::ObsOpIndex>(op_state->obs_op), op_state->obs_bytes);
+                    }
                     releaseReadWriteSlot(ctx);
                 }
             };
@@ -850,15 +852,20 @@ int32_t RDMAEndpoint::dispatchTask(OpCode                             op_code,
 // ============================================================
 // Two-Sided Primitives (Message Passing)
 // ============================================================
+//
+// Observability v0 reports semantic submit/completion only for
+// one-sided read/write/writeWithImm. Two-sided send/recv and immRecv
+// semantic pending are intentionally not reported in v0 — their
+// completion paths are not yet integrated with the op_state-level
+// once-only accounting. Transport-level post counters
+// (post_send_batch / post_recv_batch / post_rc_oneside_batch) in
+// rdma_channel.cpp are unaffected.
 
 std::shared_ptr<SendFuture> RDMAEndpoint::send(const chunk_tuple_t& chunk, void* stream_handle)
 {
     auto data_ptr = std::get<0>(chunk);
     auto offset   = std::get<1>(chunk);
     auto length   = std::get<2>(chunk);
-
-    // Observability: record semantic submit
-    obs::obs_record_submit(obs_nic_id_, obs::OBS_OP_SEND, 1, length);
 
     storage_view_t view{data_ptr, offset, length};
     int32_t        handle = local_pool_->registerMemoryRegion(data_ptr, length);
@@ -897,9 +904,6 @@ std::shared_ptr<RecvFuture> RDMAEndpoint::recv(const chunk_tuple_t& chunk, void*
     auto offset   = std::get<1>(chunk);
     auto length   = std::get<2>(chunk);
 
-    // Observability: record semantic submit
-    obs::obs_record_submit(obs_nic_id_, obs::OBS_OP_RECV, 1, length);
-
     storage_view_t view{data_ptr, offset, length};
     int32_t        handle = local_pool_->registerMemoryRegion(data_ptr, length);
 
@@ -935,15 +939,23 @@ std::shared_ptr<RecvFuture> RDMAEndpoint::recv(const chunk_tuple_t& chunk, void*
 
 std::shared_ptr<ReadWriteFuture> RDMAEndpoint::read(const std::vector<assign_tuple_t>& assign, void* stream)
 {
-    // Observability: record semantic submit
+    auto op_state = makeOpState((1u << num_qp_) - 1, false, stream, /*trace_start=*/false);
+
+    // Observability: anchor semantic accounting on op_state. The CQ
+    // callback uses obs_completed.exchange(true) to record completion
+    // exactly once per user op, regardless of num_qp or slot count.
     if (obs::obs_enabled()) {
         uint64_t total_bytes = 0;
         for (const auto& a : assign)
             total_bytes += std::get<4>(a);
-        obs::obs_record_submit(obs_nic_id_, obs::OBS_OP_READ, static_cast<uint32_t>(assign.size()), total_bytes);
+        op_state->obs_enabled      = true;
+        op_state->obs_bytes        = total_bytes;
+        op_state->obs_assign_count = static_cast<uint32_t>(assign.size());
+        op_state->obs_op           = static_cast<uint8_t>(obs::OBS_OP_READ);
+        op_state->obs_nic_id       = static_cast<uint16_t>(obs_nic_id_);
+        obs::obs_record_submit(obs_nic_id_, obs::OBS_OP_READ, op_state->obs_assign_count, total_bytes);
     }
 
-    auto op_state = makeOpState((1u << num_qp_) - 1, false, stream, /*trace_start=*/false);
     registerInFlight(op_state);
     dispatchTask(OpCode::READ, assign, op_state, 0, stream);
     return std::make_shared<ReadWriteFuture>(op_state);
@@ -951,15 +963,20 @@ std::shared_ptr<ReadWriteFuture> RDMAEndpoint::read(const std::vector<assign_tup
 
 std::shared_ptr<ReadWriteFuture> RDMAEndpoint::write(const std::vector<assign_tuple_t>& assign, void* stream)
 {
-    // Observability: record semantic submit
+    auto op_state = makeOpState((1u << num_qp_) - 1, false, stream, /*trace_start=*/false);
+
     if (obs::obs_enabled()) {
         uint64_t total_bytes = 0;
         for (const auto& a : assign)
             total_bytes += std::get<4>(a);
-        obs::obs_record_submit(obs_nic_id_, obs::OBS_OP_WRITE, static_cast<uint32_t>(assign.size()), total_bytes);
+        op_state->obs_enabled      = true;
+        op_state->obs_bytes        = total_bytes;
+        op_state->obs_assign_count = static_cast<uint32_t>(assign.size());
+        op_state->obs_op           = static_cast<uint8_t>(obs::OBS_OP_WRITE);
+        op_state->obs_nic_id       = static_cast<uint16_t>(obs_nic_id_);
+        obs::obs_record_submit(obs_nic_id_, obs::OBS_OP_WRITE, op_state->obs_assign_count, total_bytes);
     }
 
-    auto op_state = makeOpState((1u << num_qp_) - 1, false, stream, /*trace_start=*/false);
     registerInFlight(op_state);
     dispatchTask(OpCode::WRITE, assign, op_state, 0, stream);
     return std::make_shared<ReadWriteFuture>(op_state);
@@ -968,16 +985,20 @@ std::shared_ptr<ReadWriteFuture> RDMAEndpoint::write(const std::vector<assign_tu
 std::shared_ptr<ReadWriteFuture>
 RDMAEndpoint::writeWithImm(const std::vector<assign_tuple_t>& assign, int32_t imm_data, void* stream)
 {
-    // Observability: record semantic submit
+    auto op_state = makeOpState((1u << num_qp_) - 1, false, stream, /*trace_start=*/false);
+
     if (obs::obs_enabled()) {
         uint64_t total_bytes = 0;
         for (const auto& a : assign)
             total_bytes += std::get<4>(a);
-        obs::obs_record_submit(
-            obs_nic_id_, obs::OBS_OP_WRITE_WITH_IMM, static_cast<uint32_t>(assign.size()), total_bytes);
+        op_state->obs_enabled      = true;
+        op_state->obs_bytes        = total_bytes;
+        op_state->obs_assign_count = static_cast<uint32_t>(assign.size());
+        op_state->obs_op           = static_cast<uint8_t>(obs::OBS_OP_WRITE_WITH_IMM);
+        op_state->obs_nic_id       = static_cast<uint16_t>(obs_nic_id_);
+        obs::obs_record_submit(obs_nic_id_, obs::OBS_OP_WRITE_WITH_IMM, op_state->obs_assign_count, total_bytes);
     }
 
-    auto op_state = makeOpState((1u << num_qp_) - 1, false, stream, /*trace_start=*/false);
     registerInFlight(op_state);
     dispatchTask(OpCode::WRITE_WITH_IMM, assign, op_state, imm_data, stream);
     return std::make_shared<ReadWriteFuture>(op_state);
@@ -985,8 +1006,7 @@ RDMAEndpoint::writeWithImm(const std::vector<assign_tuple_t>& assign, int32_t im
 
 std::shared_ptr<ImmRecvFuture> RDMAEndpoint::immRecv(void* stream)
 {
-    // Observability: record semantic submit (no bytes for immRecv)
-    obs::obs_record_submit(obs_nic_id_, obs::OBS_OP_IMM_RECV, 1, 0);
+    // v0: no semantic submit for immRecv — see note on send/recv above.
 
     io_recv_slot_id_.fetch_add(1, std::memory_order_relaxed);
 
@@ -1372,6 +1392,13 @@ void RDMAEndpoint::cancelAll()
             expected, RDMAAssign::FAILED, std::memory_order_release, std::memory_order_relaxed);
         if (op_state->signal) {
             op_state->signal->force_complete();
+        }
+        // Observability: record cancellation as failure, exactly once.
+        // If the real completion already raced ahead and recorded, this
+        // short-circuits via obs_completed.
+        if (op_state->obs_enabled && !op_state->obs_completed.exchange(true, std::memory_order_acq_rel)) {
+            obs::obs_record_fail(
+                op_state->obs_nic_id, static_cast<obs::ObsOpIndex>(op_state->obs_op), op_state->obs_bytes);
         }
     }
 

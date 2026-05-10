@@ -232,19 +232,10 @@ int64_t RDMAContext::cq_poll_handle()
             if (wc[i].wr_id != 0) {
                 RDMAAssign* assign = reinterpret_cast<RDMAAssign*>(wc[i].wr_id);
 
-                // Observability: record completion or failure using pre-computed fields
-                if (obs::obs_enabled() && assign->obs_is_final) {
-                    auto obs_op    = static_cast<obs::ObsOpIndex>(assign->obs_op);
-                    auto obs_nic   = static_cast<int>(assign->obs_nic_id);
-                    auto obs_bytes = assign->obs_bytes;
-                    if (status_code == RDMAAssign::SUCCESS) {
-                        obs::obs_record_complete(obs_nic, obs_op, obs_bytes);
-                    }
-                    else {
-                        obs::obs_record_fail(obs_nic, obs_op, obs_bytes);
-                    }
-                }
-
+                // Semantic completion accounting is owned by the
+                // EndpointOpState-level callback below (exchange-guarded for
+                // once-only semantics). CQ polling only records CQ-level
+                // error signals.
                 if (assign->callback_) {
                     assign->callback_(status_code, wc[i].imm_data);
                 }

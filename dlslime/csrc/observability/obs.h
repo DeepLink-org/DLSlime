@@ -69,8 +69,20 @@ struct alignas(64) PeerCounters {
     std::atomic<uint64_t> failed_bytes_total{0};
     std::atomic<int64_t>  pending_ops{0};
     std::atomic<uint64_t> error_total{0};
-    std::atomic<uint64_t> mr_count{0};
-    std::atomic<uint64_t> mr_bytes{0};
+
+    // Per-op pending breakdown (peer-level authoritative; stays correct
+    // even if nic_id == -1 at the call site).
+    std::atomic<int64_t> pending_by_op[OBS_OP_COUNT]{};
+
+    // User-registered MRs. Back-compat aliases mr_count / mr_bytes map
+    // to these.
+    std::atomic<uint64_t> user_mr_count{0};
+    std::atomic<uint64_t> user_mr_bytes{0};
+    // System MRs (internal bookkeeping: sys.io_dummy, sys.msg_dummy,
+    // sys.send_ctx). Tracked separately so user-facing MR counts are
+    // not inflated by internal allocations.
+    std::atomic<uint64_t> sys_mr_count{0};
+    std::atomic<uint64_t> sys_mr_bytes{0};
 };
 
 /// Per-NIC counters with per-op breakdown.
@@ -123,7 +135,7 @@ void obs_reset_for_test();
 // Hot-path recording API — all inline, gated by obs_enabled()
 // ============================================================
 
-/// Record a semantic submit (called from RDMAEndpoint read/write/send/recv/immRecv).
+/// Record a semantic submit (called from RDMAEndpoint for one-sided ops only).
 inline void obs_record_submit(int nic_id, ObsOpIndex op, uint32_t assign_count, uint64_t bytes)
 {
     if (!obs_enabled())
@@ -137,6 +149,9 @@ inline void obs_record_submit(int nic_id, ObsOpIndex op, uint32_t assign_count, 
     g_peer.batch_total.fetch_add(1, std::memory_order_relaxed);
     g_peer.submitted_bytes_total.fetch_add(bytes, std::memory_order_relaxed);
     g_peer.pending_ops.fetch_add(1, std::memory_order_relaxed);
+    if (op < OBS_OP_COUNT) {
+        g_peer.pending_by_op[op].fetch_add(1, std::memory_order_relaxed);
+    }
 
     if (nic_id >= 0 && nic_id < OBS_MAX_NICS) {
         auto& nic = g_nics[nic_id];
@@ -147,7 +162,9 @@ inline void obs_record_submit(int nic_id, ObsOpIndex op, uint32_t assign_count, 
     }
 }
 
-/// Record a successful completion (called from CQ callback path).
+/// Record a successful completion. Must be called at most once per semantic
+/// user op — idempotency is enforced at the call site via
+/// EndpointOpState::obs_completed.exchange(), not inside this primitive.
 inline void obs_record_complete(int nic_id, ObsOpIndex op, uint64_t bytes)
 {
     if (!obs_enabled())
@@ -158,6 +175,9 @@ inline void obs_record_complete(int nic_id, ObsOpIndex op, uint64_t bytes)
 
     g_peer.completed_bytes_total.fetch_add(bytes, std::memory_order_relaxed);
     g_peer.pending_ops.fetch_sub(1, std::memory_order_relaxed);
+    if (op < OBS_OP_COUNT) {
+        g_peer.pending_by_op[op].fetch_sub(1, std::memory_order_relaxed);
+    }
 
     if (nic_id >= 0 && nic_id < OBS_MAX_NICS) {
         auto& nic = g_nics[nic_id];
@@ -166,7 +186,7 @@ inline void obs_record_complete(int nic_id, ObsOpIndex op, uint64_t bytes)
     }
 }
 
-/// Record a failure (called from CQ callback path on wc.status != SUCCESS).
+/// Record a failure. Same once-per-op contract as obs_record_complete.
 inline void obs_record_fail(int nic_id, ObsOpIndex op, uint64_t bytes)
 {
     if (!obs_enabled())
@@ -178,6 +198,9 @@ inline void obs_record_fail(int nic_id, ObsOpIndex op, uint64_t bytes)
     g_peer.failed_bytes_total.fetch_add(bytes, std::memory_order_relaxed);
     g_peer.pending_ops.fetch_sub(1, std::memory_order_relaxed);
     g_peer.error_total.fetch_add(1, std::memory_order_relaxed);
+    if (op < OBS_OP_COUNT) {
+        g_peer.pending_by_op[op].fetch_sub(1, std::memory_order_relaxed);
+    }
 
     if (nic_id >= 0 && nic_id < OBS_MAX_NICS) {
         auto& nic = g_nics[nic_id];
@@ -240,9 +263,13 @@ inline void obs_record_mr_register(uint64_t bytes, bool is_system)
 
     extern PeerCounters g_peer;
 
-    if (!is_system) {
-        g_peer.mr_count.fetch_add(1, std::memory_order_relaxed);
-        g_peer.mr_bytes.fetch_add(bytes, std::memory_order_relaxed);
+    if (is_system) {
+        g_peer.sys_mr_count.fetch_add(1, std::memory_order_relaxed);
+        g_peer.sys_mr_bytes.fetch_add(bytes, std::memory_order_relaxed);
+    }
+    else {
+        g_peer.user_mr_count.fetch_add(1, std::memory_order_relaxed);
+        g_peer.user_mr_bytes.fetch_add(bytes, std::memory_order_relaxed);
     }
 }
 
@@ -254,9 +281,30 @@ inline void obs_record_mr_unregister(uint64_t bytes, bool is_system)
 
     extern PeerCounters g_peer;
 
-    if (!is_system) {
-        g_peer.mr_count.fetch_sub(1, std::memory_order_relaxed);
-        g_peer.mr_bytes.fetch_sub(bytes, std::memory_order_relaxed);
+    if (is_system) {
+        g_peer.sys_mr_count.fetch_sub(1, std::memory_order_relaxed);
+        g_peer.sys_mr_bytes.fetch_sub(bytes, std::memory_order_relaxed);
+    }
+    else {
+        g_peer.user_mr_count.fetch_sub(1, std::memory_order_relaxed);
+        g_peer.user_mr_bytes.fetch_sub(bytes, std::memory_order_relaxed);
+    }
+}
+
+/// Record a delta increase to an existing MR (used when re-registering an
+/// MR with a larger length). bytes is the positive delta.
+inline void obs_record_mr_grow(uint64_t delta_bytes, bool is_system)
+{
+    if (!obs_enabled() || delta_bytes == 0)
+        return;
+
+    extern PeerCounters g_peer;
+
+    if (is_system) {
+        g_peer.sys_mr_bytes.fetch_add(delta_bytes, std::memory_order_relaxed);
+    }
+    else {
+        g_peer.user_mr_bytes.fetch_add(delta_bytes, std::memory_order_relaxed);
     }
 }
 

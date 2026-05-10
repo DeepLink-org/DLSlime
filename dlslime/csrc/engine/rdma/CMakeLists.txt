@@ -7,11 +7,10 @@ set(RDMA_SOURCES
     rdma_endpoint.cpp
     rdma_future.cpp
     rdma_worker.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../observability/obs.cpp
 )
 add_library(_slime_rdma SHARED ${RDMA_SOURCES})
 
-target_link_libraries(_slime_rdma PUBLIC _slime_device _slime_engine numa ibverbs)
+target_link_libraries(_slime_rdma PUBLIC _slime_device _slime_engine _slime_obs numa ibverbs)
 
 set_target_properties(
     _slime_rdma

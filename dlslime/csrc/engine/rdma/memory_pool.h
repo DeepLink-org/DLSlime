@@ -136,5 +136,10 @@ private:
     std::unordered_map<uintptr_t, int32_t>   ptr_to_handle_;
 
     std::vector<struct ibv_mr*> handle_to_mr_;
+
+    // Observability: remember whether each registered MR is a system
+    // (internal "sys.*") MR or a user-visible MR. Looked up on unregister
+    // so user/sys counters don't drift.
+    std::unordered_map<int32_t, bool> handle_to_is_system_;
 };
 }  // namespace dlslime
