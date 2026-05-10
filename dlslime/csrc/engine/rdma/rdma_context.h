@@ -96,6 +96,8 @@ private:
     /* Completion Queue Polling */
     int64_t cq_poll_handle();
 
+    int obs_nic_id_{-1};  // Observability: registered NIC slot index
+
     int64_t service_level_{0};
 };
 

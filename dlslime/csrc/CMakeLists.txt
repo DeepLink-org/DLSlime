@@ -1,3 +1,4 @@
+add_subdirectory(observability)
 add_subdirectory(device)
 add_subdirectory(engine)
 
@@ -20,7 +21,7 @@ target_include_directories(_slime_topology PUBLIC
 )
 
 add_library(dlslime INTERFACE)
-target_link_libraries(dlslime INTERFACE _slime_engine _slime_device _slime_topology)
+target_link_libraries(dlslime INTERFACE _slime_engine _slime_device _slime_topology _slime_obs)
 
 if(BUILD_RDMA)
     target_link_libraries(dlslime INTERFACE _slime_rdma)

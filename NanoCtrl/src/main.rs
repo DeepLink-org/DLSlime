@@ -8,6 +8,7 @@ mod error;
 mod handlers;
 mod models;
 mod net;
+mod obs;
 mod redis_repo;
 mod state;
 
@@ -51,6 +52,8 @@ enum Commands {
     Status(StatusArgs),
     /// Stop NanoCtrl background server.
     Stop(StopArgs),
+    /// Query observability snapshots from Redis.
+    Obs(obs::ObsArgs),
 }
 
 #[derive(ClapArgs, Clone, Debug)]
@@ -125,6 +128,7 @@ async fn main() -> anyhow::Result<()> {
         Some(Commands::Start(args)) => start_server(args).await,
         Some(Commands::Status(args)) => status_server(args),
         Some(Commands::Stop(args)) => stop_server(args),
+        Some(Commands::Obs(args)) => obs::run_obs(args),
         None => run_server(cli.server).await,
     }
 }

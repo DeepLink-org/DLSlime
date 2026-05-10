@@ -11,12 +11,17 @@
 #include <unordered_map>
 
 #include "dlslime/csrc/logging.h"
+#include "dlslime/csrc/observability/obs.h"
 
 namespace dlslime {
 
 int32_t RDMAMemoryPool::registerMemoryRegion(uintptr_t data_ptr, uint64_t length, std::optional<std::string> name)
 {
     std::unique_lock<std::mutex> lock(name_mutex_);
+
+    // Observability: classify this MR as a system (internal) or
+    // user-visible registration based on the "sys." name prefix.
+    const bool is_system = name.has_value() && name.value().rfind("sys.", 0) == 0;
 
     // Check if pointer is already registered
     if (ptr_to_handle_.count(data_ptr)) {
@@ -35,9 +40,11 @@ int32_t RDMAMemoryPool::registerMemoryRegion(uintptr_t data_ptr, uint64_t length
             return handle;
         }
 
-        // Existing MR is too small (address reused for larger buffer) — re-register
-        SLIME_LOG_INFO(
-            "Re-registering MR at ", (void*)data_ptr, ": old length=", existing->length, ", new length=", length);
+        // Existing MR is too small (address reused for larger buffer) — re-register.
+        // Only the delta (length - existing->length) should be added to the
+        // MR-bytes counter; the old length was already counted at initial register.
+        uint64_t old_length = existing->length;
+        SLIME_LOG_INFO("Re-registering MR at ", (void*)data_ptr, ": old length=", old_length, ", new length=", length);
         ibv_dereg_mr(existing);
 
         int     access_rights = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_READ;
@@ -47,6 +54,17 @@ int32_t RDMAMemoryPool::registerMemoryRegion(uintptr_t data_ptr, uint64_t length
 
         if (name.has_value()) {
             name_to_handle_[name.value()] = handle;
+        }
+
+        // Carry forward the user/system classification of the original
+        // registration — the handle's identity does not change.
+        bool handle_is_system = false;
+        auto sys_it           = handle_to_is_system_.find(handle);
+        if (sys_it != handle_to_is_system_.end()) {
+            handle_is_system = sys_it->second;
+        }
+        if (length > old_length) {
+            obs::obs_record_mr_grow(length - old_length, handle_is_system);
         }
         return handle;
     }
@@ -58,7 +76,8 @@ int32_t RDMAMemoryPool::registerMemoryRegion(uintptr_t data_ptr, uint64_t length
 
     int32_t handle = handle_to_mr_.size();
     handle_to_mr_.push_back(mr);
-    ptr_to_handle_[data_ptr] = handle;
+    ptr_to_handle_[data_ptr]     = handle;
+    handle_to_is_system_[handle] = is_system;
 
     if (name.has_value()) {
         if (name_to_handle_.count(name.value())) {
@@ -68,14 +87,15 @@ int32_t RDMAMemoryPool::registerMemoryRegion(uintptr_t data_ptr, uint64_t length
         name_to_handle_[name.value()] = handle;
     }
 
-    // SLIME_LOG_DEBUG("Registered MR: Handle=", handle, ", Ptr=", (void*)data_ptr, ", Name=", (name.has_value() ?
-    // name.value() : "None"));
     if (name.has_value()) {
         SLIME_LOG_INFO("Registered Local MR: Name=", name.value(), ", Handle=", handle, ", Ptr=", (void*)data_ptr);
     }
     else {
         SLIME_LOG_INFO("Registered Local MR: Handle=", handle, ", Ptr=", (void*)data_ptr);
     }
+
+    obs::obs_record_mr_register(length, is_system);
+
     return handle;
 }
 
@@ -126,12 +146,25 @@ int RDMAMemoryPool::unregisterMemoryRegion(int32_t handle)
         return -1;
     }
 
+    // Capture length and user/system classification before deregistration
+    // frees the MR struct / removes the map entry.
+    uint64_t mr_length = handle_to_mr_[handle] ? handle_to_mr_[handle]->length : 0;
+    bool     is_system = false;
+    auto     sys_it    = handle_to_is_system_.find(handle);
+    if (sys_it != handle_to_is_system_.end()) {
+        is_system = sys_it->second;
+    }
+
     int rc = ibv_dereg_mr(handle_to_mr_[handle]);
     if (rc != 0) {
         SLIME_LOG_ERROR("Failed to unregister Local MR handle=", handle, ", rc=", rc, ", errno=", errno);
         return rc;
     }
+
+    obs::obs_record_mr_unregister(mr_length, is_system);
+
     handle_to_mr_[handle] = nullptr;
+    handle_to_is_system_.erase(handle);
 
     for (auto it = name_to_handle_.begin(); it != name_to_handle_.end();) {
         if (it->second == handle) {

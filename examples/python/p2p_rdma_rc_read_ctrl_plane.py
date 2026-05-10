@@ -36,14 +36,12 @@ def print_topology_discovery(agent, label, peer_aliases):
 initiator_agent = start_peer_agent(
     # alias=None (default) - NanoCtrl will auto-generate unique name
     nanoctrl_url="http://127.0.0.1:3000",
-    alias="dlslime0",
     scope=EXAMPLE_SCOPE,
 )
 
 target_agent = start_peer_agent(
     # alias=None (default) - NanoCtrl will auto-generate unique name
     nanoctrl_url="http://127.0.0.1:3000",
-    alias="dlslime1",
     scope=EXAMPLE_SCOPE,
 )
 

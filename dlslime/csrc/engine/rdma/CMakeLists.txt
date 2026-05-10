@@ -10,7 +10,7 @@ set(RDMA_SOURCES
 )
 add_library(_slime_rdma SHARED ${RDMA_SOURCES})
 
-target_link_libraries(_slime_rdma PUBLIC _slime_device _slime_engine numa ibverbs)
+target_link_libraries(_slime_rdma PUBLIC _slime_device _slime_engine _slime_obs numa ibverbs)
 
 set_target_properties(
     _slime_rdma

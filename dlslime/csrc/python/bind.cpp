@@ -64,6 +64,7 @@ void bind_cache(pybind11::module_& m);
 #include "dlslime/csrc/common/json.hpp"
 #include "dlslime/csrc/common/pybind_json/pybind_json.hpp"
 #include "dlslime/csrc/logging.h"
+#include "dlslime/csrc/observability/obs.h"
 #include "dlslime/csrc/topology.h"
 
 using json = nlohmann::json;
@@ -538,4 +539,19 @@ PYBIND11_MODULE(_slime_c, m)
     //         .def("all_gather_ll", &dlslime::AllGatherInterLLBuffer::allGatherLL)
     //         .def("all_gather_ll_hook", &dlslime::AllGatherInterLLBuffer::allGatherLLHook);
     // #endif
+
+    // =========================================================================
+    // Observability (always available, independent of backend)
+    // =========================================================================
+    m.def("obs_enabled", &dlslime::obs::obs_enabled, "Check if observability is enabled (DLSLIME_OBS=1)");
+    m.def(
+        "obs_snapshot",
+        []() { return dlslime::obs::obs_snapshot_json(); },
+        "Return a dict snapshot of all obs counters");
+    m.def("obs_reset_for_test", &dlslime::obs::obs_reset_for_test, "Reset all obs counters (testing only)");
+    m.def(
+        "obs_register_nic_for_test",
+        [](const std::string& name) { return dlslime::obs::obs_register_nic(name.c_str()); },
+        py::arg("name"),
+        "Register a NIC name and return its slot id (test-only wrapper around obs_register_nic)");
 }
