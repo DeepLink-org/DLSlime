@@ -1,0 +1,148 @@
+site_name: DLSlime
+site_description: Composable and embeddable communication runtime for AI services
+site_url: https://deeplink-org.github.io/DLSlime/
+docs_dir: src
+
+repo_name: DeepLink-org/DLSlime
+repo_url: https://github.com/DeepLink-org/DLSlime
+
+theme:
+  name: material
+  logo: assets/images/logo.png
+  favicon: assets/images/logo.png
+  palette:
+    - scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.indexes
+    - navigation.tracking
+    - navigation.top
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+  icon:
+    repo: fontawesome/brands/github
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - attr_list
+  - md_in_html
+  - def_list
+  - tables
+  - toc:
+      permalink: true
+
+plugins:
+  - search
+  - i18n:
+      docs_structure: suffix
+      fallback_to_default: true
+      reconfigure_material: true
+      reconfigure_search: true
+      languages:
+        - locale: en
+          default: true
+          name: English
+          build: true
+          site_name: DLSlime Documentation
+        - locale: zh
+          name: 中文
+          build: true
+          site_name: DLSlime 文档
+          nav_translations:
+            Home: 首页
+            Installation: 安装指南
+            Quickstart: 快速开始
+            Guide: 用户指南
+            Overview: 总览
+            Endpoint API: Endpoint API
+            PeerAgent API: PeerAgent API
+            Deployment: 部署
+            DLSlimeCache Service: DLSlimeCache 服务
+            SlimeRPC Benchmark: SlimeRPC 基准测试
+            Design: 设计文档
+            Architecture: 架构
+            DLSlimeCache: DLSlimeCache
+            Endpoint Ownership: Endpoint 所有权
+            Endpoint DeviceSignal Refactor: Endpoint DeviceSignal 重构
+            Platform: 平台支持
+            Huawei Ascend: 华为昇腾
+            API Reference: API 参考
+            Versions: 版本
+            Roadmap: 路线图
+  - mkdocstrings:
+      handlers:
+        python:
+          paths:
+            - ..
+          options:
+            docstring_style: google
+            docstring_options:
+              ignore_init_summary: true
+            merge_init_into_class: true
+            show_submodules: false
+            show_source: false
+
+nav:
+  - Home: index.md
+  - Installation: installation.md
+  - Quickstart: quickstart.md
+  - Guide:
+      - Overview: guide/index.md
+      - Endpoint API: guide/endpoint-api.md
+      - PeerAgent API: guide/peeragent-api.md
+      - Deployment: guide/deployment.md
+      - DLSlimeCache Service: guide/dlslime-cache.md
+      - SlimeRPC Benchmark: guide/benchmark-rpc.md
+  - Design:
+      - Architecture: design/architecture.md
+      - DLSlimeCache: design/dlslime-cache.md
+      - Endpoint Ownership: design/endpoint-ownership-model.md
+      - Endpoint DeviceSignal Refactor: design/endpoint-device-signal-refactor.md
+  - Platform:
+      - Overview: platform/index.md
+      - Huawei Ascend: platform/huawei-ascend.md
+  - API Reference: api_reference.md
+  - Versions: versions.md
+  - Roadmap: roadmap.md
+
+extra:
+  generator: false
+  version:
+    provider: mike
+    default: latest
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/DeepLink-org/DLSlime
+
+extra_css:
+  - assets/stylesheets/dlslime.css
+
+copyright: © 2026 DLSlime contributors.

@@ -1,0 +1,55 @@
+:root {
+  --md-primary-fg-color: #155e75;
+  --md-primary-fg-color--light: #0891b2;
+  --md-primary-fg-color--dark: #164e63;
+  --md-accent-fg-color: #16a34a;
+}
+
+.md-header__button.md-logo img {
+  height: 1.6rem;
+}
+
+.md-typeset .hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(280px, 0.9fr);
+  gap: 2rem;
+  align-items: center;
+  margin: 1.5rem 0 2rem;
+}
+
+.md-typeset .hero h1 {
+  margin-bottom: 0.6rem;
+}
+
+.md-typeset .hero img {
+  width: 100%;
+}
+
+.md-typeset .feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.8rem;
+  margin: 1rem 0 1.5rem;
+}
+
+.md-typeset .feature-grid > a,
+.md-typeset .feature-grid > div {
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 8px;
+  color: var(--md-default-fg-color);
+  display: block;
+  padding: 0.9rem;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.md-typeset .feature-grid > a:hover {
+  border-color: var(--md-accent-fg-color);
+  box-shadow: 0 4px 18px rgb(0 0 0 / 8%);
+  text-decoration: none;
+}
+
+@media screen and (max-width: 760px) {
+  .md-typeset .hero {
+    grid-template-columns: 1fr;
+  }
+}
