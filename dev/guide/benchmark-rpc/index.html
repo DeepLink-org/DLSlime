@@ -591,6 +591,8 @@
       
         
       
+        
+      
     
     
     
@@ -691,6 +693,34 @@
     
   
     PeerAgent API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../slimerpc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    SlimeRPC
   
 
     
@@ -1410,15 +1440,17 @@
 
 <h1 id="slimerpc-benchmark">SlimeRPC Benchmark<a class="headerlink" href="#slimerpc-benchmark" title="Permanent link">&para;</a></h1>
 <p>This document describes the Python RPC microbenchmark added for comparing
-SlimeRPC against Ray on a single machine.</p>
+SlimeRPC against Ray (and optionally Pulsing) on a single machine.</p>
 <h2 id="what-it-measures">What It Measures<a class="headerlink" href="#what-it-measures" title="Permanent link">&para;</a></h2>
 <p>The benchmark measures round-trip latency and effective bandwidth for a raw
 bytes echo RPC across payload sizes from <code>1KB</code> up to <code>16MB</code> by default.</p>
-<p>It runs two implementations:</p>
+<p>It runs two implementations by default, with a third opt-in baseline:</p>
 <ul>
 <li><code>SlimeRPC</code>: RDMA-backed <code>PeerAgent</code> RPC echo between <code>bench-driver</code> and
   <code>bench-worker</code></li>
 <li><code>Ray</code>: a local <code>EchoActor</code> baseline using the same payload sizes and metrics</li>
+<li><code>Pulsing</code> (optional, off by default): a <code>@pul.remote</code> actor echo using the
+  same payload sizes and metrics. Enable with <code>--with-pulsing</code>.</li>
 </ul>
 <p>The comparison script prints:</p>
 <ul>
@@ -1426,7 +1458,9 @@ bytes echo RPC across payload sizes from <code>1KB</code> up to <code>16MB</code
 <li>p50 latency</li>
 <li>p99 latency</li>
 <li>effective round-trip bandwidth</li>
-<li>Ray/Slime speedup</li>
+<li><code>S/Ray</code> = Ray avg latency / SlimeRPC avg latency (&gt; 1 means SlimeRPC wins)</li>
+<li><code>S/Pul</code> = Pulsing avg latency / SlimeRPC avg latency (only shown when
+  Pulsing was enabled)</li>
 </ul>
 <h2 id="files">Files<a class="headerlink" href="#files" title="Permanent link">&para;</a></h2>
 <ul>
@@ -1434,6 +1468,7 @@ bytes echo RPC across payload sizes from <code>1KB</code> up to <code>16MB</code
 <li><code>bench/python/rpc_bench_slime_worker.py</code></li>
 <li><code>bench/python/rpc_bench_slime_driver.py</code></li>
 <li><code>bench/python/rpc_bench_ray.py</code></li>
+<li><code>bench/python/rpc_bench_pulsing.py</code></li>
 <li><code>bench/python/rpc_bench_compare.py</code></li>
 </ul>
 <h2 id="prerequisites">Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">&para;</a></h2>
@@ -1443,27 +1478,39 @@ bytes echo RPC across payload sizes from <code>1KB</code> up to <code>16MB</code
 <li>Make sure Redis is reachable through NanoCtrl.</li>
 <li>Build and install DLSlime with Python bindings and RDMA support.</li>
 </ol>
+<p>For the optional Pulsing baseline, also install <code>pulsing</code>
+(<code>pip install pulsing</code>) in the same environment.</p>
 <h2 id="run">Run<a class="headerlink" href="#run" title="Permanent link">&para;</a></h2>
-<p>Default run:</p>
+<p>Default run (SlimeRPC + Ray, Pulsing disabled):</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>bash<span class="w"> </span>bench/python/run_rpc_bench.sh
 </span></code></pre></div>
+<p>Include the Pulsing baseline:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>bash<span class="w"> </span>bench/python/run_rpc_bench.sh<span class="w"> </span>--with-pulsing
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="c1"># or</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="nv">WITH_PULSING</span><span class="o">=</span><span class="m">1</span><span class="w"> </span>bash<span class="w"> </span>bench/python/run_rpc_bench.sh
+</span></code></pre></div>
 <p>Specify control-plane address or buffer size:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>bash<span class="w"> </span>bench/python/run_rpc_bench.sh<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span>--ctrl<span class="w"> </span>http://127.0.0.1:3000<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">  </span>--buf-mb<span class="w"> </span><span class="m">256</span><span class="w"> </span><span class="se">\</span>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">  </span>--max-size-mb<span class="w"> </span><span class="m">16</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>bash<span class="w"> </span>bench/python/run_rpc_bench.sh<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span>--ctrl<span class="w"> </span>http://127.0.0.1:3000<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span>--buf-mb<span class="w"> </span><span class="m">256</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span>--max-size-mb<span class="w"> </span><span class="m">16</span>
 </span></code></pre></div>
 <p>Environment-variable form:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nv">CTRL</span><span class="o">=</span>http://127.0.0.1:3000<span class="w"> </span><span class="nv">BUF_MB</span><span class="o">=</span><span class="m">256</span><span class="w"> </span><span class="nv">MAX_SIZE_MB</span><span class="o">=</span><span class="m">16</span><span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span>bash<span class="w"> </span>bench/python/run_rpc_bench.sh
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nv">CTRL</span><span class="o">=</span>http://127.0.0.1:3000<span class="w"> </span><span class="nv">BUF_MB</span><span class="o">=</span><span class="m">256</span><span class="w"> </span><span class="nv">MAX_SIZE_MB</span><span class="o">=</span><span class="m">16</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span>bash<span class="w"> </span>bench/python/run_rpc_bench.sh
 </span></code></pre></div>
 <h2 id="output">Output<a class="headerlink" href="#output" title="Permanent link">&para;</a></h2>
-<p>The script writes:</p>
+<p>The script always writes:</p>
 <ul>
 <li><code>bench/results/slime_rpc.csv</code></li>
 <li><code>bench/results/ray_rpc.csv</code></li>
 </ul>
-<p>and then prints a merged comparison table.</p>
+<p>and, when <code>--with-pulsing</code> is passed, additionally writes:</p>
+<ul>
+<li><code>bench/results/pulsing_rpc.csv</code></li>
+</ul>
+<p>It then prints a merged comparison table. The <code>S/Pul</code> column only appears in
+the table when the Pulsing CSV is present.</p>
 <h2 id="stability-notes">Stability Notes<a class="headerlink" href="#stability-notes" title="Permanent link">&para;</a></h2>
 <p>The default <code>--max-size-mb</code> is <code>16</code>.</p>
 <p>That limit is intentional: the current raw mailbox RPC path is validated and

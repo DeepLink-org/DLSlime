@@ -10,17 +10,17 @@
       
       
       
-        <link rel="canonical" href="https://deeplink-org.github.io/DLSlime/dev/zh/guide/peeragent-api/">
+        <link rel="canonical" href="https://deeplink-org.github.io/DLSlime/dev/zh/guide/slimerpc/">
       
       
-        <link rel="prev" href="../endpoint-api/">
+        <link rel="prev" href="../peeragent-api/">
       
       
-        <link rel="next" href="../slimerpc/">
+        <link rel="next" href="../deployment/">
       
       
         
-          <link rel="alternate" href="../../../guide/peeragent-api/" hreflang="en">
+          <link rel="alternate" href="../../../guide/slimerpc/" hreflang="en">
         
           <link rel="alternate" href="./" hreflang="zh">
         
@@ -31,7 +31,7 @@
     
     
       
-        <title>PeerAgent API - DLSlime 文档</title>
+        <title>SlimeRPC - DLSlime 文档</title>
       
     
     
@@ -88,7 +88,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#peeragent-api" class="md-skip">
+        <a href="#slimerpc" class="md-skip">
           跳转至
         </a>
       
@@ -125,7 +125,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              PeerAgent API
+              SlimeRPC
             
           </span>
         </div>
@@ -172,7 +172,7 @@
       <ul class="md-select__list">
         
           <li class="md-select__item">
-            <a href="../../../guide/peeragent-api/" hreflang="en" class="md-select__link">
+            <a href="../../../guide/slimerpc/" hreflang="en" class="md-select__link">
               English
             </a>
           </li>
@@ -684,6 +684,34 @@
                 
   
   
+  
+  
+    <li class="md-nav__item">
+      <a href="../peeragent-api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PeerAgent API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
     
   
   
@@ -703,7 +731,7 @@
   <span class="md-ellipsis">
     
   
-    PeerAgent API
+    SlimeRPC
   
 
     
@@ -721,7 +749,7 @@
   <span class="md-ellipsis">
     
   
-    PeerAgent API
+    SlimeRPC
   
 
     
@@ -747,21 +775,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#agent" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        启动 Agent
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#_1" class="md-nav__link">
     <span class="md-ellipsis">
       
-        发现与连接
+        前置条件
       
     </span>
   </a>
@@ -772,7 +789,7 @@
   <a href="#_2" class="md-nav__link">
     <span class="md-ellipsis">
       
-        内存区域
+        定义服务
       
     </span>
   </a>
@@ -780,10 +797,87 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#io" class="md-nav__link">
+  <a href="#peeragent" class="md-nav__link">
     <span class="md-ellipsis">
       
-        命名 I/O
+        连接 PeerAgent
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#worker" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Worker 侧
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#client" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Client 侧
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#channel-buffer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Channel Buffer
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#raw" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Raw 模式
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#in-place-raw" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        In-Place Raw 回复
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        错误处理
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        示例
       
     </span>
   </a>
@@ -794,34 +888,6 @@
   
 </nav>
       
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../slimerpc/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    SlimeRPC
-  
-
-    
-  </span>
-  
-  
-
-      </a>
     </li>
   
 
@@ -1311,21 +1377,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#agent" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        启动 Agent
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#_1" class="md-nav__link">
     <span class="md-ellipsis">
       
-        发现与连接
+        前置条件
       
     </span>
   </a>
@@ -1336,7 +1391,7 @@
   <a href="#_2" class="md-nav__link">
     <span class="md-ellipsis">
       
-        内存区域
+        定义服务
       
     </span>
   </a>
@@ -1344,10 +1399,87 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#io" class="md-nav__link">
+  <a href="#peeragent" class="md-nav__link">
     <span class="md-ellipsis">
       
-        命名 I/O
+        连接 PeerAgent
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#worker" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Worker 侧
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#client" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Client 侧
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#channel-buffer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Channel Buffer
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#raw" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Raw 模式
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#in-place-raw" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        In-Place Raw 回复
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        错误处理
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        示例
       
     </span>
   </a>
@@ -1374,122 +1506,192 @@
   
 
 
-<h1 id="peeragent-api">PeerAgent API<a class="headerlink" href="#peeragent-api" title="Permanent link">&para;</a></h1>
-<p>PeerAgent 是 DLSlime 面向服务场景的 endpoint facade。它会向 NanoCtrl 注册 agent 和内存元数据，
-通过 Redis 交换连接信息，并提供命名 I/O helper，应用代码不需要手动交换 RDMA endpoint metadata。</p>
-<p>适合使用 PeerAgent 的场景包括：动态 peer 发现、多租户或多任务 <code>scope</code> 隔离、命名 memory region、
-以及需要自动清理过期控制面状态的服务。</p>
-<h2 id="agent">启动 Agent<a class="headerlink" href="#agent" title="Permanent link">&para;</a></h2>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">dlslime</span><span class="w"> </span><span class="kn">import</span> <span class="n">start_peer_agent</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">agent</span> <span class="o">=</span> <span class="n">start_peer_agent</span><span class="p">(</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">nanoctrl_url</span><span class="o">=</span><span class="s2">&quot;http://127.0.0.1:3000&quot;</span><span class="p">,</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">alias</span><span class="o">=</span><span class="s2">&quot;worker-a&quot;</span><span class="p">,</span>   <span class="c1"># 可选；也可由 NanoCtrl 自动分配</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">device</span><span class="o">=</span><span class="s2">&quot;mlx5_0&quot;</span><span class="p">,</span>    <span class="c1"># 可选首选 NIC</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">scope</span><span class="o">=</span><span class="s2">&quot;job-123&quot;</span><span class="p">,</span>    <span class="c1"># 可选隔离前缀</span>
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="p">)</span>
+<h1 id="slimerpc">SlimeRPC<a class="headerlink" href="#slimerpc" title="Permanent link">&para;</a></h1>
+<p>SlimeRPC 是构建在 PeerAgent 和 DLSlime RDMA 数据面上的 typed RPC 层。它适合把应用逻辑写成
+Python 服务调用，同时把连接建立、内存注册和 request/reply 传输交给 DLSlime。</p>
+<p>公开 API：</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">dlslime.rpc</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">method</span><span class="p">,</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">proxy</span><span class="p">,</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">serve</span><span class="p">,</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">serve_once</span><span class="p">,</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">wait_all</span><span class="p">,</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">RpcError</span><span class="p">,</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">RemoteRpcError</span><span class="p">,</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="n">RpcTimeoutError</span><span class="p">,</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="n">SoftRnrMonitor</span><span class="p">,</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="p">)</span>
 </span></code></pre></div>
-<p>也可以使用 context manager 自动清理：</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">with</span> <span class="n">start_peer_agent</span><span class="p">(</span><span class="n">scope</span><span class="o">=</span><span class="s2">&quot;example&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">agent</span><span class="p">:</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="nb">print</span><span class="p">(</span><span class="n">agent</span><span class="o">.</span><span class="n">alias</span><span class="p">)</span>
-</span></code></pre></div>
-<h2 id="_1">发现与连接<a class="headerlink" href="#_1" title="Permanent link">&para;</a></h2>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">peers</span> <span class="o">=</span> <span class="n">agent</span><span class="o">.</span><span class="n">list_agents</span><span class="p">()</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">resource</span> <span class="o">=</span> <span class="n">agent</span><span class="o">.</span><span class="n">get_resource</span><span class="p">(</span><span class="s2">&quot;worker-b&quot;</span><span class="p">)</span>
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="n">memory_keys</span> <span class="o">=</span> <span class="n">agent</span><span class="o">.</span><span class="n">list_mem_keys</span><span class="p">(</span><span class="s2">&quot;worker-b&quot;</span><span class="p">)</span>
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>
-</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="n">conn</span> <span class="o">=</span> <span class="n">agent</span><span class="o">.</span><span class="n">connect_to</span><span class="p">(</span><span class="s2">&quot;worker-b&quot;</span><span class="p">,</span> <span class="n">ib_port</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">qp_num</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="n">conn</span><span class="o">.</span><span class="n">wait</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">)</span>
-</span></code></pre></div>
-<p>常用方法：</p>
-<table>
-<thead>
-<tr>
-<th>方法</th>
-<th>作用</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>list_agents()</code></td>
-<td>返回当前 <code>scope</code> 下可见的 active aliases。</td>
-</tr>
-<tr>
-<td><code>get_resource(peer_alias=None)</code></td>
-<td>返回本地或 peer 的 topology/resource 元数据。</td>
-</tr>
-<tr>
-<td><code>list_mem_keys(peer_alias=None)</code></td>
-<td>返回本地或 peer 已注册的 memory-region 名称。</td>
-</tr>
-<tr>
-<td><code>connect_to(peer_alias, ...)</code></td>
-<td>建立到指定 peer 的 directed connection。</td>
-</tr>
-<tr>
-<td><code>get_connections()</code></td>
-<td>返回按 peer alias 分组的连接句柄。</td>
-</tr>
-</tbody>
-</table>
-<p>所有需要互相发现的 agent 必须使用同一个 <code>scope</code>。</p>
-<h2 id="_2">内存区域<a class="headerlink" href="#_2" title="Permanent link">&para;</a></h2>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">handler</span> <span class="o">=</span> <span class="n">agent</span><span class="o">.</span><span class="n">register_memory_region</span><span class="p">(</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="s2">&quot;kv&quot;</span><span class="p">,</span>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="n">tensor</span><span class="o">.</span><span class="n">data_ptr</span><span class="p">(),</span>
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>    <span class="nb">int</span><span class="p">(</span><span class="n">tensor</span><span class="o">.</span><span class="n">storage_offset</span><span class="p">()),</span>
-</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>    <span class="n">tensor</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">*</span> <span class="n">tensor</span><span class="o">.</span><span class="n">itemsize</span><span class="p">,</span>
-</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="p">)</span>
-</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>
-</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="n">remote_handle</span> <span class="o">=</span> <span class="n">agent</span><span class="o">.</span><span class="n">get_handle</span><span class="p">(</span><span class="s2">&quot;kv&quot;</span><span class="p">,</span> <span class="n">peer_alias</span><span class="o">=</span><span class="s2">&quot;worker-b&quot;</span><span class="p">)</span>
-</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="n">peer_info</span> <span class="o">=</span> <span class="n">agent</span><span class="o">.</span><span class="n">get_mr_info</span><span class="p">(</span><span class="s2">&quot;kv&quot;</span><span class="p">,</span> <span class="n">peer_alias</span><span class="o">=</span><span class="s2">&quot;worker-b&quot;</span><span class="p">)</span>
-</span></code></pre></div>
-<p>底层 tensor 或 buffer 必须在 memory region 注册期间保持存活，并且所有相关 future 完成前不能释放或复用。</p>
-<h2 id="io">命名 I/O<a class="headerlink" href="#io" title="Permanent link">&para;</a></h2>
-<p>PeerAgent 支持两种 assignment：</p>
+<h2 id="_1">前置条件<a class="headerlink" href="#_1" title="Permanent link">&para;</a></h2>
 <ul>
-<li>命名形式：<code>("mr_name", target_offset, source_offset, length)</code></li>
-<li>handle 形式：<code>(local_handle, remote_handle, target_offset, source_offset, length)</code></li>
+<li>NanoCtrl 正在运行，client 和 worker 都能访问。</li>
+<li>Redis 可通过 NanoCtrl 发现。</li>
+<li>两侧 PeerAgent 已连接。</li>
+<li>DLSlime 构建时启用了 C++ RPC session。若未启用，<code>proxy()</code> 会提示需要用 <code>BUILD_RPC=ON</code> 重新构建。</li>
 </ul>
-<p>命名形式更适合普通服务代码：</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">future</span> <span class="o">=</span> <span class="n">agent</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;worker-b&quot;</span><span class="p">,</span> <span class="p">[(</span><span class="s2">&quot;kv&quot;</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">8</span><span class="p">)])</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">future</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>nanoctrl<span class="w"> </span>start
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>python<span class="w"> </span>examples/python/rpc_example.py<span class="w"> </span>--ctrl<span class="w"> </span>http://127.0.0.1:3000
 </span></code></pre></div>
-<p>可用 I/O 方法：</p>
+<h2 id="_2">定义服务<a class="headerlink" href="#_2" title="Permanent link">&para;</a></h2>
+<p>用 <code>@method</code> 标记可远程调用的方法：</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">dlslime.rpc</span><span class="w"> </span><span class="kn">import</span> <span class="n">method</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="k">class</span><span class="w"> </span><span class="nc">CalcService</span><span class="p">:</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>    <span class="nd">@method</span>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">add</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">a</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>        <span class="k">return</span> <span class="n">a</span> <span class="o">+</span> <span class="n">b</span>
+</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>
+</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>    <span class="nd">@method</span>
+</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">echo</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">msg</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+</span><span id="__span-2-11"><a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;echo: </span><span class="si">{</span><span class="n">msg</span><span class="si">}</span><span class="s2">&quot;</span>
+</span></code></pre></div>
+<p>默认使用 <code>pickle</code> 序列化参数和返回值。两端需要导入同一个 service class 定义，因为 method tag 会按方法名排序确定。</p>
+<h2 id="peeragent">连接 PeerAgent<a class="headerlink" href="#peeragent" title="Permanent link">&para;</a></h2>
+<p>SlimeRPC 依赖 PeerAgent 连接，不替代 discovery 流程：</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">dlslime</span><span class="w"> </span><span class="kn">import</span> <span class="n">PeerAgent</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="n">worker</span> <span class="o">=</span> <span class="n">PeerAgent</span><span class="p">(</span><span class="n">nanoctrl_url</span><span class="o">=</span><span class="s2">&quot;http://127.0.0.1:3000&quot;</span><span class="p">,</span> <span class="n">alias</span><span class="o">=</span><span class="s2">&quot;worker:0&quot;</span><span class="p">)</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="n">driver</span> <span class="o">=</span> <span class="n">PeerAgent</span><span class="p">(</span><span class="n">nanoctrl_url</span><span class="o">=</span><span class="s2">&quot;http://127.0.0.1:3000&quot;</span><span class="p">,</span> <span class="n">alias</span><span class="o">=</span><span class="s2">&quot;driver:0&quot;</span><span class="p">)</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="n">driver_conn</span> <span class="o">=</span> <span class="n">driver</span><span class="o">.</span><span class="n">connect_to</span><span class="p">(</span><span class="s2">&quot;worker:0&quot;</span><span class="p">,</span> <span class="n">ib_port</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">qp_num</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="n">worker_conn</span> <span class="o">=</span> <span class="n">worker</span><span class="o">.</span><span class="n">connect_to</span><span class="p">(</span><span class="s2">&quot;driver:0&quot;</span><span class="p">,</span> <span class="n">ib_port</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">qp_num</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>
+</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="n">driver_conn</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+</span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="n">worker_conn</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+</span></code></pre></div>
+<h2 id="worker">Worker 侧<a class="headerlink" href="#worker" title="Permanent link">&para;</a></h2>
+<p><code>serve()</code> 会阻塞并处理某个 peer 的请求：</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">dlslime.rpc</span><span class="w"> </span><span class="kn">import</span> <span class="n">serve</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="n">serve</span><span class="p">(</span><span class="n">worker</span><span class="p">,</span> <span class="n">CalcService</span><span class="p">(),</span> <span class="n">peer</span><span class="o">=</span><span class="s2">&quot;driver:0&quot;</span><span class="p">)</span>
+</span></code></pre></div>
+<p>在示例或测试中可放到后台线程：</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>    <span class="n">target</span><span class="o">=</span><span class="n">serve</span><span class="p">,</span>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>    <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="n">worker</span><span class="p">,</span> <span class="n">CalcService</span><span class="p">(),</span> <span class="s2">&quot;driver:0&quot;</span><span class="p">),</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>    <span class="n">daemon</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="p">)</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+</span></code></pre></div>
+<p><code>serve()</code> 只有在恰好连接一个 peer 时才能省略 <code>peer</code>。多 peer 服务应显式传 <code>peer=...</code>。</p>
+<h2 id="client">Client 侧<a class="headerlink" href="#client" title="Permanent link">&para;</a></h2>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">dlslime.rpc</span><span class="w"> </span><span class="kn">import</span> <span class="n">proxy</span><span class="p">,</span> <span class="n">wait_all</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="n">calc</span> <span class="o">=</span> <span class="n">proxy</span><span class="p">(</span><span class="n">driver</span><span class="p">,</span> <span class="s2">&quot;worker:0&quot;</span><span class="p">,</span> <span class="n">CalcService</span><span class="p">)</span>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="n">future</span> <span class="o">=</span> <span class="n">calc</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="k">assert</span> <span class="n">future</span><span class="o">.</span><span class="n">wait</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="mf">30.0</span><span class="p">)</span> <span class="o">==</span> <span class="mi">3</span>
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="n">futures</span> <span class="o">=</span> <span class="p">[</span><span class="n">calc</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">i</span> <span class="o">*</span> <span class="mi">10</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">5</span><span class="p">)]</span>
+</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="n">results</span> <span class="o">=</span> <span class="n">wait_all</span><span class="p">(</span><span class="n">futures</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mf">30.0</span><span class="p">)</span>
+</span></code></pre></div>
+<p>每次 proxy 调用都会返回 future，通过 <code>wait()</code> 获取结果。</p>
+<h2 id="channel-buffer">Channel Buffer<a class="headerlink" href="#channel-buffer" title="Permanent link">&para;</a></h2>
+<p>SlimeRPC 会为每个 <code>(local_agent, peer_agent)</code> 创建一个 RDMA mailbox channel，并注册类似下面的 MR：</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>rpc:mailbox:&lt;local_alias&gt;:&lt;peer_alias&gt;
+</span></code></pre></div>
+<p>常用参数：</p>
 <table>
 <thead>
 <tr>
-<th>方法</th>
+<th>设置</th>
+<th style="text-align: right;">默认值</th>
 <th>作用</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>read(peer_alias, assignments, stream=None)</code></td>
-<td>从 peer RDMA read 到本地内存。</td>
+<td><code>agent._rpc_buffer_size</code></td>
+<td style="text-align: right;"><code>32_000_000</code> bytes</td>
+<td>每个 inflight request/reply slot 大小。</td>
 </tr>
 <tr>
-<td><code>write(peer_alias, assignments, stream=None)</code></td>
-<td>从本地 RDMA write 到 peer 内存。</td>
+<td><code>agent._rpc_max_inflight</code></td>
+<td style="text-align: right;"><code>SLIME_RPC_MAX_INFLIGHT</code> 或 <code>16</code></td>
+<td>receive slot 数量。</td>
 </tr>
 <tr>
-<td><code>write_with_imm(peer_alias, assignments, imm_data=0, stream=None)</code></td>
-<td>携带 immediate data 的 RDMA write。</td>
-</tr>
-<tr>
-<td><code>send(peer_alias, chunk, stream_handler=None)</code></td>
-<td>消息发送。</td>
-</tr>
-<tr>
-<td><code>recv(peer_alias, chunk, stream_handler=None)</code></td>
-<td>消息接收。</td>
-</tr>
-<tr>
-<td><code>imm_recv(peer_alias, stream=None)</code></td>
-<td>接收 immediate-data event。</td>
+<td><code>SLIME_RPC_MAX_INFLIGHT</code></td>
+<td style="text-align: right;"><code>16</code></td>
+<td>max inflight 的环境变量默认值。</td>
 </tr>
 </tbody>
 </table>
+<p>创建 proxy 或启动 <code>serve()</code> 前设置：</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">driver</span><span class="o">.</span><span class="n">_rpc_buffer_size</span> <span class="o">=</span> <span class="mi">64</span> <span class="o">*</span> <span class="mi">1024</span> <span class="o">*</span> <span class="mi">1024</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="n">driver</span><span class="o">.</span><span class="n">_rpc_max_inflight</span> <span class="o">=</span> <span class="mi">8</span>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="n">worker</span><span class="o">.</span><span class="n">_rpc_buffer_size</span> <span class="o">=</span> <span class="mi">64</span> <span class="o">*</span> <span class="mi">1024</span> <span class="o">*</span> <span class="mi">1024</span>
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="n">worker</span><span class="o">.</span><span class="n">_rpc_max_inflight</span> <span class="o">=</span> <span class="mi">8</span>
+</span></code></pre></div>
+<h2 id="raw">Raw 模式<a class="headerlink" href="#raw" title="Permanent link">&para;</a></h2>
+<p><code>@method(raw=True)</code> 会跳过 pickle。handler 接收 channel、请求指针和请求字节数：</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">ctypes</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">dlslime.rpc</span><span class="w"> </span><span class="kn">import</span> <span class="n">method</span>
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>
+</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>
+</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="k">class</span><span class="w"> </span><span class="nc">RawEcho</span><span class="p">:</span>
+</span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>    <span class="nd">@method</span><span class="p">(</span><span class="n">raw</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="__span-9-7"><a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">echo</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">channel</span><span class="p">,</span> <span class="n">ptr</span><span class="p">,</span> <span class="n">nbytes</span><span class="p">):</span>
+</span><span id="__span-9-8"><a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a>        <span class="n">request</span> <span class="o">=</span> <span class="nb">bytes</span><span class="p">((</span><span class="n">ctypes</span><span class="o">.</span><span class="n">c_char</span> <span class="o">*</span> <span class="n">nbytes</span><span class="p">)</span><span class="o">.</span><span class="n">from_address</span><span class="p">(</span><span class="n">ptr</span><span class="p">))</span>
+</span><span id="__span-9-9"><a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a>        <span class="k">return</span> <span class="n">request</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span>
+</span></code></pre></div>
+<p>客户端传入一个 <code>bytes</code>，返回值也是 <code>bytes</code>：</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="n">raw</span> <span class="o">=</span> <span class="n">proxy</span><span class="p">(</span><span class="n">driver</span><span class="p">,</span> <span class="s2">&quot;worker:0&quot;</span><span class="p">,</span> <span class="n">RawEcho</span><span class="p">)</span>
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="n">response</span> <span class="o">=</span> <span class="n">raw</span><span class="o">.</span><span class="n">echo</span><span class="p">(</span><span class="sa">b</span><span class="s2">&quot;hello&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+</span></code></pre></div>
+<p>Raw 模式适合 FlatBuffers、protobuf bytes 或自定义二进制布局。完整示例见
+<code>examples/python/rpc_flatbuf_example.py</code>。</p>
+<h2 id="in-place-raw">In-Place Raw 回复<a class="headerlink" href="#in-place-raw" title="Permanent link">&para;</a></h2>
+<p><code>@method(raw=True, inplace=True)</code> 允许 handler 直接把回复写入已注册的 send buffer：</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">InplaceService</span><span class="p">:</span>
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>    <span class="nd">@method</span><span class="p">(</span><span class="n">raw</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">echo</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">req_ptr</span><span class="p">,</span> <span class="n">req_nbytes</span><span class="p">,</span> <span class="n">resp_ptr</span><span class="p">,</span> <span class="n">resp_cap</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>        <span class="n">n</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">req_nbytes</span><span class="p">,</span> <span class="n">resp_cap</span><span class="p">)</span>
+</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>        <span class="n">ctypes</span><span class="o">.</span><span class="n">memmove</span><span class="p">(</span><span class="n">resp_ptr</span><span class="p">,</span> <span class="n">req_ptr</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span>
+</span><span id="__span-11-6"><a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>        <span class="k">return</span> <span class="n">n</span>
+</span></code></pre></div>
+<p>handler 返回写入的字节数。执行期间 session send lock 会被持有，因此只适合非常短的 hot-path handler。</p>
+<h2 id="_3">错误处理<a class="headerlink" href="#_3" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>错误</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>RpcTimeoutError</code></td>
+<td><code>future.wait(timeout=...)</code> 超时。</td>
+</tr>
+<tr>
+<td><code>RemoteRpcError</code></td>
+<td>远端 handler 抛出异常。</td>
+</tr>
+<tr>
+<td><code>RpcError</code></td>
+<td>SlimeRPC 客户端可见错误基类。</td>
+</tr>
+</tbody>
+</table>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">dlslime.rpc</span><span class="w"> </span><span class="kn">import</span> <span class="n">RemoteRpcError</span><span class="p">,</span> <span class="n">RpcTimeoutError</span>
+</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>
+</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="k">try</span><span class="p">:</span>
+</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>    <span class="n">result</span> <span class="o">=</span> <span class="n">calc</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">wait</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
+</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="k">except</span> <span class="n">RpcTimeoutError</span><span class="p">:</span>
+</span><span id="__span-12-6"><a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a>    <span class="o">...</span>
+</span><span id="__span-12-7"><a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="k">except</span> <span class="n">RemoteRpcError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+</span><span id="__span-12-8"><a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a>    <span class="nb">print</span><span class="p">(</span><span class="n">exc</span><span class="o">.</span><span class="n">type_name</span><span class="p">,</span> <span class="n">exc</span><span class="o">.</span><span class="n">message</span><span class="p">)</span>
+</span></code></pre></div>
+<h2 id="_4">示例<a class="headerlink" href="#_4" title="Permanent link">&para;</a></h2>
+<ul>
+<li><code>examples/python/rpc_example.py</code>：typed pickle RPC loopback。</li>
+<li><code>examples/python/rpc_flatbuf_example.py</code>：raw FlatBuffers RPC loopback。</li>
+<li><code>bench/python/rpc_bench_slime_worker.py</code>：benchmark worker。</li>
+<li><code>bench/python/rpc_bench_slime_driver.py</code>：benchmark driver。</li>
+</ul>
 
 
 

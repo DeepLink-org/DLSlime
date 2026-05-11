@@ -2,252 +2,266 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
     <url>
         <loc>https://deeplink-org.github.io/DLSlime/dev/</loc>
-        <lastmod>2026-05-10</lastmod>
+        <lastmod>2026-05-11</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://deeplink-org.github.io/DLSlime/dev/"/>
         <xhtml:link rel="alternate" hreflang="zh" href="https://deeplink-org.github.io/DLSlime/devzh/"/>
     </url>
     <url>
         <loc>https://deeplink-org.github.io/DLSlime/dev/api_reference/</loc>
-        <lastmod>2026-05-10</lastmod>
+        <lastmod>2026-05-11</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://deeplink-org.github.io/DLSlime/dev/api_reference/"/>
         <xhtml:link rel="alternate" hreflang="zh" href="https://deeplink-org.github.io/DLSlime/devzh/api_reference/"/>
     </url>
     <url>
         <loc>https://deeplink-org.github.io/DLSlime/dev/installation/</loc>
-        <lastmod>2026-05-10</lastmod>
+        <lastmod>2026-05-11</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://deeplink-org.github.io/DLSlime/dev/installation/"/>
         <xhtml:link rel="alternate" hreflang="zh" href="https://deeplink-org.github.io/DLSlime/devzh/installation/"/>
     </url>
     <url>
         <loc>https://deeplink-org.github.io/DLSlime/dev/quickstart/</loc>
-        <lastmod>2026-05-10</lastmod>
+        <lastmod>2026-05-11</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://deeplink-org.github.io/DLSlime/dev/quickstart/"/>
         <xhtml:link rel="alternate" hreflang="zh" href="https://deeplink-org.github.io/DLSlime/devzh/quickstart/"/>
     </url>
     <url>
         <loc>https://deeplink-org.github.io/DLSlime/dev/roadmap/</loc>
-        <lastmod>2026-05-10</lastmod>
+        <lastmod>2026-05-11</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://deeplink-org.github.io/DLSlime/dev/roadmap/"/>
         <xhtml:link rel="alternate" hreflang="zh" href="https://deeplink-org.github.io/DLSlime/devzh/roadmap/"/>
     </url>
     <url>
         <loc>https://deeplink-org.github.io/DLSlime/dev/versions/</loc>
-        <lastmod>2026-05-10</lastmod>
+        <lastmod>2026-05-11</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://deeplink-org.github.io/DLSlime/dev/versions/"/>
         <xhtml:link rel="alternate" hreflang="zh" href="https://deeplink-org.github.io/DLSlime/devzh/versions/"/>
     </url>
     <url>
         <loc>https://deeplink-org.github.io/DLSlime/dev/design/architecture/</loc>
-        <lastmod>2026-05-10</lastmod>
+        <lastmod>2026-05-11</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://deeplink-org.github.io/DLSlime/dev/design/architecture/"/>
         <xhtml:link rel="alternate" hreflang="zh" href="https://deeplink-org.github.io/DLSlime/devzh/design/architecture/"/>
     </url>
     <url>
         <loc>https://deeplink-org.github.io/DLSlime/dev/design/dlslime-cache/</loc>
-        <lastmod>2026-05-10</lastmod>
+        <lastmod>2026-05-11</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://deeplink-org.github.io/DLSlime/dev/design/dlslime-cache/"/>
         <xhtml:link rel="alternate" hreflang="zh" href="https://deeplink-org.github.io/DLSlime/devzh/design/dlslime-cache/"/>
     </url>
     <url>
         <loc>https://deeplink-org.github.io/DLSlime/dev/design/endpoint-device-signal-refactor/</loc>
-        <lastmod>2026-05-10</lastmod>
+        <lastmod>2026-05-11</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://deeplink-org.github.io/DLSlime/dev/design/endpoint-device-signal-refactor/"/>
         <xhtml:link rel="alternate" hreflang="zh" href="https://deeplink-org.github.io/DLSlime/devzh/design/endpoint-device-signal-refactor/"/>
     </url>
     <url>
         <loc>https://deeplink-org.github.io/DLSlime/dev/design/endpoint-ownership-model/</loc>
-        <lastmod>2026-05-10</lastmod>
+        <lastmod>2026-05-11</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://deeplink-org.github.io/DLSlime/dev/design/endpoint-ownership-model/"/>
         <xhtml:link rel="alternate" hreflang="zh" href="https://deeplink-org.github.io/DLSlime/devzh/design/endpoint-ownership-model/"/>
     </url>
     <url>
         <loc>https://deeplink-org.github.io/DLSlime/dev/guide/</loc>
-        <lastmod>2026-05-10</lastmod>
+        <lastmod>2026-05-11</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://deeplink-org.github.io/DLSlime/dev/guide/"/>
         <xhtml:link rel="alternate" hreflang="zh" href="https://deeplink-org.github.io/DLSlime/devzh/guide/"/>
     </url>
     <url>
         <loc>https://deeplink-org.github.io/DLSlime/dev/guide/benchmark-rpc/</loc>
-        <lastmod>2026-05-10</lastmod>
+        <lastmod>2026-05-11</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://deeplink-org.github.io/DLSlime/dev/guide/benchmark-rpc/"/>
         <xhtml:link rel="alternate" hreflang="zh" href="https://deeplink-org.github.io/DLSlime/devzh/guide/benchmark-rpc/"/>
     </url>
     <url>
         <loc>https://deeplink-org.github.io/DLSlime/dev/guide/deployment/</loc>
-        <lastmod>2026-05-10</lastmod>
+        <lastmod>2026-05-11</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://deeplink-org.github.io/DLSlime/dev/guide/deployment/"/>
         <xhtml:link rel="alternate" hreflang="zh" href="https://deeplink-org.github.io/DLSlime/devzh/guide/deployment/"/>
     </url>
     <url>
         <loc>https://deeplink-org.github.io/DLSlime/dev/guide/dlslime-cache/</loc>
-        <lastmod>2026-05-10</lastmod>
+        <lastmod>2026-05-11</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://deeplink-org.github.io/DLSlime/dev/guide/dlslime-cache/"/>
         <xhtml:link rel="alternate" hreflang="zh" href="https://deeplink-org.github.io/DLSlime/devzh/guide/dlslime-cache/"/>
     </url>
     <url>
         <loc>https://deeplink-org.github.io/DLSlime/dev/guide/endpoint-api/</loc>
-        <lastmod>2026-05-10</lastmod>
+        <lastmod>2026-05-11</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://deeplink-org.github.io/DLSlime/dev/guide/endpoint-api/"/>
         <xhtml:link rel="alternate" hreflang="zh" href="https://deeplink-org.github.io/DLSlime/devzh/guide/endpoint-api/"/>
     </url>
     <url>
         <loc>https://deeplink-org.github.io/DLSlime/dev/guide/peeragent-api/</loc>
-        <lastmod>2026-05-10</lastmod>
+        <lastmod>2026-05-11</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://deeplink-org.github.io/DLSlime/dev/guide/peeragent-api/"/>
         <xhtml:link rel="alternate" hreflang="zh" href="https://deeplink-org.github.io/DLSlime/devzh/guide/peeragent-api/"/>
     </url>
     <url>
+        <loc>https://deeplink-org.github.io/DLSlime/dev/guide/slimerpc/</loc>
+        <lastmod>2026-05-11</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://deeplink-org.github.io/DLSlime/dev/guide/slimerpc/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://deeplink-org.github.io/DLSlime/devzh/guide/slimerpc/"/>
+    </url>
+    <url>
         <loc>https://deeplink-org.github.io/DLSlime/dev/platform/</loc>
-        <lastmod>2026-05-10</lastmod>
+        <lastmod>2026-05-11</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://deeplink-org.github.io/DLSlime/dev/platform/"/>
         <xhtml:link rel="alternate" hreflang="zh" href="https://deeplink-org.github.io/DLSlime/devzh/platform/"/>
     </url>
     <url>
         <loc>https://deeplink-org.github.io/DLSlime/dev/platform/huawei-ascend/</loc>
-        <lastmod>2026-05-10</lastmod>
+        <lastmod>2026-05-11</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://deeplink-org.github.io/DLSlime/dev/platform/huawei-ascend/"/>
         <xhtml:link rel="alternate" hreflang="zh" href="https://deeplink-org.github.io/DLSlime/devzh/platform/huawei-ascend/"/>
     </url>
     <url>
         <loc>https://deeplink-org.github.io/DLSlime/dev/zh/</loc>
-        <lastmod>2026-05-10</lastmod>
+        <lastmod>2026-05-11</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="zh" href="https://deeplink-org.github.io/DLSlime/dev/zh/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://deeplink-org.github.io/DLSlime/dev"/>
     </url>
     <url>
         <loc>https://deeplink-org.github.io/DLSlime/dev/zh/api_reference/</loc>
-        <lastmod>2026-05-10</lastmod>
+        <lastmod>2026-05-11</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="zh" href="https://deeplink-org.github.io/DLSlime/dev/zh/api_reference/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://deeplink-org.github.io/DLSlime/devapi_reference/"/>
     </url>
     <url>
         <loc>https://deeplink-org.github.io/DLSlime/dev/zh/installation/</loc>
-        <lastmod>2026-05-10</lastmod>
+        <lastmod>2026-05-11</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="zh" href="https://deeplink-org.github.io/DLSlime/dev/zh/installation/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://deeplink-org.github.io/DLSlime/devinstallation/"/>
     </url>
     <url>
         <loc>https://deeplink-org.github.io/DLSlime/dev/zh/quickstart/</loc>
-        <lastmod>2026-05-10</lastmod>
+        <lastmod>2026-05-11</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="zh" href="https://deeplink-org.github.io/DLSlime/dev/zh/quickstart/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://deeplink-org.github.io/DLSlime/devquickstart/"/>
     </url>
     <url>
         <loc>https://deeplink-org.github.io/DLSlime/dev/zh/roadmap/</loc>
-        <lastmod>2026-05-10</lastmod>
+        <lastmod>2026-05-11</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="zh" href="https://deeplink-org.github.io/DLSlime/dev/zh/roadmap/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://deeplink-org.github.io/DLSlime/devroadmap/"/>
     </url>
     <url>
         <loc>https://deeplink-org.github.io/DLSlime/dev/zh/versions/</loc>
-        <lastmod>2026-05-10</lastmod>
+        <lastmod>2026-05-11</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="zh" href="https://deeplink-org.github.io/DLSlime/dev/zh/versions/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://deeplink-org.github.io/DLSlime/devversions/"/>
     </url>
     <url>
         <loc>https://deeplink-org.github.io/DLSlime/dev/zh/design/architecture/</loc>
-        <lastmod>2026-05-10</lastmod>
+        <lastmod>2026-05-11</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="zh" href="https://deeplink-org.github.io/DLSlime/dev/zh/design/architecture/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://deeplink-org.github.io/DLSlime/devdesign/architecture/"/>
     </url>
     <url>
         <loc>https://deeplink-org.github.io/DLSlime/dev/zh/design/dlslime-cache/</loc>
-        <lastmod>2026-05-10</lastmod>
+        <lastmod>2026-05-11</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="zh" href="https://deeplink-org.github.io/DLSlime/dev/zh/design/dlslime-cache/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://deeplink-org.github.io/DLSlime/devdesign/dlslime-cache/"/>
     </url>
     <url>
         <loc>https://deeplink-org.github.io/DLSlime/dev/zh/design/endpoint-device-signal-refactor/</loc>
-        <lastmod>2026-05-10</lastmod>
+        <lastmod>2026-05-11</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="zh" href="https://deeplink-org.github.io/DLSlime/dev/zh/design/endpoint-device-signal-refactor/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://deeplink-org.github.io/DLSlime/devdesign/endpoint-device-signal-refactor/"/>
     </url>
     <url>
         <loc>https://deeplink-org.github.io/DLSlime/dev/zh/design/endpoint-ownership-model/</loc>
-        <lastmod>2026-05-10</lastmod>
+        <lastmod>2026-05-11</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="zh" href="https://deeplink-org.github.io/DLSlime/dev/zh/design/endpoint-ownership-model/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://deeplink-org.github.io/DLSlime/devdesign/endpoint-ownership-model/"/>
     </url>
     <url>
         <loc>https://deeplink-org.github.io/DLSlime/dev/zh/guide/</loc>
-        <lastmod>2026-05-10</lastmod>
+        <lastmod>2026-05-11</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="zh" href="https://deeplink-org.github.io/DLSlime/dev/zh/guide/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://deeplink-org.github.io/DLSlime/devguide/"/>
     </url>
     <url>
         <loc>https://deeplink-org.github.io/DLSlime/dev/zh/guide/benchmark-rpc/</loc>
-        <lastmod>2026-05-10</lastmod>
+        <lastmod>2026-05-11</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="zh" href="https://deeplink-org.github.io/DLSlime/dev/zh/guide/benchmark-rpc/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://deeplink-org.github.io/DLSlime/devguide/benchmark-rpc/"/>
     </url>
     <url>
         <loc>https://deeplink-org.github.io/DLSlime/dev/zh/guide/deployment/</loc>
-        <lastmod>2026-05-10</lastmod>
+        <lastmod>2026-05-11</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="zh" href="https://deeplink-org.github.io/DLSlime/dev/zh/guide/deployment/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://deeplink-org.github.io/DLSlime/devguide/deployment/"/>
     </url>
     <url>
         <loc>https://deeplink-org.github.io/DLSlime/dev/zh/guide/dlslime-cache/</loc>
-        <lastmod>2026-05-10</lastmod>
+        <lastmod>2026-05-11</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="zh" href="https://deeplink-org.github.io/DLSlime/dev/zh/guide/dlslime-cache/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://deeplink-org.github.io/DLSlime/devguide/dlslime-cache/"/>
     </url>
     <url>
         <loc>https://deeplink-org.github.io/DLSlime/dev/zh/guide/endpoint-api/</loc>
-        <lastmod>2026-05-10</lastmod>
+        <lastmod>2026-05-11</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="zh" href="https://deeplink-org.github.io/DLSlime/dev/zh/guide/endpoint-api/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://deeplink-org.github.io/DLSlime/devguide/endpoint-api/"/>
     </url>
     <url>
         <loc>https://deeplink-org.github.io/DLSlime/dev/zh/guide/peeragent-api/</loc>
-        <lastmod>2026-05-10</lastmod>
+        <lastmod>2026-05-11</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="zh" href="https://deeplink-org.github.io/DLSlime/dev/zh/guide/peeragent-api/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://deeplink-org.github.io/DLSlime/devguide/peeragent-api/"/>
     </url>
     <url>
+        <loc>https://deeplink-org.github.io/DLSlime/dev/zh/guide/slimerpc/</loc>
+        <lastmod>2026-05-11</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://deeplink-org.github.io/DLSlime/dev/zh/guide/slimerpc/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://deeplink-org.github.io/DLSlime/devguide/slimerpc/"/>
+    </url>
+    <url>
         <loc>https://deeplink-org.github.io/DLSlime/dev/zh/platform/</loc>
-        <lastmod>2026-05-10</lastmod>
+        <lastmod>2026-05-11</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="zh" href="https://deeplink-org.github.io/DLSlime/dev/zh/platform/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://deeplink-org.github.io/DLSlime/devplatform/"/>
     </url>
     <url>
         <loc>https://deeplink-org.github.io/DLSlime/dev/zh/platform/huawei-ascend/</loc>
-        <lastmod>2026-05-10</lastmod>
+        <lastmod>2026-05-11</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="zh" href="https://deeplink-org.github.io/DLSlime/dev/zh/platform/huawei-ascend/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://deeplink-org.github.io/DLSlime/devplatform/huawei-ascend/"/>
