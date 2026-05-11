@@ -30,5 +30,6 @@ from dlslime.logging import get_logger, set_log_level
 
 - [Endpoint API](guide/endpoint-api.md)
 - [PeerAgent API](guide/peeragent-api.md)
+- [SlimeRPC](guide/slimerpc.md)
 - [DLSlimeCache 服务](guide/dlslime-cache.md)
 - [版本](versions.md)

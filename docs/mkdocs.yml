@@ -84,6 +84,7 @@ plugins:
             Overview: 总览
             Endpoint API: Endpoint API
             PeerAgent API: PeerAgent API
+            SlimeRPC: SlimeRPC
             Deployment: 部署
             DLSlimeCache Service: DLSlimeCache 服务
             SlimeRPC Benchmark: SlimeRPC 基准测试
@@ -118,6 +119,7 @@ nav:
       - Overview: guide/index.md
       - Endpoint API: guide/endpoint-api.md
       - PeerAgent API: guide/peeragent-api.md
+      - SlimeRPC: guide/slimerpc.md
       - Deployment: guide/deployment.md
       - DLSlimeCache Service: guide/dlslime-cache.md
       - SlimeRPC Benchmark: guide/benchmark-rpc.md

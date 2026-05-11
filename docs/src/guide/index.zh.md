@@ -7,5 +7,6 @@
 - [部署](deployment.md)：以可复现方式运行 NanoCtrl、Redis、DLSlimeCache 和示例。
 - [Endpoint API](endpoint-api.md)：直接使用底层 RDMA endpoint 接口。
 - [PeerAgent API](peeragent-api.md)：使用控制面发现、命名 memory region 和服务化 I/O。
+- [SlimeRPC](slimerpc.md)：定义 Python 服务，并通过 PeerAgent-backed RDMA RPC 调用。
 - [DLSlimeCache 服务](dlslime-cache.md)：服务生命周期和客户端流程。
 - [SlimeRPC 基准测试](benchmark-rpc.md)：对比 SlimeRPC 与 Ray。

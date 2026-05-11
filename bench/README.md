@@ -12,8 +12,8 @@ so benchmark commands, hardware notes, and result files can evolve together.
 | `python/endpoint_io_bench.py`       | Endpoint-level I/O benchmark                                  |
 | `python/endpoint_sendrecv_bench.py` | Endpoint send/recv benchmark                                  |
 | `python/cache_bench.py`             | DLSlimeCache benchmark                                        |
-| `python/run_rpc_bench.sh`           | SlimeRPC vs Ray benchmark wrapper                             |
-| `python/rpc_bench_*.py`             | SlimeRPC and Ray benchmark implementations                    |
+| `python/run_rpc_bench.sh`           | SlimeRPC vs Ray (optionally + Pulsing) benchmark wrapper      |
+| `python/rpc_bench_*.py`             | SlimeRPC, Ray, and Pulsing benchmark implementations          |
 | `results/`                          | CSV outputs and captured worker logs                          |
 
 ## Prerequisites
@@ -112,10 +112,19 @@ dlslime-cache stop
 ## SlimeRPC vs Ray Benchmark
 
 The RPC benchmark compares SlimeRPC round-trip latency and bandwidth with a Ray
-actor baseline.
+actor baseline. A Pulsing (`@pul.remote`) actor baseline is available as an
+opt-in third comparator.
 
 ```bash
 bash bench/python/run_rpc_bench.sh
+```
+
+Include the Pulsing baseline (requires `pip install pulsing`):
+
+```bash
+bash bench/python/run_rpc_bench.sh --with-pulsing
+# or
+WITH_PULSING=1 bash bench/python/run_rpc_bench.sh
 ```
 
 With explicit parameters:
@@ -132,6 +141,7 @@ The script writes:
 ```text
 bench/results/slime_rpc.csv
 bench/results/ray_rpc.csv
+bench/results/pulsing_rpc.csv   # only when --with-pulsing is passed
 ```
 
 See [../docs/benchmark-rpc.md](../docs/benchmark-rpc.md) for the full RPC
