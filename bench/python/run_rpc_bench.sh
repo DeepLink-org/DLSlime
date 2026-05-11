@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# run_rpc_bench.sh — run SlimeRPC + Ray benchmarks and print comparison.
+# run_rpc_bench.sh — run SlimeRPC + Pulsing + Ray benchmarks and print comparison.
 #
 # Usage:
 #   bash run_rpc_bench.sh [--ctrl http://127.0.0.1:3000] [--buf-mb 256] [--max-size-mb 16] [--scope rpc-bench-...]
@@ -31,7 +31,7 @@ mkdir -p "$RESULTS_DIR"
 WORKER_LOG="$RESULTS_DIR/slime_worker_${SCOPE}.log"
 
 echo "╔══════════════════════════════════════════════════╗"
-echo "║        SlimeRPC vs Ray — RPC Benchmark           ║"
+echo "║   SlimeRPC vs Pulsing vs Ray — RPC Benchmark     ║"
 echo "╚══════════════════════════════════════════════════╝"
 echo "  NanoCtrl : $CTRL"
 echo "  Scope    : $SCOPE"
@@ -41,8 +41,8 @@ echo "  Results  : $RESULTS_DIR"
 echo "  Worker Log: $WORKER_LOG"
 echo ""
 
-# ── [1/3] SlimeRPC ──────────────────────────────────────────────────────────
-echo "▶ [1/3] SlimeRPC — starting worker..."
+# ── [1/4] SlimeRPC ──────────────────────────────────────────────────────────
+echo "▶ [1/4] SlimeRPC — starting worker..."
 PYTHONUNBUFFERED=1 python "$SCRIPT_DIR/rpc_bench_slime_worker.py" \
     --ctrl "$CTRL" --scope "$SCOPE" --buf-mb "$BUF_MB" \
     >"$WORKER_LOG" 2>&1 &
@@ -51,7 +51,7 @@ WORKER_PID=$!
 # Give the worker time to register with NanoCtrl
 sleep 2
 
-echo "▶ [1/3] SlimeRPC — running driver..."
+echo "▶ [1/4] SlimeRPC — running driver..."
 if ! python "$SCRIPT_DIR/rpc_bench_slime_driver.py" \
     --ctrl "$CTRL" --scope "$SCOPE" --buf-mb "$BUF_MB" \
     --max-size-mb "$MAX_SIZE_MB" \
@@ -70,13 +70,19 @@ kill "$WORKER_PID" 2>/dev/null || true
 wait "$WORKER_PID" 2>/dev/null || true
 echo ""
 
-# ── [2/3] Ray ───────────────────────────────────────────────────────────────
-echo "▶ [2/3] Ray — running benchmark..."
+# ── [2/4] Pulsing ───────────────────────────────────────────────────────────
+echo "▶ [2/4] Pulsing — running benchmark..."
+python "$SCRIPT_DIR/rpc_bench_pulsing.py" --out "$RESULTS_DIR/pulsing_rpc.csv"
+echo ""
+
+# ── [3/4] Ray ───────────────────────────────────────────────────────────────
+echo "▶ [3/4] Ray — running benchmark..."
 python "$SCRIPT_DIR/rpc_bench_ray.py" --out "$RESULTS_DIR/ray_rpc.csv"
 echo ""
 
-# ── [3/3] Compare ───────────────────────────────────────────────────────────
-echo "▶ [3/3] Comparison"
+# ── [4/4] Compare ───────────────────────────────────────────────────────────
+echo "▶ [4/4] Comparison"
 python "$SCRIPT_DIR/rpc_bench_compare.py" \
-    --slime "$RESULTS_DIR/slime_rpc.csv" \
-    --ray   "$RESULTS_DIR/ray_rpc.csv"
+    --slime   "$RESULTS_DIR/slime_rpc.csv" \
+    --pulsing "$RESULTS_DIR/pulsing_rpc.csv" \
+    --ray     "$RESULTS_DIR/ray_rpc.csv"

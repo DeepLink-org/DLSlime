@@ -56,13 +56,17 @@ class StreamMailbox:
 
     def start(self) -> None:
         """Start the stream listener thread."""
-        # Delete any stale stream messages from a previous run before listening.
-        prefix = (
-            f"{self._agent._redis_key_prefix}:" if self._agent._redis_key_prefix else ""
-        )
-        stream_key = f"{prefix}stream:{self._agent.alias}"
-        self._agent._redis_client.delete(stream_key)
-
+        # Do NOT delete the stream here. A peer whose connect_to runs before
+        # this agent registers will XADD qp_ready onto stream:<our-alias>
+        # before our listener exists; deleting here wipes that message. The
+        # peer marks _notified_peers after its first XADD and will not re-send,
+        # so losing the message stalls the handshake forever.
+        #
+        # Instead, _listen_loop reads from "0-0" and processes every message
+        # on the stream. Truly stale messages from a prior crashed session
+        # with the same alias fail endpoint.connect at handshake time — the
+        # listen loop catches that and continues, so later in-flight qp_ready
+        # from the current peer session still completes the handshake.
         self._thread = threading.Thread(target=self._listen_loop, daemon=True)
         self._thread.start()
         logger.info(
@@ -85,7 +89,11 @@ class StreamMailbox:
         )
         stream_key = f"{prefix}stream:{self._agent.alias}"
 
-        # Start from the beginning of the (now-freshly-cleared) stream.
+        # Start from the beginning of the stream. We intentionally do not
+        # delete the stream on start — see the note in start() — so there may
+        # be messages from before our listener thread was running (including
+        # in-flight qp_ready from a peer whose connect_to fired before our
+        # registration). Processing from "0-0" picks those up.
         last_id = "0-0"
 
         logger.info(
