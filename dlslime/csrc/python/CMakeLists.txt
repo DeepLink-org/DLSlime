@@ -67,6 +67,11 @@ if (BUILD_ASCEND_DIRECT)
     )
 endif()
 
+if (BUILD_TCP)
+    target_compile_definitions(_slime_c PRIVATE BUILD_TCP)
+    list(APPEND _slime_c_link_libraries _slime_tcp)
+endif()
+
 # Ops moved to NanoCCL - link to NanoCCL if needed
 # if (BUILD_INTRA_OPS OR BUILD_INTER_OPS)
 #     if (BUILD_INTRA_OPS)

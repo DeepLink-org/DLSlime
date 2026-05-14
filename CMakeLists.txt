@@ -13,6 +13,7 @@ slime_option(USE_MACA                  "USE in MACA Platform"             OFF)
 
 slime_option(BUILD_NVLINK              "Build NVLINK"                     OFF)
 slime_option(BUILD_ASCEND_DIRECT       "Build Ascend direct transport"    OFF)
+slime_option(BUILD_TCP                 "Build TCP transport"               ON)
 
 # Slime options for custom python wrapper
 slime_option(BUILD_PYTHON              "Build python wrapper"             OFF)
