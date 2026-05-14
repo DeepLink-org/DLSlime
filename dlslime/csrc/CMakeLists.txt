@@ -27,6 +27,10 @@ if(BUILD_RDMA)
     target_link_libraries(dlslime INTERFACE _slime_rdma)
 endif()
 
+if(BUILD_TCP)
+    target_link_libraries(dlslime INTERFACE _slime_tcp)
+endif()
+
 # rpc/ has no independent C++ consumers (the session API is all
 # pybind11). It is compiled straight into _slime_c.so by the python
 # subdirectory below. Keep the source files here as a marker so future
