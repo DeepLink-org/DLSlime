@@ -130,7 +130,7 @@ def test_recv_timeout():
 
     def run_a():
         ep_a.connect(ep_b.endpoint_info())
-        fut = ep_a.async_recv((h_a, 0, 5), timeout_ms=300)
+        fut = ep_a.async_recv((h_a, 0, 5))
         result = fut.wait_for(0.3)
         print(f"  recv wait_for(0.3s): {result} (expected None)")
         assert result is None, f"Expected None (timeout), got {result}"

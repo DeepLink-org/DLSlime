@@ -612,32 +612,26 @@ PYBIND11_MODULE(_slime_c, m)
              &dlslime::tcp::TcpEndpoint::register_remote_memory_region,
              py::arg("name"), py::arg("mr_info"), py::call_guard<py::gil_scoped_release>())
         .def("async_send",
-             py::overload_cast<const dlslime::chunk_tuple_t&, int64_t, void*>(
+             py::overload_cast<const dlslime::chunk_tuple_t&, int64_t>(
                  &dlslime::tcp::TcpEndpoint::async_send),
              py::arg("chunk"),
              py::arg("timeout_ms") = dlslime::tcp::TcpEndpoint::kDefaultTimeoutMs,
-             py::arg("stream") = nullptr,
              py::call_guard<py::gil_scoped_release>())
         .def("async_recv",
-             py::overload_cast<const dlslime::chunk_tuple_t&, int64_t, void*>(
-                 &dlslime::tcp::TcpEndpoint::async_recv),
+             &dlslime::tcp::TcpEndpoint::async_recv,
              py::arg("chunk"),
-             py::arg("timeout_ms") = dlslime::tcp::TcpEndpoint::kDefaultTimeoutMs,
-             py::arg("stream") = nullptr,
              py::call_guard<py::gil_scoped_release>())
         .def("async_read",
-             py::overload_cast<const std::vector<dlslime::assign_tuple_t>&, int64_t, void*>(
+             py::overload_cast<const std::vector<dlslime::assign_tuple_t>&, int64_t>(
                  &dlslime::tcp::TcpEndpoint::async_read),
              py::arg("assign"),
              py::arg("timeout_ms") = dlslime::tcp::TcpEndpoint::kDefaultTimeoutMs,
-             py::arg("stream") = nullptr,
              py::call_guard<py::gil_scoped_release>())
         .def("async_write",
-             py::overload_cast<const std::vector<dlslime::assign_tuple_t>&, int64_t, void*>(
+             py::overload_cast<const std::vector<dlslime::assign_tuple_t>&, int64_t>(
                  &dlslime::tcp::TcpEndpoint::async_write),
              py::arg("assign"),
              py::arg("timeout_ms") = dlslime::tcp::TcpEndpoint::kDefaultTimeoutMs,
-             py::arg("stream") = nullptr,
              py::call_guard<py::gil_scoped_release>());
 #endif  // BUILD_TCP
 

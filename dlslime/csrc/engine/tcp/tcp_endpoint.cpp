@@ -20,13 +20,6 @@ static void hdr_hton(SessionHeader& h) {
     h.addr = htole64(h.addr);
 }
 
-void TcpEndpoint::set_sndtimeo(int fd, int64_t ms) {
-    struct timeval tv;
-    tv.tv_sec  = static_cast<time_t>(ms / 1000);
-    tv.tv_usec = static_cast<suseconds_t>((ms % 1000) * 1000);
-    setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
-}
-
 // ── RecvMatcher factory ────────────────────────────────
 
 ServerSession::RecvMatcher TcpEndpoint::make_recv_matcher() {
@@ -173,7 +166,7 @@ bool TcpEndpoint::write_message(tcp::socket& sock,
 // ── async_send ──────────────────────────────────────────
 
 std::shared_ptr<TcpSendFuture>
-TcpEndpoint::async_send(const chunk_tuple_t& chunk, int64_t timeout_ms, void*) {
+TcpEndpoint::async_send(const chunk_tuple_t& chunk, int64_t timeout_ms) {
     auto mr = local_pool_->get_mr_fast(static_cast<int32_t>(std::get<0>(chunk)));
     if (mr.length == 0)
         throw std::runtime_error("TcpEndpoint::async_send: invalid local MR");
@@ -191,14 +184,11 @@ TcpEndpoint::async_send(const chunk_tuple_t& chunk, int64_t timeout_ms, void*) {
         return std::make_shared<TcpSendFuture>(op);
     }
 
-    if (timeout_ms > 0)
-        set_sndtimeo(conn->socket.native_handle(), timeout_ms);
-
     SessionHeader hdr{len, 0, OP_SEND};
     auto& pool = ctx_->conn_pool();
 
     std::weak_ptr<TcpEndpoint> weak = weak_from_this();
-    asio::post(ctx_->io_context(), [weak, conn, op, hdr, src, len, timeout_ms, &pool]() {
+    asio::post(ctx_->io_context(), [weak, conn, op, hdr, src, len, &pool]() {
         auto ep = weak.lock();
         if (!ep) {
             op->completion_status.store(TCP_CLOSED, std::memory_order_release);
@@ -214,9 +204,7 @@ TcpEndpoint::async_send(const chunk_tuple_t& chunk, int64_t timeout_ms, void*) {
             asio::buffer(reinterpret_cast<const void*>(src), len)
         };
         asio::async_write(conn->socket, bufs,
-            [conn, op, timeout_ms, &pool](asio::error_code ec, size_t) {
-                if (timeout_ms > 0 && conn->socket.is_open())
-                    TcpEndpoint::set_sndtimeo(conn->socket.native_handle(), 0);
+            [conn, op, &pool](asio::error_code ec, size_t) {
                 op->completion_status.store(
                     ec ? TCP_FAILED : TCP_SUCCESS, std::memory_order_release);
                 if (op->signal) op->signal->set_comm_done(0);
@@ -230,7 +218,7 @@ TcpEndpoint::async_send(const chunk_tuple_t& chunk, int64_t timeout_ms, void*) {
 // ── async_recv ──────────────────────────────────────────
 
 std::shared_ptr<TcpRecvFuture>
-TcpEndpoint::async_recv(const chunk_tuple_t& chunk, int64_t /*timeout_ms*/, void*) {
+TcpEndpoint::async_recv(const chunk_tuple_t& chunk) {
     auto mr = local_pool_->get_mr_fast(static_cast<int32_t>(std::get<0>(chunk)));
     if (mr.length == 0)
         throw std::runtime_error("TcpEndpoint::async_recv: invalid local MR");
@@ -252,7 +240,7 @@ TcpEndpoint::async_recv(const chunk_tuple_t& chunk, int64_t /*timeout_ms*/, void
 
 std::shared_ptr<TcpReadWriteFuture>
 TcpEndpoint::async_read(const std::vector<assign_tuple_t>& assign,
-                         int64_t /*timeout_ms*/, void*) {
+                         int64_t /*timeout_ms*/) {
     if (assign.empty())
         throw std::runtime_error("TcpEndpoint::async_read: empty assignment");
 
@@ -315,7 +303,6 @@ TcpEndpoint::async_read(const std::vector<assign_tuple_t>& assign,
                     return;
                 }
 
-                // Read raw response data (no header).
                 asio::async_read(conn->socket,
                     asio::buffer(reinterpret_cast<void*>(op->user_buffer),
                                  op->user_length),
@@ -342,7 +329,7 @@ TcpEndpoint::async_read(const std::vector<assign_tuple_t>& assign,
 
 std::shared_ptr<TcpReadWriteFuture>
 TcpEndpoint::async_write(const std::vector<assign_tuple_t>& assign,
-                          int64_t timeout_ms, void*) {
+                          int64_t /*timeout_ms*/) {
     if (assign.empty())
         throw std::runtime_error("TcpEndpoint::async_write: empty assignment");
 
@@ -370,14 +357,11 @@ TcpEndpoint::async_write(const std::vector<assign_tuple_t>& assign,
         return std::make_shared<TcpReadWriteFuture>(op);
     }
 
-    if (timeout_ms > 0)
-        set_sndtimeo(conn->socket.native_handle(), timeout_ms);
-
     SessionHeader hdr{length, remote.addr + remote.offset + remote_off, OP_WRITE};
     auto& pool = ctx_->conn_pool();
 
     std::weak_ptr<TcpEndpoint> weak = weak_from_this();
-    asio::post(ctx_->io_context(), [weak, conn, op, hdr, src, length, timeout_ms, &pool]() {
+    asio::post(ctx_->io_context(), [weak, conn, op, hdr, src, length, &pool]() {
         auto ep = weak.lock();
         if (!ep) {
             op->completion_status.store(TCP_CLOSED, std::memory_order_release);
@@ -393,9 +377,7 @@ TcpEndpoint::async_write(const std::vector<assign_tuple_t>& assign,
             asio::buffer(reinterpret_cast<const void*>(src), length)
         };
         asio::async_write(conn->socket, bufs,
-            [conn, op, timeout_ms, &pool](asio::error_code ec, size_t) {
-                if (timeout_ms > 0 && conn->socket.is_open())
-                    TcpEndpoint::set_sndtimeo(conn->socket.native_handle(), 0);
+            [conn, op, &pool](asio::error_code ec, size_t) {
                 op->completion_status.store(
                     ec ? TCP_FAILED : TCP_SUCCESS, std::memory_order_release);
                 if (op->signal) op->signal->set_comm_done(0);
@@ -417,7 +399,6 @@ void TcpEndpoint::shutdown() {
 
     acceptor_.close();
 
-    // Force-complete all pending operations.
     {
         std::lock_guard<std::mutex> lk(recv_mu_);
         for (auto& pr : pending_recvs_) {
@@ -439,7 +420,6 @@ void TcpEndpoint::shutdown() {
         pending_reads_.clear();
     }
 
-    // If self-contained, stop the private TcpContext.
     if (own_ctx_)
         own_ctx_->shutdown();
 }

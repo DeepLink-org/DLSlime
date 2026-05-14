@@ -9,7 +9,6 @@
 #include <memory>
 #include <mutex>
 #include <string>
-#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -32,10 +31,10 @@ class TcpEndpoint : public std::enable_shared_from_this<TcpEndpoint> {
 public:
     static constexpr int64_t kDefaultTimeoutMs = 30000;
 
-    // Self-contained: creates its own TcpContext + io_thread.
+    // 【主构造】自包含 TcpContext (最常用)
     explicit TcpEndpoint(uint16_t port = 0);
 
-    // Shared context: multiple endpoints share one io_context thread.
+    // 【次构造】共享 TcpContext (多 endpoint 复用单 io_context 线程)
     TcpEndpoint(TcpContext& ctx, uint16_t port = 0);
 
     ~TcpEndpoint();
@@ -55,27 +54,26 @@ public:
                                           const json& mr_info);
     json mr_info() const;
 
-    // ── Async I/O (all return Future; I/O on io_context thread) ──
+    // ── Async I/O (all return Future immediately; I/O runs on io_context thread) ──
 
+    // Bilateral send.  timeout_ms controls socket write timeout (SO_SNDTIMEO).
     std::shared_ptr<TcpSendFuture> async_send(
         const chunk_tuple_t& chunk,
-        int64_t timeout_ms = kDefaultTimeoutMs,
-        void* stream = nullptr);
+        int64_t timeout_ms = kDefaultTimeoutMs);
 
+    // Bilateral recv.  Timeout via future.wait_for().
     std::shared_ptr<TcpRecvFuture> async_recv(
-        const chunk_tuple_t& chunk,
-        int64_t timeout_ms = kDefaultTimeoutMs,
-        void* stream = nullptr);
+        const chunk_tuple_t& chunk);
 
+    // Unilateral read: request remote to send data from registered buffer.
     std::shared_ptr<TcpReadWriteFuture> async_read(
         const std::vector<assign_tuple_t>& assign,
-        int64_t timeout_ms = kDefaultTimeoutMs,
-        void* stream = nullptr);
+        int64_t timeout_ms = kDefaultTimeoutMs);
 
+    // Unilateral write: push data to remote registered buffer.
     std::shared_ptr<TcpReadWriteFuture> async_write(
         const std::vector<assign_tuple_t>& assign,
-        int64_t timeout_ms = kDefaultTimeoutMs,
-        void* stream = nullptr);
+        int64_t timeout_ms = kDefaultTimeoutMs);
 
     // ── Accessors ───────────────────────────────────────
     void    setId(int64_t id) { id_.store(id, std::memory_order_relaxed); }
@@ -83,16 +81,13 @@ public:
     bool    is_connected() const { return connected_.load(std::memory_order_acquire); }
 
 private:
-    // ── io_context management ───────────────────────────
     void start_io();
     void do_accept();
     ServerSession::RecvMatcher make_recv_matcher();
 
-    // ── helpers ─────────────────────────────────────────
     bool is_initiator(const std::string& peer_host, uint16_t peer_port) const;
     bool write_message(asio::ip::tcp::socket& sock,
                        const SessionHeader& hdr, const void* payload);
-    static void set_sndtimeo(int fd, int64_t ms);
 
     // ── identity ────────────────────────────────────────
     std::atomic<int64_t> id_{-1};
@@ -104,7 +99,7 @@ private:
 
     // ── asio core ───────────────────────────────────────
     TcpContext*                    ctx_{nullptr};
-    std::unique_ptr<TcpContext>    own_ctx_;       // if self-contained
+    std::unique_ptr<TcpContext>    own_ctx_;
     asio::ip::tcp::acceptor        acceptor_;
     std::atomic<bool>              running_{true};
 
@@ -119,7 +114,7 @@ private:
     std::mutex             recv_mu_;
     std::deque<PendingRecv> pending_recvs_;
 
-    // ── read matching (connections reserved for response) ──
+    // ── read matching ───────────────────────────────────
     struct PendingRead {
         std::shared_ptr<PooledConnection> conn;
         std::shared_ptr<TcpOpState>       op_state;
