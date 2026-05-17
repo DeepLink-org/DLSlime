@@ -6,7 +6,7 @@ namespace tcp {
 // ── local MR ────────────────────────────────────────────
 
 int32_t TcpMemoryPool::register_memory_region(
-    uintptr_t addr, uint64_t offset, size_t length,
+    uintptr_t addr, size_t length,
     std::optional<std::string> name) {
 
     auto pit = ptr_to_handle_.find(addr);
@@ -21,10 +21,11 @@ int32_t TcpMemoryPool::register_memory_region(
     }
 
     int32_t h = static_cast<int32_t>(handle_to_mr_.size());
-    handle_to_mr_.push_back({addr, offset, length});
+    handle_to_mr_.push_back({addr, length});
     handle_to_name_.push_back(name.value_or(""));
     ptr_to_handle_[addr] = h;
-    if (name.has_value()) name_to_handle_[*name] = h;
+    if (name.has_value())
+        name_to_handle_[*name] = h;
     return h;
 }
 
@@ -53,7 +54,6 @@ int32_t TcpMemoryPool::register_remote_memory_region(
             int32_t h = it->second;
             auto& rm  = remote_handle_to_mr_[h];
             rm.addr   = mr_info.value("addr", 0UL);
-            rm.offset = mr_info.value("offset", 0UL);
             rm.length = mr_info.value("length", 0UL);
             return h;
         }
@@ -62,7 +62,6 @@ int32_t TcpMemoryPool::register_remote_memory_region(
     int32_t h = static_cast<int32_t>(remote_handle_to_mr_.size());
     remote_handle_to_mr_.push_back({
         mr_info.value("addr", 0UL),
-        mr_info.value("offset", 0UL),
         mr_info.value("length", 0UL)
     });
     remote_handle_to_name_.push_back(mr_name);

@@ -42,15 +42,26 @@ TcpConnectionPool::getConnection(const std::string& host, uint16_t port) {
     auto conn = std::make_shared<PooledConnection>(std::move(sock), host, port);
     {
         std::lock_guard<std::mutex> lk(mu_);
+        // Remove idle connection
+        cleanupIdleConnections(false);
+
         auto& q = pool_[key];
-        for (auto& c : q) {
-            if (!c->in_use && c->socket.is_open()) {
-                asio::error_code ign;
-                conn->socket.close(ign);
-                c->in_use = true;
-                c->last_used = std::chrono::steady_clock::now();
-                return c;
+        for (auto q_i = q.begin(); q_i != q.end();) {
+            auto& c = *q_i;
+            if (!c->in_use) {
+                if (c->socket.is_open()) {
+                    c->in_use = true;
+                    c->last_used = std::chrono::steady_clock::now();
+                    asio::error_code ign;
+                    conn->socket.close(ign);
+                    return c;
+                } else {
+                    // Remove dead connection
+                    q_i = q.erase(q_i);
+                    continue;
+                }
             }
+            q_i++;
         }
         q.push_back(conn);
     }
@@ -60,25 +71,40 @@ TcpConnectionPool::getConnection(const std::string& host, uint16_t port) {
 void TcpConnectionPool::returnConnection(
     std::shared_ptr<PooledConnection> conn) {
     if (!conn) return;
+    ConnKey key{conn->host, conn->port};
+
     std::lock_guard<std::mutex> lk(mu_);
-    if (conn->socket.is_open()) {
-        conn->in_use = false;
-        conn->last_used = std::chrono::steady_clock::now();
-    } else {
-        ConnKey key{conn->host, conn->port};
-        auto it = pool_.find(key);
-        if (it != pool_.end()) {
-            auto& q = it->second;
-            for (auto qi = q.begin(); qi != q.end(); ++qi)
-                if (*qi == conn) { q.erase(qi); break; }
-            if (q.empty()) pool_.erase(it);
-        }
+    auto it = pool_.find(key);
+    if (it != pool_.end()) {
+        auto& q = it->second;
+        for (auto qi = q.begin(); qi != q.end(); ++qi)
+            if (*qi == conn) {
+                if (conn->socket.is_open()) {
+                    conn->in_use = false;
+                    conn->last_used = std::chrono::steady_clock::now();
+                } else {
+                    q.erase(qi);
+                }
+                break;
+            }
+        if (q.empty()) pool_.erase(it);
+        return;
     }
+
+    // Connection not found in pool (temporary), close it.
+    if (conn->socket.is_open()) {
+        asio::error_code ec;
+        conn->socket.close(ec);
+        if (ec)
+            SLIME_LOG_WARN("TcpConnectionPool: close temp conn ", conn->host,
+                           ":", conn->port, " failed: ", ec.message());
+    }
+
 }
 
-void TcpConnectionPool::cleanupIdleConnections() {
+void TcpConnectionPool::cleanupIdleConnections(bool lock = true) {
     auto now = std::chrono::steady_clock::now();
-    std::lock_guard<std::mutex> lk(mu_);
+    if (use_lock) std::lock_guard<std::mutex> lk(mu_);
     for (auto it = pool_.begin(); it != pool_.end(); ) {
         auto& q = it->second;
         while (!q.empty()) {
@@ -102,7 +128,8 @@ void TcpConnectionPool::cleanupIdleConnections() {
 void TcpConnectionPool::clear() {
     std::lock_guard<std::mutex> lk(mu_);
     for (auto& [_, q] : pool_)
-        for (auto& c : q) { asio::error_code ign; c->socket.close(ign); }
+        // force close
+        for (auto& c : q) { c->in_use = false; asio::error_code ign; c->socket.close(ign);}
     pool_.clear();
 }
 

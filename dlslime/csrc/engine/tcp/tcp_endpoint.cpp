@@ -37,21 +37,13 @@ ServerSession::RecvMatcher TcpEndpoint::make_recv_matcher() {
 
 // ── Constructor ────────────────────────────────────────
 
-TcpEndpoint::TcpEndpoint(uint16_t port)
+TcpEndpoint::TcpEndpoint(const std::string& ip, uint16_t port)
     : own_ctx_(std::make_unique<TcpContext>())
     , acceptor_(own_ctx_->io_context())
     , local_pool_(std::make_shared<TcpMemoryPool>())
-    , remote_pool_(std::make_shared<TcpMemoryPool>()) {
+    , remote_pool_(std::make_shared<TcpMemoryPool>())
+    , local_host_(ip) {
     ctx_ = own_ctx_.get();
-    local_port_ = port;
-    start_io();
-}
-
-TcpEndpoint::TcpEndpoint(TcpContext& ctx, uint16_t port)
-    : acceptor_(ctx.io_context())
-    , local_pool_(std::make_shared<TcpMemoryPool>())
-    , remote_pool_(std::make_shared<TcpMemoryPool>()) {
-    ctx_ = &ctx;
     local_port_ = port;
     start_io();
 }
@@ -61,7 +53,8 @@ TcpEndpoint::~TcpEndpoint() {
 }
 
 void TcpEndpoint::start_io() {
-    auto ep = tcp::endpoint(tcp::v4(), local_port_);
+    auto addr = asio::ip::make_address(local_host_);
+    auto ep   = tcp::endpoint(addr, local_port_);
     acceptor_.open(ep.protocol());
     acceptor_.set_option(tcp::acceptor::reuse_address(true));
     acceptor_.bind(ep);
@@ -115,14 +108,12 @@ bool TcpEndpoint::is_initiator(const std::string& peer_host,
     return local_port_ > peer_port;
 }
 
-void TcpEndpoint::connect(const json& remote_info) {
-    if (connected_.load(std::memory_order_acquire)) return;
+void TcpEndpoint::connect(const json& remote_endpoint_info) {
+    peer_host_ = remote_endpoint_info.value("host", "");
+    peer_port_ = static_cast<uint16_t>(remote_endpoint_info.value("port", 0));
 
-    peer_host_ = remote_info.value("host", "");
-    peer_port_ = static_cast<uint16_t>(remote_info.value("port", 0));
-
-    if (remote_info.contains("mr_info")) {
-        for (const auto& [name, info] : remote_info["mr_info"].items())
+    if (remote_endpoint_info.contains("mr_info")) {
+        for (const auto& [name, info] : remote_endpoint_info["mr_info"].items())
             remote_pool_->register_remote_memory_region(info, name);
     }
 
@@ -137,9 +128,9 @@ void TcpEndpoint::connect(const json& remote_info) {
 // ── memory registration ─────────────────────────────────
 
 int32_t TcpEndpoint::register_memory_region(const std::string& name,
-                                             uintptr_t ptr, uintptr_t offset,
+                                             uintptr_t ptr,
                                              size_t length) {
-    return local_pool_->register_memory_region(ptr, offset, length, name);
+    return local_pool_->register_memory_region(ptr, length, name);
 }
 
 int32_t TcpEndpoint::register_remote_memory_region(const std::string& name,
@@ -171,7 +162,7 @@ TcpEndpoint::async_send(const chunk_tuple_t& chunk, int64_t timeout_ms) {
     if (mr.length == 0)
         throw std::runtime_error("TcpEndpoint::async_send: invalid local MR");
 
-    uintptr_t src = mr.addr + mr.offset + std::get<1>(chunk);
+    uintptr_t src = mr.addr + std::get<1>(chunk);
     size_t    len = std::get<2>(chunk);
 
     auto conn = ctx_->conn_pool().getConnection(peer_host_, peer_port_);
@@ -225,7 +216,7 @@ TcpEndpoint::async_recv(const chunk_tuple_t& chunk) {
 
     auto op = TcpOpState::create();
     op->signal->reset_all();
-    op->user_buffer = mr.addr + mr.offset + std::get<1>(chunk);
+    op->user_buffer = mr.addr + std::get<1>(chunk);
     op->user_length = std::get<2>(chunk);
 
     {
@@ -258,7 +249,7 @@ TcpEndpoint::async_read(const std::vector<assign_tuple_t>& assign,
 
     auto op = TcpOpState::create();
     op->signal->reset_all();
-    op->user_buffer = local.addr + local.offset + local_off;
+    op->user_buffer = local.addr + local_off;
     op->user_length = length;
 
     auto conn = ctx_->conn_pool().getConnection(peer_host_, peer_port_);
@@ -274,7 +265,7 @@ TcpEndpoint::async_read(const std::vector<assign_tuple_t>& assign,
         pending_reads_[req_id] = {conn, op};
     }
 
-    SessionHeader hdr{length, remote.addr + remote.offset + remote_off, OP_READ};
+    SessionHeader hdr{length, remote.addr + remote_off, OP_READ};
     auto& pool = ctx_->conn_pool();
 
     std::weak_ptr<TcpEndpoint> weak = weak_from_this();
@@ -345,7 +336,7 @@ TcpEndpoint::async_write(const std::vector<assign_tuple_t>& assign,
     if (local.length == 0 || remote.length == 0)
         throw std::runtime_error("TcpEndpoint::async_write: invalid MR handle");
 
-    uintptr_t src = local.addr + local.offset + local_off;
+    uintptr_t src = local.addr + local_off;
 
     auto conn = ctx_->conn_pool().getConnection(peer_host_, peer_port_);
     auto op   = TcpOpState::create();
@@ -357,7 +348,7 @@ TcpEndpoint::async_write(const std::vector<assign_tuple_t>& assign,
         return std::make_shared<TcpReadWriteFuture>(op);
     }
 
-    SessionHeader hdr{length, remote.addr + remote.offset + remote_off, OP_WRITE};
+    SessionHeader hdr{length, remote.addr + remote_off, OP_WRITE};
     auto& pool = ctx_->conn_pool();
 
     std::weak_ptr<TcpEndpoint> weak = weak_from_this();

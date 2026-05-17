@@ -15,12 +15,10 @@ using json = nlohmann::json;
 
 struct TcpMr {
     uintptr_t addr{0};
-    uint64_t  offset{0};
     size_t    length{0};
 
     json json_info(const std::string& name) const {
-        return {{"name", name}, {"addr", addr},
-                {"offset", offset}, {"length", length}};
+        return {{"name", name}, {"addr", addr}, {"length", length}};
     }
 };
 
@@ -29,7 +27,7 @@ class TcpMemoryPool {
 public:
     TcpMemoryPool() = default;
 
-    int32_t register_memory_region(uintptr_t addr, uint64_t offset,
+    int32_t register_memory_region(uintptr_t addr,
                                    size_t length,
                                    std::optional<std::string> name = std::nullopt);
     int32_t unregister_memory_region(int32_t handle);

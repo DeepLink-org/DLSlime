@@ -30,7 +30,7 @@ struct PooledConnection {
 // States: IDLE (in deque, in_use=false) / ACTIVE (checked out) / RESERVED
 class TcpConnectionPool {
 public:
-    static constexpr std::chrono::seconds kIdleTimeout{60};
+    static constexpr std::chrono::seconds kIdleTimeout{300};
 
     explicit TcpConnectionPool(asio::io_context& io_ctx) : io_ctx_(io_ctx) {}
 

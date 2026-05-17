@@ -575,13 +575,13 @@ PYBIND11_MODULE(_slime_c, m)
         m, "TcpMemoryPool")
         .def(py::init<>())
         .def("register_memory_region",
-             [](dlslime::tcp::TcpMemoryPool& self, uintptr_t addr, uint64_t offset,
+             [](dlslime::tcp::TcpMemoryPool& self, uintptr_t addr,
                 size_t length, py::object name_obj) {
                  std::optional<std::string> name;
                  if (!name_obj.is_none()) name = name_obj.cast<std::string>();
-                 return self.register_memory_region(addr, offset, length, name);
+                 return self.register_memory_region(addr, length, name);
              },
-             py::arg("addr"), py::arg("offset"), py::arg("length"),
+             py::arg("addr"), py::arg("length"),
              py::arg("name") = py::none())
         .def("register_remote_memory_region",
              [](dlslime::tcp::TcpMemoryPool& self, const json& mr_info,
@@ -597,7 +597,8 @@ PYBIND11_MODULE(_slime_c, m)
 
     py::class_<dlslime::tcp::TcpEndpoint, std::shared_ptr<dlslime::tcp::TcpEndpoint>>(
         m, "TcpEndpoint")
-        .def(py::init<uint16_t>(), py::arg("port") = 0)
+        .def(py::init<const std::string&, uint16_t>(),
+             py::arg("ip") = "0.0.0.0", py::arg("port") = 0)
         .def("connect", &dlslime::tcp::TcpEndpoint::connect,
              py::arg("remote_info"), py::call_guard<py::gil_scoped_release>())
         .def("endpoint_info", &dlslime::tcp::TcpEndpoint::endpoint_info)
@@ -606,7 +607,7 @@ PYBIND11_MODULE(_slime_c, m)
              py::call_guard<py::gil_scoped_release>())
         .def("register_memory_region",
              &dlslime::tcp::TcpEndpoint::register_memory_region,
-             py::arg("name"), py::arg("data_ptr"), py::arg("offset"), py::arg("length"),
+             py::arg("name"), py::arg("data_ptr"), py::arg("length"),
              py::call_guard<py::gil_scoped_release>())
         .def("register_remote_memory_region",
              &dlslime::tcp::TcpEndpoint::register_remote_memory_region,

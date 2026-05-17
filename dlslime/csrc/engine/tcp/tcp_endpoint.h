@@ -31,11 +31,12 @@ class TcpEndpoint : public std::enable_shared_from_this<TcpEndpoint> {
 public:
     static constexpr int64_t kDefaultTimeoutMs = 30000;
 
-    // 【主构造】自包含 TcpContext (最常用)
-    explicit TcpEndpoint(uint16_t port = 0);
+    // ip: 绑定网卡地址 (默认 0.0.0.0).  port: 0 = 随机端口.
+    explicit TcpEndpoint(const std::string& ip = "0.0.0.0", uint16_t port = 0);
 
-    // 【次构造】共享 TcpContext (多 endpoint 复用单 io_context 线程)
-    TcpEndpoint(TcpContext& ctx, uint16_t port = 0);
+    // 共享 TcpContext — 暂禁用, 多 endpoint 复用单 io_context 时再完善
+    // (涉及 context 所有权 / conn_pool 管理 / 析构顺序)
+    TcpEndpoint(TcpContext& ctx, uint16_t port = 0) = delete;
 
     ~TcpEndpoint();
 
@@ -44,12 +45,12 @@ public:
 
     // ── Connection ──────────────────────────────────────
     json endpoint_info() const;
-    void connect(const json& remote_info);
+    void connect(const json& remote_endpoint_info);
     void shutdown();
 
     // ── Memory ──────────────────────────────────────────
     int32_t register_memory_region(const std::string& name,
-                                   uintptr_t ptr, uintptr_t offset, size_t length);
+                                   uintptr_t ptr, size_t length);
     int32_t register_remote_memory_region(const std::string& name,
                                           const json& mr_info);
     json mr_info() const;
@@ -98,8 +99,9 @@ private:
     std::atomic<bool> connected_{false};
 
     // ── asio core ───────────────────────────────────────
-    TcpContext*                    ctx_{nullptr};
-    std::unique_ptr<TcpContext>    own_ctx_;
+    // ctx_ 始终指向 own_ctx_ (次构造禁用后不再有外部注入路径)
+    TcpContext*                 ctx_{nullptr};
+    std::unique_ptr<TcpContext> own_ctx_;
     asio::ip::tcp::acceptor        acceptor_;
     std::atomic<bool>              running_{true};
 

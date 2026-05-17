@@ -153,14 +153,12 @@ public:
 
     // ── 构造 ──
 
-    // 【主构造】每个 endpoint 内部自动创建 TcpContext, 调用者无需关心。
-    // 这是最常用的场景: 一个 endpoint = 一个 peer 连接。
-    explicit TcpEndpoint(uint16_t port = 0);
+    // 【主构造】ip 绑定网卡地址 (默认 0.0.0.0), port=0 随机端口
+    explicit TcpEndpoint(const std::string& ip = "0.0.0.0", uint16_t port = 0);
 
-    // 【次构造】注入外部共享 TcpContext, 用于多 endpoint 复用单 io_context 线程
-    // 的高级优化场景 (如 PeerAgent 连接 N 个 peer 时节省 N-1 个线程)。
-    // 仅在明确需要跨 endpoint 共享资源时使用。
-    TcpEndpoint(TcpContext& ctx, uint16_t port = 0);
+    // 【次构造】共享 TcpContext — 暂禁用
+    // (涉及 context 所有权 / conn_pool 跨 endpoint 管理 / 析构顺序)
+    TcpEndpoint(TcpContext& ctx, uint16_t port = 0) = delete;
 
     // ── 连接 ──
     json endpoint_info() const;   // {host, port, mr_info}
@@ -349,7 +347,7 @@ ep.shutdown()
                                     returnConnection()
                                          │
                                          ▼
-  [IDLE] (in_use=false, 在 deque 中) ──► 60s 无使用 → cleanupIdleConnections() → 关闭
+  [IDLE] (in_use=false, 在 deque 中) ──► 300s 无使用 → cleanupIdleConnections() → 关闭
          │
          │ getConnection() 命中
          ▼
@@ -366,7 +364,7 @@ class TcpConnectionPool {
     // 归还连接到 IDLE 状态 (或关闭, 如果 socket 已断开)
     void returnConnection(std::shared_ptr<PooledConnection> conn);
 
-    // 淘汰超过 kIdleTimeout (60s) 的空闲连接
+    // 淘汰超过 kIdleTimeout (300s) 的空闲连接
     void cleanupIdleConnections();
 
     // 关闭所有连接 (shutdown 时调用)

@@ -27,10 +27,10 @@ def test_async_send_recv():
     buf_a = ctypes.create_string_buffer(4096)
     buf_b = ctypes.create_string_buffer(4096)
 
-    ep_a = TcpEndpoint(10001)
-    ep_b = TcpEndpoint(10002)
-    h_a = ep_a.register_memory_region("a", ctypes.addressof(buf_a), 0, 4096)
-    h_b = ep_b.register_memory_region("b", ctypes.addressof(buf_b), 0, 4096)
+    ep_a = TcpEndpoint(port=10001)
+    ep_b = TcpEndpoint(port=10002)
+    h_a = ep_a.register_memory_region("a", ctypes.addressof(buf_a), 4096)
+    h_b = ep_b.register_memory_region("b", ctypes.addressof(buf_b), 4096)
     info_a = ep_a.endpoint_info()
     info_b = ep_b.endpoint_info()
 
@@ -71,11 +71,11 @@ def test_async_write_read():
     buf_b = ctypes.create_string_buffer(4096)
     addr_a = ctypes.addressof(buf_a)
 
-    ep_a = TcpEndpoint(0)
-    ep_b = TcpEndpoint(0)
+    ep_a = TcpEndpoint(port=0)
+    ep_b = TcpEndpoint(port=0)
 
-    h_a = ep_a.register_memory_region("a", addr_a, 0, 4096)
-    h_b = ep_b.register_memory_region("b", ctypes.addressof(buf_b), 0, 4096)
+    h_a = ep_a.register_memory_region("a", addr_a, 4096)
+    h_b = ep_b.register_memory_region("b", ctypes.addressof(buf_b), 4096)
 
     info_a = ep_a.endpoint_info()
     info_b = ep_b.endpoint_info()
@@ -119,9 +119,9 @@ def test_recv_timeout():
 
     buf_a = ctypes.create_string_buffer(64)
 
-    ep_a = TcpEndpoint(10003)
-    h_a = ep_a.register_memory_region("a", ctypes.addressof(buf_a), 0, 64)
-    ep_b = TcpEndpoint(10004)
+    ep_a = TcpEndpoint(port=10003)
+    h_a = ep_a.register_memory_region("a", ctypes.addressof(buf_a), 64)
+    ep_b = TcpEndpoint(port=10004)
 
     def run_b():
         ep_b.connect(ep_a.endpoint_info())
@@ -147,10 +147,10 @@ def test_send_timeout_ms():
     buf_a = ctypes.create_string_buffer(256)
     buf_b = ctypes.create_string_buffer(256)
 
-    ep_a = TcpEndpoint(10005)
-    ep_b = TcpEndpoint(10006)
-    h_a = ep_a.register_memory_region("a", ctypes.addressof(buf_a), 0, 256)
-    h_b = ep_b.register_memory_region("b", ctypes.addressof(buf_b), 0, 256)
+    ep_a = TcpEndpoint(port=10005)
+    ep_b = TcpEndpoint(port=10006)
+    h_a = ep_a.register_memory_region("a", ctypes.addressof(buf_a), 256)
+    h_b = ep_b.register_memory_region("b", ctypes.addressof(buf_b), 256)
 
     def run_b():
         ep_b.connect(ep_a.endpoint_info())
@@ -177,10 +177,10 @@ def test_default_timeout():
     buf_a = ctypes.create_string_buffer(128)
     buf_b = ctypes.create_string_buffer(128)
 
-    ep_a = TcpEndpoint(10007)
-    ep_b = TcpEndpoint(10008)
-    h_a = ep_a.register_memory_region("a", ctypes.addressof(buf_a), 0, 128)
-    h_b = ep_b.register_memory_region("b", ctypes.addressof(buf_b), 0, 128)
+    ep_a = TcpEndpoint(port=10007)
+    ep_b = TcpEndpoint(port=10008)
+    h_a = ep_a.register_memory_region("a", ctypes.addressof(buf_a), 128)
+    h_b = ep_b.register_memory_region("b", ctypes.addressof(buf_b), 128)
 
     def run_b():
         ep_b.connect(ep_a.endpoint_info())
