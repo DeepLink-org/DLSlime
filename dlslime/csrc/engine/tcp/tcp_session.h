@@ -4,11 +4,8 @@
 #include <asio.hpp>
 
 #include <cstdint>
-#include <deque>
 #include <functional>
 #include <memory>
-#include <mutex>
-#include <vector>
 
 #include "tcp_header.h"
 #include "tcp_memory_pool.h"
@@ -19,20 +16,14 @@ namespace tcp {
 
 class TcpConnectionPool;
 
-constexpr size_t kDefaultChunkSize = 65536;  // 64KB
-
-// ── RecvSlot: returned by RecvMatcher when a SEND matches a pending recv ──
 struct RecvSlot {
     uintptr_t                   buffer{0};
     size_t                      length{0};
     std::shared_ptr<TcpOpState> op_state;
 };
 
-// ── ServerSession: handles incoming requests on one connection ──
-//
-// Lifecycle: start() → readHeader → dispatch → readBody/writeBody ↻
-// Persistent — one session handles many transfers on the same connection.
-// Referenced from Mooncake ServerSession.
+// ServerSession: handles incoming requests on one persistent connection.
+// Lifecycle: start() → readHeader → dispatch → readBody/writeBody → readHeader ↻
 class ServerSession : public std::enable_shared_from_this<ServerSession> {
 public:
     using RecvMatcher = std::function<RecvSlot()>;
@@ -46,14 +37,13 @@ public:
 private:
     void readHeader();
     void dispatch();
-    void readBody(uint64_t remaining);
+    void readBody(void* dst, size_t len);             // read into caller's buffer
+    void writeBody(const void* src, size_t len);      // write from caller's buffer
 
     asio::ip::tcp::socket socket_;
     TcpMemoryPool*        local_pool_;
     RecvMatcher           recv_matcher_;
     SessionHeader         header_{};
-    uint64_t              transferred_{0};
-    std::vector<uint8_t>  chunk_buf_;
 };
 
 }  // namespace tcp

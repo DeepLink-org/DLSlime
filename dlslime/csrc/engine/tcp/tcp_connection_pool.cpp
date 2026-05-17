@@ -102,9 +102,9 @@ void TcpConnectionPool::returnConnection(
 
 }
 
-void TcpConnectionPool::cleanupIdleConnections(bool lock = true) {
+void TcpConnectionPool::cleanupIdleConnections(bool lock) {
     auto now = std::chrono::steady_clock::now();
-    if (use_lock) std::lock_guard<std::mutex> lk(mu_);
+    if (lock) std::lock_guard<std::mutex> lk(mu_);
     for (auto it = pool_.begin(); it != pool_.end(); ) {
         auto& q = it->second;
         while (!q.empty()) {

@@ -1,13 +1,23 @@
 #include "tcp_memory_pool.h"
 
+#include "dlslime/csrc/logging.h"
+
 namespace dlslime {
 namespace tcp {
 
 // ── local MR ────────────────────────────────────────────
 
 int32_t TcpMemoryPool::register_memory_region(
-    uintptr_t addr, size_t length,
-    std::optional<std::string> name) {
+    uintptr_t addr, size_t length, const std::string& name) {
+
+    if (name.empty()) {
+        SLIME_LOG_WARN("TcpMemoryPool: empty name rejected");
+        return -1;
+    }
+    if (name_to_handle_.find(name) != name_to_handle_.end()) {
+        SLIME_LOG_WARN("TcpMemoryPool: duplicate name '", name, "' rejected");
+        return -1;
+    }
 
     auto pit = ptr_to_handle_.find(addr);
     if (pit != ptr_to_handle_.end()) {
@@ -15,29 +25,34 @@ int32_t TcpMemoryPool::register_memory_region(
         if (h >= 0 && static_cast<size_t>(h) < handle_to_mr_.size()
             && handle_to_mr_[h].addr == addr
             && handle_to_mr_[h].length >= length) {
-            if (name.has_value()) name_to_handle_[*name] = h;
+            name_to_handle_[name] = h;
             return h;
         }
     }
 
     int32_t h = static_cast<int32_t>(handle_to_mr_.size());
     handle_to_mr_.push_back({addr, length});
-    handle_to_name_.push_back(name.value_or(""));
     ptr_to_handle_[addr] = h;
-    if (name.has_value())
-        name_to_handle_[*name] = h;
+    name_to_handle_[name] = h;
     return h;
 }
 
 int32_t TcpMemoryPool::unregister_memory_region(int32_t handle) {
     if (handle < 0 || static_cast<size_t>(handle) >= handle_to_mr_.size())
         return -1;
+
     auto& mr = handle_to_mr_[handle];
-    auto& s  = handle_to_name_[handle];
     ptr_to_handle_.erase(mr.addr);
-    if (!s.empty()) name_to_handle_.erase(s);
+
+    // Remove all name→handle entries pointing to this handle.
+    for (auto it = name_to_handle_.begin(); it != name_to_handle_.end(); ) {
+        if (it->second == handle)
+            it = name_to_handle_.erase(it);
+        else
+            ++it;
+    }
+
     mr = {};
-    s.clear();
     return 0;
 }
 

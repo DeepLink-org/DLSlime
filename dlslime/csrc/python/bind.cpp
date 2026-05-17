@@ -575,14 +575,8 @@ PYBIND11_MODULE(_slime_c, m)
         m, "TcpMemoryPool")
         .def(py::init<>())
         .def("register_memory_region",
-             [](dlslime::tcp::TcpMemoryPool& self, uintptr_t addr,
-                size_t length, py::object name_obj) {
-                 std::optional<std::string> name;
-                 if (!name_obj.is_none()) name = name_obj.cast<std::string>();
-                 return self.register_memory_region(addr, length, name);
-             },
-             py::arg("addr"), py::arg("length"),
-             py::arg("name") = py::none())
+             &dlslime::tcp::TcpMemoryPool::register_memory_region,
+             py::arg("addr"), py::arg("length"), py::arg("name"))
         .def("register_remote_memory_region",
              [](dlslime::tcp::TcpMemoryPool& self, const json& mr_info,
                 py::object name_obj) {

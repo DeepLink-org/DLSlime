@@ -39,7 +39,7 @@ public:
 
     void returnConnection(std::shared_ptr<PooledConnection> conn);
 
-    void cleanupIdleConnections();
+    void cleanupIdleConnections(bool lock = true);
     void clear();
 
 private:

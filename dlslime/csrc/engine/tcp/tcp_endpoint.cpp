@@ -157,7 +157,7 @@ bool TcpEndpoint::write_message(tcp::socket& sock,
 // ── async_send ──────────────────────────────────────────
 
 std::shared_ptr<TcpSendFuture>
-TcpEndpoint::async_send(const chunk_tuple_t& chunk, int64_t timeout_ms) {
+TcpEndpoint::async_send(const chunk_tuple_t& chunk, int64_t /*timeout_ms*/) {
     auto mr = local_pool_->get_mr_fast(static_cast<int32_t>(std::get<0>(chunk)));
     if (mr.length == 0)
         throw std::runtime_error("TcpEndpoint::async_send: invalid local MR");
