@@ -8,6 +8,10 @@
 
 #include "dlslime/csrc/logging.h"
 
+#ifdef USE_CUDA
+#include <cuda_runtime.h>
+#endif
+
 namespace dlslime {
 namespace tcp {
 
@@ -20,6 +24,14 @@ static void hdr_hton(SessionHeader& h) {
     h.addr = htole64(h.addr);
 }
 
+#ifdef USE_CUDA
+static bool is_cuda_memory(const void* addr) {
+    cudaPointerAttributes attr;
+    auto st = cudaPointerGetAttributes(&attr, addr);
+    return (st == cudaSuccess && attr.type == cudaMemoryTypeDevice);
+}
+#endif
+
 // ── RecvMatcher factory ────────────────────────────────
 
 ServerSession::RecvMatcher TcpEndpoint::make_recv_matcher() {
@@ -31,7 +43,19 @@ ServerSession::RecvMatcher TcpEndpoint::make_recv_matcher() {
         if (self->pending_recvs_.empty()) return {};
         auto pr = std::move(self->pending_recvs_.front());
         self->pending_recvs_.pop_front();
-        return {pr.op_state->user_buffer, pr.op_state->user_length, pr.op_state};
+
+        RecvSlot slot{pr.op_state->user_buffer, pr.op_state->user_length, pr.op_state};
+#ifdef USE_CUDA
+        if (pr.cuda_dst) {
+            slot.buffer = reinterpret_cast<uintptr_t>(pr.staging_buf.get());
+            slot.post_read = [buf = std::move(pr.staging_buf),
+                              dst = pr.cuda_dst, len = pr.op_state->user_length]() {
+                cudaMemcpy(reinterpret_cast<void*>(dst), buf.get(),
+                           len, cudaMemcpyHostToDevice);
+            };
+        }
+#endif
+        return slot;
     };
 }
 
@@ -155,15 +179,30 @@ TcpEndpoint::async_send(const chunk_tuple_t& chunk, int64_t /*timeout_ms*/) {
     SessionHeader hdr{len, 0, OP_SEND};
     auto& pool = ctx_->conn_pool();
 
+    auto* send_ptr = reinterpret_cast<const char*>(src);
+    bool  is_cuda  = false;
+#ifdef USE_CUDA
+    if (is_cuda_memory(send_ptr)) {
+        // TODO: 使用锁页内存，以及考虑async和overlap
+        auto* buf = new char[len];
+        cudaMemcpy(buf, send_ptr, len, cudaMemcpyDeviceToHost);
+        send_ptr = buf;
+        is_cuda  = true;
+    }
+#endif
+
     auto session = std::make_shared<ClientSession>(
         std::move(conn->socket),
-        [op, conn, &pool](asio::error_code ec) {
+        [op, conn, &pool, send_ptr, is_cuda](asio::error_code ec) {
             op->completion_status.store(
                 ec ? TCP_FAILED : TCP_SUCCESS, std::memory_order_release);
             if (op->signal) op->signal->set_comm_done(0);
             pool.returnConnection(conn);
+#ifdef USE_CUDA
+            if (is_cuda) delete[] send_ptr;
+#endif
         });
-    session->start_write(hdr, reinterpret_cast<const void*>(src));
+    session->start_write(hdr, send_ptr);
 
     return std::make_shared<TcpSendFuture>(op);
 }
@@ -175,12 +214,24 @@ std::shared_ptr<TcpRecvFuture>
 TcpEndpoint::async_recv(const chunk_tuple_t& chunk) {
     auto op = TcpOpState::create();
     op->signal->reset_all();
-    op->user_buffer = std::get<0>(chunk) + std::get<1>(chunk);
-    op->user_length = std::get<2>(chunk);
+    uintptr_t dst    = std::get<0>(chunk) + std::get<1>(chunk);
+    size_t    length = std::get<2>(chunk);
+    op->user_buffer  = dst;
+    op->user_length  = length;
+
+    PendingRecv pr{op};
+#ifdef USE_CUDA
+    if (is_cuda_memory(reinterpret_cast<const void*>(dst))) {
+        auto* buf = new char[length];
+        pr.staging_buf.reset(buf);
+        pr.cuda_dst = dst;
+        op->user_buffer = reinterpret_cast<uintptr_t>(buf);
+    }
+#endif
 
     {
         std::lock_guard<std::mutex> lk(recv_mu_);
-        pending_recvs_.push_back({op});
+        pending_recvs_.push_back(std::move(pr));
     }
 
     return std::make_shared<TcpRecvFuture>(op);
@@ -208,7 +259,8 @@ TcpEndpoint::async_read(const std::vector<assign_tuple_t>& assign,
 
     auto op = TcpOpState::create();
     op->signal->reset_all();
-    op->user_buffer = local.addr + local_off;
+    uintptr_t local_dst = local.addr + local_off;
+    op->user_buffer = local_dst;
     op->user_length = length;
 
     auto conn = ctx_->conn_pool().getConnection(peer_host_, peer_port_);
@@ -221,15 +273,32 @@ TcpEndpoint::async_read(const std::vector<assign_tuple_t>& assign,
     SessionHeader hdr{length, remote.addr + remote_off, OP_READ};
     auto& pool = ctx_->conn_pool();
 
+    auto* read_dst = reinterpret_cast<char*>(local_dst);
+    bool  is_cuda  = false;
+#ifdef USE_CUDA
+    if (is_cuda_memory(read_dst)) {
+        read_dst = new char[length];
+        is_cuda  = true;
+    }
+#endif
+
     auto session = std::make_shared<ClientSession>(
         std::move(conn->socket),
-        [op, conn, &pool](asio::error_code ec) {
+        [op, conn, &pool, read_dst, is_cuda,
+         real_dst = local_dst, len = length](asio::error_code ec) {
+#ifdef USE_CUDA
+            if (!ec && is_cuda) {
+                cudaMemcpy(reinterpret_cast<void*>(real_dst),
+                           read_dst, len, cudaMemcpyHostToDevice);
+                delete[] read_dst;
+            }
+#endif
             op->completion_status.store(
                 ec ? TCP_FAILED : TCP_SUCCESS, std::memory_order_release);
             if (op->signal) op->signal->set_comm_done(0);
             pool.returnConnection(conn);
         });
-    session->start_read(hdr, reinterpret_cast<void*>(op->user_buffer));
+    session->start_read(hdr, read_dst);
 
     return std::make_shared<TcpReadWriteFuture>(op);
 }
@@ -269,15 +338,29 @@ TcpEndpoint::async_write(const std::vector<assign_tuple_t>& assign,
     SessionHeader hdr{length, remote.addr + remote_off, OP_WRITE};
     auto& pool = ctx_->conn_pool();
 
+    auto* send_ptr = reinterpret_cast<const char*>(src);
+    bool  is_cuda  = false;
+#ifdef USE_CUDA
+    if (is_cuda_memory(send_ptr)) {
+        auto* buf = new char[length];
+        cudaMemcpy(buf, send_ptr, length, cudaMemcpyDeviceToHost);
+        send_ptr = buf;
+        is_cuda  = true;
+    }
+#endif
+
     auto session = std::make_shared<ClientSession>(
         std::move(conn->socket),
-        [op, conn, &pool](asio::error_code ec) {
+        [op, conn, &pool, send_ptr, is_cuda](asio::error_code ec) {
             op->completion_status.store(
                 ec ? TCP_FAILED : TCP_SUCCESS, std::memory_order_release);
             if (op->signal) op->signal->set_comm_done(0);
             pool.returnConnection(conn);
+#ifdef USE_CUDA
+            if (is_cuda) delete[] send_ptr;
+#endif
         });
-    session->start_write(hdr, reinterpret_cast<const void*>(src));
+    session->start_write(hdr, send_ptr);
 
     return std::make_shared<TcpReadWriteFuture>(op);
 }

@@ -99,6 +99,8 @@ private:
     // ── recv matching ───────────────────────────────────
     struct PendingRecv {
         std::shared_ptr<TcpOpState> op_state;
+        std::unique_ptr<char[]>     staging_buf;
+        uintptr_t                   cuda_dst{0};
     };
     std::mutex             recv_mu_;
     std::deque<PendingRecv> pending_recvs_;

@@ -77,6 +77,7 @@ void ServerSession::dispatch() {
                         SLIME_LOG_WARN("ServerSession SEND read: ", ec.message());
                     return;
                 }
+                if (slot.post_read) slot.post_read();
                 if (slot.op_state) {
                     slot.op_state->bytes_copied = n;
                     slot.op_state->completion_status.store(
