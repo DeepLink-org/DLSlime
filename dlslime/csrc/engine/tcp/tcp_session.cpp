@@ -131,5 +131,40 @@ void ServerSession::writeBody(const void* src, size_t len) {
         });
 }
 
+// ── ClientSession ───────────────────────────────────────
+
+ClientSession::ClientSession(asio::ip::tcp::socket sock, DoneCallback on_done)
+    : socket_(std::move(sock)), on_done_(std::move(on_done)) {}
+
+void ClientSession::start_write(const SessionHeader& hdr, const void* payload) {
+    auto self = shared_from_this();
+    SessionHeader net = hdr;
+    hdr_to_net(net);
+    std::array<asio::const_buffer, 2> bufs = {
+        asio::buffer(&net, sizeof(net)),
+        asio::buffer(payload, hdr.size)
+    };
+    asio::async_write(socket_, bufs,
+        [this, self](asio::error_code ec, size_t) {
+            if (on_done_) on_done_(ec);
+        });
+}
+
+void ClientSession::start_read(const SessionHeader& hdr, void* dst) {
+    auto self = shared_from_this();
+    hdr_ = hdr;
+    SessionHeader net = hdr;
+    hdr_to_net(net);
+    asio::async_write(socket_, asio::buffer(&net, sizeof(net)),
+        [this, self, dst](asio::error_code ec, size_t) {
+            if (ec) { if (on_done_) on_done_(ec); return; }
+            asio::async_read(socket_,
+                asio::buffer(dst, hdr_.size),
+                [this, self](asio::error_code ec, size_t) {
+                    if (on_done_) on_done_(ec);
+                });
+        });
+}
+
 }  // namespace tcp
 }  // namespace dlslime

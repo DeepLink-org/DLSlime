@@ -128,30 +128,13 @@ void TcpEndpoint::connect(const json& remote_endpoint_info) {
 // ── memory registration ─────────────────────────────────
 
 int32_t TcpEndpoint::register_memory_region(const std::string& name,
-                                             uintptr_t ptr,
-                                             size_t length) {
+                                             uintptr_t ptr, size_t length) {
     return local_pool_->register_memory_region(ptr, length, name);
 }
 
 int32_t TcpEndpoint::register_remote_memory_region(const std::string& name,
                                                     const json& mr_info) {
     return remote_pool_->register_remote_memory_region(mr_info, name);
-}
-
-// ── write_message ───────────────────────────────────────
-
-bool TcpEndpoint::write_message(tcp::socket& sock,
-                                 const SessionHeader& hdr,
-                                 const void* payload) {
-    asio::error_code ec;
-    SessionHeader net = hdr;
-    hdr_hton(net);
-    std::array<asio::const_buffer, 2> bufs = {
-        asio::buffer(&net, sizeof(net)),
-        asio::buffer(payload, hdr.size)
-    };
-    asio::write(sock, bufs, ec);
-    return !ec;
 }
 
 // ── async_send ──────────────────────────────────────────
@@ -178,30 +161,15 @@ TcpEndpoint::async_send(const chunk_tuple_t& chunk, int64_t /*timeout_ms*/) {
     SessionHeader hdr{len, 0, OP_SEND};
     auto& pool = ctx_->conn_pool();
 
-    std::weak_ptr<TcpEndpoint> weak = weak_from_this();
-    asio::post(ctx_->io_context(), [weak, conn, op, hdr, src, len, &pool]() {
-        auto ep = weak.lock();
-        if (!ep) {
-            op->completion_status.store(TCP_CLOSED, std::memory_order_release);
-            if (op->signal) op->signal->force_complete();
-            return;
-        }
-
-        asio::error_code ec;
-        SessionHeader net = hdr;
-        hdr_hton(net);
-        std::array<asio::const_buffer, 2> bufs = {
-            asio::buffer(&net, sizeof(net)),
-            asio::buffer(reinterpret_cast<const void*>(src), len)
-        };
-        asio::async_write(conn->socket, bufs,
-            [conn, op, &pool](asio::error_code ec, size_t) {
-                op->completion_status.store(
-                    ec ? TCP_FAILED : TCP_SUCCESS, std::memory_order_release);
-                if (op->signal) op->signal->set_comm_done(0);
-                pool.returnConnection(conn);
-            });
-    });
+    auto session = std::make_shared<ClientSession>(
+        std::move(conn->socket),
+        [op, conn, &pool](asio::error_code ec) {
+            op->completion_status.store(
+                ec ? TCP_FAILED : TCP_SUCCESS, std::memory_order_release);
+            if (op->signal) op->signal->set_comm_done(0);
+            pool.returnConnection(conn);
+        });
+    session->start_write(hdr, reinterpret_cast<const void*>(src));
 
     return std::make_shared<TcpSendFuture>(op);
 }
@@ -236,8 +204,8 @@ TcpEndpoint::async_read(const std::vector<assign_tuple_t>& assign,
         throw std::runtime_error("TcpEndpoint::async_read: empty assignment");
 
     const auto& a = assign[0];
-    int32_t  local_h  = static_cast<int32_t>(std::get<0>(a));
-    int32_t  remote_h = static_cast<int32_t>(std::get<1>(a));
+    int32_t  local_h   = static_cast<int32_t>(std::get<0>(a));
+    int32_t  remote_h  = static_cast<int32_t>(std::get<1>(a));
     uint64_t remote_off = std::get<2>(a);
     uint64_t local_off  = std::get<3>(a);
     size_t   length     = std::get<4>(a);
@@ -259,59 +227,18 @@ TcpEndpoint::async_read(const std::vector<assign_tuple_t>& assign,
         return std::make_shared<TcpReadWriteFuture>(op);
     }
 
-    uint64_t req_id = next_req_id_.fetch_add(1, std::memory_order_relaxed);
-    {
-        std::lock_guard<std::mutex> lk(read_mu_);
-        pending_reads_[req_id] = {conn, op};
-    }
-
     SessionHeader hdr{length, remote.addr + remote_off, OP_READ};
     auto& pool = ctx_->conn_pool();
 
-    std::weak_ptr<TcpEndpoint> weak = weak_from_this();
-    asio::post(ctx_->io_context(), [weak, conn, op, hdr, req_id, &pool]() {
-        auto ep = weak.lock();
-        if (!ep) {
-            op->completion_status.store(TCP_CLOSED, std::memory_order_release);
-            if (op->signal) op->signal->force_complete();
-            return;
-        }
-
-        SessionHeader net = hdr;
-        hdr_hton(net);
-        asio::async_write(conn->socket,
-            asio::buffer(&net, sizeof(net)),
-            [weak, conn, op, req_id, &pool](asio::error_code ec, size_t) {
-                if (ec) {
-                    op->completion_status.store(TCP_FAILED, std::memory_order_release);
-                    if (op->signal) op->signal->set_comm_done(0);
-                    pool.returnConnection(conn);
-                    auto self = weak.lock();
-                    if (self) {
-                        std::lock_guard<std::mutex> lk(self->read_mu_);
-                        self->pending_reads_.erase(req_id);
-                    }
-                    return;
-                }
-
-                asio::async_read(conn->socket,
-                    asio::buffer(reinterpret_cast<void*>(op->user_buffer),
-                                 op->user_length),
-                    [weak, conn, op, req_id, &pool](asio::error_code ec, size_t n) {
-                        op->bytes_copied = n;
-                        op->completion_status.store(
-                            ec ? TCP_FAILED : TCP_SUCCESS,
-                            std::memory_order_release);
-                        if (op->signal) op->signal->set_comm_done(0);
-                        pool.returnConnection(conn);
-                        auto self = weak.lock();
-                        if (self) {
-                            std::lock_guard<std::mutex> lk(self->read_mu_);
-                            self->pending_reads_.erase(req_id);
-                        }
-                    });
-            });
-    });
+    auto session = std::make_shared<ClientSession>(
+        std::move(conn->socket),
+        [op, conn, &pool](asio::error_code ec) {
+            op->completion_status.store(
+                ec ? TCP_FAILED : TCP_SUCCESS, std::memory_order_release);
+            if (op->signal) op->signal->set_comm_done(0);
+            pool.returnConnection(conn);
+        });
+    session->start_read(hdr, reinterpret_cast<void*>(op->user_buffer));
 
     return std::make_shared<TcpReadWriteFuture>(op);
 }
@@ -351,30 +278,15 @@ TcpEndpoint::async_write(const std::vector<assign_tuple_t>& assign,
     SessionHeader hdr{length, remote.addr + remote_off, OP_WRITE};
     auto& pool = ctx_->conn_pool();
 
-    std::weak_ptr<TcpEndpoint> weak = weak_from_this();
-    asio::post(ctx_->io_context(), [weak, conn, op, hdr, src, length, &pool]() {
-        auto ep = weak.lock();
-        if (!ep) {
-            op->completion_status.store(TCP_CLOSED, std::memory_order_release);
-            if (op->signal) op->signal->force_complete();
-            return;
-        }
-
-        asio::error_code ec;
-        SessionHeader net = hdr;
-        hdr_hton(net);
-        std::array<asio::const_buffer, 2> bufs = {
-            asio::buffer(&net, sizeof(net)),
-            asio::buffer(reinterpret_cast<const void*>(src), length)
-        };
-        asio::async_write(conn->socket, bufs,
-            [conn, op, &pool](asio::error_code ec, size_t) {
-                op->completion_status.store(
-                    ec ? TCP_FAILED : TCP_SUCCESS, std::memory_order_release);
-                if (op->signal) op->signal->set_comm_done(0);
-                pool.returnConnection(conn);
-            });
-    });
+    auto session = std::make_shared<ClientSession>(
+        std::move(conn->socket),
+        [op, conn, &pool](asio::error_code ec) {
+            op->completion_status.store(
+                ec ? TCP_FAILED : TCP_SUCCESS, std::memory_order_release);
+            if (op->signal) op->signal->set_comm_done(0);
+            pool.returnConnection(conn);
+        });
+    session->start_write(hdr, reinterpret_cast<const void*>(src));
 
     return std::make_shared<TcpReadWriteFuture>(op);
 }
@@ -387,7 +299,6 @@ void TcpEndpoint::shutdown() {
         return;
 
     connected_.store(false, std::memory_order_release);
-
     acceptor_.close();
 
     {
@@ -399,16 +310,6 @@ void TcpEndpoint::shutdown() {
             }
         }
         pending_recvs_.clear();
-    }
-    {
-        std::lock_guard<std::mutex> lk(read_mu_);
-        for (auto& [_, pending] : pending_reads_) {
-            if (pending.op_state && pending.op_state->signal) {
-                pending.op_state->completion_status.store(TCP_CLOSED, std::memory_order_release);
-                pending.op_state->signal->force_complete();
-            }
-        }
-        pending_reads_.clear();
     }
 
     if (own_ctx_)
