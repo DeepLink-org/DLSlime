@@ -20,7 +20,8 @@ struct RecvSlot {
     uintptr_t                   buffer{0};
     size_t                      length{0};
     std::shared_ptr<TcpOpState> op_state;
-    std::function<void()>       post_read;   // called after read, before signal
+    std::function<void()>       post_read;
+    bool                        exact_size{false};  // reject send size != recv size
 };
 
 // ── ServerSession: handles incoming requests on one persistent connection ──

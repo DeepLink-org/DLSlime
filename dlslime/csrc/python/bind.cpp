@@ -599,6 +599,7 @@ PYBIND11_MODULE(_slime_c, m)
         .def("mr_info", &dlslime::tcp::TcpEndpoint::mr_info)
         .def("shutdown", &dlslime::tcp::TcpEndpoint::shutdown,
              py::call_guard<py::gil_scoped_release>())
+        .def("is_connected", &dlslime::tcp::TcpEndpoint::is_connected)
         .def("register_memory_region",
              &dlslime::tcp::TcpEndpoint::register_memory_region,
              py::arg("name"), py::arg("data_ptr"), py::arg("length"),
@@ -614,7 +615,7 @@ PYBIND11_MODULE(_slime_c, m)
              py::call_guard<py::gil_scoped_release>())
         .def("async_recv",
              &dlslime::tcp::TcpEndpoint::async_recv,
-             py::arg("chunk"),
+             py::arg("chunk"), py::arg("exact_size") = false,
              py::call_guard<py::gil_scoped_release>())
         .def("async_read",
              py::overload_cast<const std::vector<dlslime::assign_tuple_t>&, int64_t>(

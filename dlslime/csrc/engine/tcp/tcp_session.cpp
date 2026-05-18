@@ -67,19 +67,48 @@ void ServerSession::dispatch() {
             readHeader();
             return;
         }
-        size_t n = std::min(static_cast<size_t>(header_.size), slot.length);
+        if (slot.exact_size && header_.size != slot.length) {
+            SLIME_LOG_WARN("ServerSession: size mismatch, send ", header_.size,
+                           " != recv ", slot.length);
+            if (slot.op_state) {
+                slot.op_state->completion_status.store(
+                    TCP_FAILED, std::memory_order_release);
+                if (slot.op_state->signal)
+                    slot.op_state->signal->set_comm_done(0);
+            }
+            readHeader();
+            return;
+        }
+
+        // Always drain the full send payload from the wire.  If recv buffer
+        // is smaller, read into a temp buffer then copy what fits.
+        size_t n_read = static_cast<size_t>(header_.size);
+        size_t n_copy = std::min(n_read, slot.length);
+        auto*  dst    = reinterpret_cast<char*>(slot.buffer);
+        bool   overflow = false;
+
+        if (header_.size > slot.length) {
+            dst = new char[n_read];
+            overflow = true;
+        }
+
         auto self = shared_from_this();
-        asio::async_read(socket_,
-            asio::buffer(reinterpret_cast<void*>(slot.buffer), n),
-            [this, self, slot, n](asio::error_code ec, size_t /*rn*/) {
+        asio::async_read(socket_, asio::buffer(dst, n_read),
+            [this, self, slot, n_copy, dst, overflow](
+                asio::error_code ec, size_t /*rn*/) {
                 if (ec) {
                     if (is_fatal(ec))
                         SLIME_LOG_WARN("ServerSession SEND read: ", ec.message());
+                    if (overflow) delete[] dst;
                     return;
+                }
+                if (overflow) {
+                    std::memcpy(reinterpret_cast<void*>(slot.buffer), dst, n_copy);
+                    delete[] dst;
                 }
                 if (slot.post_read) slot.post_read();
                 if (slot.op_state) {
-                    slot.op_state->bytes_copied = n;
+                    slot.op_state->bytes_copied = n_copy;
                     slot.op_state->completion_status.store(
                         TCP_SUCCESS, std::memory_order_release);
                     if (slot.op_state->signal)

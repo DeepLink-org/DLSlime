@@ -44,7 +44,8 @@ ServerSession::RecvMatcher TcpEndpoint::make_recv_matcher() {
         auto pr = std::move(self->pending_recvs_.front());
         self->pending_recvs_.pop_front();
 
-        RecvSlot slot{pr.op_state->user_buffer, pr.op_state->user_length, pr.op_state};
+        RecvSlot slot{pr.op_state->user_buffer, pr.op_state->user_length,
+                       pr.op_state, {}, pr.exact_size};
 #ifdef USE_CUDA
         if (pr.cuda_dst) {
             slot.buffer = reinterpret_cast<uintptr_t>(pr.staging_buf.get());
@@ -211,7 +212,7 @@ TcpEndpoint::async_send(const chunk_tuple_t& chunk, int64_t /*timeout_ms*/) {
 // chunk_tuple_t = (dst_ptr, offset, length) — raw pointers, no MR lookup.
 
 std::shared_ptr<TcpRecvFuture>
-TcpEndpoint::async_recv(const chunk_tuple_t& chunk) {
+TcpEndpoint::async_recv(const chunk_tuple_t& chunk, bool exact_size) {
     auto op = TcpOpState::create();
     op->signal->reset_all();
     uintptr_t dst    = std::get<0>(chunk) + std::get<1>(chunk);
@@ -219,7 +220,7 @@ TcpEndpoint::async_recv(const chunk_tuple_t& chunk) {
     op->user_buffer  = dst;
     op->user_length  = length;
 
-    PendingRecv pr{op};
+    PendingRecv pr{op, nullptr, 0, exact_size};
 #ifdef USE_CUDA
     if (is_cuda_memory(reinterpret_cast<const void*>(dst))) {
         auto* buf = new char[length];

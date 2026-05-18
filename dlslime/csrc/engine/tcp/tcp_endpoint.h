@@ -58,7 +58,8 @@ public:
         int64_t timeout_ms = kDefaultTimeoutMs);
 
     std::shared_ptr<TcpRecvFuture> async_recv(
-        const chunk_tuple_t& chunk);
+        const chunk_tuple_t& chunk,
+        bool exact_size = false);
 
     std::shared_ptr<TcpReadWriteFuture> async_read(
         const std::vector<assign_tuple_t>& assign,
@@ -101,6 +102,7 @@ private:
         std::shared_ptr<TcpOpState> op_state;
         std::unique_ptr<char[]>     staging_buf;
         uintptr_t                   cuda_dst{0};
+        bool                        exact_size{false};
     };
     std::mutex             recv_mu_;
     std::deque<PendingRecv> pending_recvs_;
