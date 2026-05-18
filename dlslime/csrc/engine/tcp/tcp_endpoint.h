@@ -32,7 +32,7 @@ public:
 
     explicit TcpEndpoint(const std::string& ip = "0.0.0.0", uint16_t port = 0);
 
-    TcpEndpoint(TcpContext& ctx, uint16_t port = 0) = delete;
+    TcpEndpoint(TcpContext& ctx, const std::string& ip = "0.0.0.0", uint16_t port = 0) = delete;
 
     ~TcpEndpoint();
 
@@ -77,8 +77,6 @@ private:
     void start_io();
     void do_accept();
     ServerSession::RecvMatcher make_recv_matcher();
-
-    bool is_initiator(const std::string& peer_host, uint16_t peer_port) const;
 
     // ── identity ────────────────────────────────────────
     std::atomic<int64_t> id_{-1};

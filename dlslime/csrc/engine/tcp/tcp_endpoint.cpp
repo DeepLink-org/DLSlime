@@ -101,28 +101,25 @@ json TcpEndpoint::mr_info() const {
     return local_pool_->mr_info();
 }
 
-bool TcpEndpoint::is_initiator(const std::string& peer_host,
-                                uint16_t peer_port) const {
-    int cmp = local_host_.compare(peer_host);
-    if (cmp != 0) return cmp > 0;
-    return local_port_ > peer_port;
-}
-
 void TcpEndpoint::connect(const json& remote_endpoint_info) {
-    peer_host_ = remote_endpoint_info.value("host", "");
-    peer_port_ = static_cast<uint16_t>(remote_endpoint_info.value("port", 0));
+    auto host = remote_endpoint_info.value("host", "");
+    auto port = static_cast<uint16_t>(remote_endpoint_info.value("port", 0));
 
+    // Verify reachability before accepting the peer identity.
+    auto conn = ctx_->conn_pool().getConnection(host, port);
+    if (!conn) {
+        SLIME_LOG_WARN("TcpEndpoint::connect: cannot reach ", host, ":", port);
+        return;
+    }
+
+    peer_host_ = host;
+    peer_port_ = port;
     if (remote_endpoint_info.contains("mr_info")) {
         for (const auto& [name, info] : remote_endpoint_info["mr_info"].items())
             remote_pool_->register_remote_memory_region(info, name);
     }
-
-    if (is_initiator(peer_host_, peer_port_)) {
-        auto conn = ctx_->conn_pool().getConnection(peer_host_, peer_port_);
-        if (conn) ctx_->conn_pool().returnConnection(std::move(conn));
-    }
-
     connected_.store(true, std::memory_order_release);
+    ctx_->conn_pool().returnConnection(std::move(conn));
 }
 
 // ── memory registration ─────────────────────────────────
@@ -138,14 +135,11 @@ int32_t TcpEndpoint::register_remote_memory_region(const std::string& name,
 }
 
 // ── async_send ──────────────────────────────────────────
+// chunk_tuple_t = (src_ptr, offset, length) — raw pointers, no MR lookup.
 
 std::shared_ptr<TcpSendFuture>
 TcpEndpoint::async_send(const chunk_tuple_t& chunk, int64_t /*timeout_ms*/) {
-    auto mr = local_pool_->get_mr_fast(static_cast<int32_t>(std::get<0>(chunk)));
-    if (mr.length == 0)
-        throw std::runtime_error("TcpEndpoint::async_send: invalid local MR");
-
-    uintptr_t src = mr.addr + std::get<1>(chunk);
+    uintptr_t src = std::get<0>(chunk) + std::get<1>(chunk);
     size_t    len = std::get<2>(chunk);
 
     auto conn = ctx_->conn_pool().getConnection(peer_host_, peer_port_);
@@ -175,16 +169,13 @@ TcpEndpoint::async_send(const chunk_tuple_t& chunk, int64_t /*timeout_ms*/) {
 }
 
 // ── async_recv ──────────────────────────────────────────
+// chunk_tuple_t = (dst_ptr, offset, length) — raw pointers, no MR lookup.
 
 std::shared_ptr<TcpRecvFuture>
 TcpEndpoint::async_recv(const chunk_tuple_t& chunk) {
-    auto mr = local_pool_->get_mr_fast(static_cast<int32_t>(std::get<0>(chunk)));
-    if (mr.length == 0)
-        throw std::runtime_error("TcpEndpoint::async_recv: invalid local MR");
-
     auto op = TcpOpState::create();
     op->signal->reset_all();
-    op->user_buffer = mr.addr + std::get<1>(chunk);
+    op->user_buffer = std::get<0>(chunk) + std::get<1>(chunk);
     op->user_length = std::get<2>(chunk);
 
     {

@@ -474,7 +474,7 @@ bool TcpFuture::wait_for(int64_t timeout_ms, int32_t* out) const {
 
 | 阶段 | 文件 | 说明 |
 |------|------|------|
-| 1. 分支 | `git checkout -b tcp-v3 main` | 基于 main 创建新分支 |
+| 1. 分支 | `git checkout -b tcp-v4` | 基于 v3 创建了新分支 |
 | 2. 头文件 | tcp_header.h, tcp_op_state.h | 17B header + 3 opcodes + op state |
 | 3. 内存池 | tcp_memory_pool.h/.cpp | 纯簿记, 无硬件注册 |
 | 4. Future | tcp_future.h | header-only, wait + wait_for |
