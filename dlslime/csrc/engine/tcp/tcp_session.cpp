@@ -9,6 +9,10 @@
 
 #include "dlslime/csrc/logging.h"
 
+#ifdef USE_CUDA
+#include <cuda_runtime.h>
+#endif
+
 namespace dlslime {
 namespace tcp {
 
@@ -27,6 +31,14 @@ static void hdr_to_host(SessionHeader& hdr) {
 static bool is_fatal(asio::error_code ec) {
     return ec && ec != asio::error::eof;
 }
+
+#ifdef USE_CUDA
+static bool is_cuda_memory(const void* addr) {
+    cudaPointerAttributes attr;
+    auto st = cudaPointerGetAttributes(&attr, addr);
+    return (st == cudaSuccess && attr.type == cudaMemoryTypeDevice);
+}
+#endif
 
 // ── ServerSession ───────────────────────────────────────
 
@@ -141,20 +153,60 @@ void ServerSession::dispatch() {
 }
 
 void ServerSession::readBody(void* dst, size_t len) {
+    auto*  ptr    = static_cast<char*>(dst);
+    bool   is_cuda = false;
+#ifdef USE_CUDA
+    if (is_cuda_memory(dst)) {
+        ptr = new char[len];
+        is_cuda = true;
+    }
+#endif
+
     auto self = shared_from_this();
-    asio::async_read(socket_, asio::buffer(dst, len),
-        [this, self](asio::error_code ec, size_t /*n*/) {
-            if (ec && is_fatal(ec))
-                SLIME_LOG_WARN("ServerSession::readBody ", ec.message());
+    asio::async_read(socket_, asio::buffer(ptr, len),
+        [this, self, real_addr = reinterpret_cast<uintptr_t>(dst),
+         len, is_cuda, ptr](asio::error_code ec, size_t /*n*/) {
+            if (ec) {
+                if (is_fatal(ec))
+                    SLIME_LOG_WARN("ServerSession::readBody ", ec.message());
+                if (is_cuda) delete[] ptr;
+                return;
+            }
+#ifdef USE_CUDA
+            if (is_cuda) {
+                auto cu_err = cudaMemcpy(reinterpret_cast<void*>(real_addr), ptr,
+                                          len, cudaMemcpyHostToDevice);
+                if (cu_err != cudaSuccess)
+                    SLIME_LOG_ERROR("readBody cudaMemcpy H2D: ", cudaGetErrorString(cu_err));
+                delete[] ptr;
+            }
+#endif
             readHeader();
         });
 }
 
 void ServerSession::writeBody(const void* src, size_t len) {
+    auto* ptr    = static_cast<const char*>(src);
+    bool  is_cuda = false;
+#ifdef USE_CUDA
+    if (is_cuda_memory(src)) {
+        auto* buf = new char[len];
+        auto cu_err = cudaMemcpy(buf, src, len, cudaMemcpyDeviceToHost);
+        if (cu_err != cudaSuccess) {
+            SLIME_LOG_ERROR("writeBody cudaMemcpy D2H: ", cudaGetErrorString(cu_err));
+            delete[] buf;
+            ptr = static_cast<const char*>(src);
+        } else {
+            ptr = buf;
+            is_cuda = true;
+        }
+    }
+#endif
+
     auto self = shared_from_this();
-    asio::async_write(socket_,
-        asio::buffer(src, len),
-        [this, self](asio::error_code ec, size_t /*n*/) {
+    asio::async_write(socket_, asio::buffer(ptr, len),
+        [this, self, is_cuda, ptr](asio::error_code ec, size_t /*n*/) {
+            if (is_cuda) delete[] ptr;
             if (ec && is_fatal(ec))
                 SLIME_LOG_WARN("ServerSession::writeBody ", ec.message());
             readHeader();

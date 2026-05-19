@@ -602,7 +602,7 @@ PYBIND11_MODULE(_slime_c, m)
         .def("is_connected", &dlslime::tcp::TcpEndpoint::is_connected)
         .def("register_memory_region",
              &dlslime::tcp::TcpEndpoint::register_memory_region,
-             py::arg("name"), py::arg("data_ptr"), py::arg("length"),
+             py::arg("name"), py::arg("data_ptr"), py::arg("offset"), py::arg("length"),
              py::call_guard<py::gil_scoped_release>())
         .def("register_remote_memory_region",
              &dlslime::tcp::TcpEndpoint::register_remote_memory_region,

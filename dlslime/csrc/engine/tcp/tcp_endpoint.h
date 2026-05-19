@@ -46,7 +46,7 @@ public:
 
     // ── Memory ──────────────────────────────────────────
     int32_t register_memory_region(const std::string& name,
-                                   uintptr_t ptr, size_t length);
+                                   uintptr_t ptr, uintptr_t offset, size_t length);
     int32_t register_remote_memory_region(const std::string& name,
                                           const json& mr_info);
     json mr_info() const;

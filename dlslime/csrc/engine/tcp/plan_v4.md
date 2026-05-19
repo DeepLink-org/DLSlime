@@ -1,8 +1,19 @@
 # TcpEndpoint v4 — Future / OpState / Session / Primitive 关系重构
 
-## 当前状态
+**状态**: 已实现并测试通过 (2026-05-18)
 
-四个 async 原语使用 ad-hoc lambda 模式，与 session 概念脱节：
+## 已实现功能
+
+- 4 个 async 原语基于 ClientSession + Future + OpState 模型
+- ClientSession 与 ServerSession 对称：start_write/start_read vs readBody/writeBody
+- 多 assign 支持：迭代 vector，每个 assign 创建独立 ClientSession，共享 OpState
+- CUDA 两端 staging：async_send/write/read + ServerSession readBody/writeBody
+- send/recv 脱离 MemoryPool（裸指针模式），read/write 继续使用 MR 寻址
+- `register_memory_region(name, ptr, offset, length)` 接口对齐 RDMAEndpoint
+- 编译开关：`USE_CUDA=ON ./build_and_test.sh all` 启用 CUDA 路径
+- 宽松截断 + exact_size 拒绝 + overflow 保护
+
+## 当前状态（已过时，仅供参考）
 
 ```
 async_send(chunk):
@@ -287,3 +298,18 @@ void ClientSession::start_write(...) {
 - **不拆 WriteSession/ReadSession** — 差异小，合并为一个 ClientSession
 - **不在 Future 中持有 Session** — Future 只 wait，通过 OpState 间接关联
 - **ClientSession 不持有 OpState** — 只报 ec，由 Primitive 的 on_done 统一 signal
+
+## 未来规划
+
+### CUDA 锁页内存
+
+当前 CUDA staging 使用 `new char[]`（可分页内存），D2H/H2D `cudaMemcpy` 走的是同步 device→host 拷贝，pageable memory 路径较慢。
+
+后续改为 `cudaHostAlloc()` 分配锁页（pinned）内存，使 `cudaMemcpy` 能走 DMA 快速路径。同时可考虑 `cudaMemcpyAsync` + `cudaStream` 与 io_context 的异步重叠。
+
+### async_recv exact_size 自适应
+
+当前 `exact_size` 是 opt-in boolean 参数，默认 `false`（宽松截断）。未来改为默认自适应：
+- 当 `send_size <= recv_size`：自动启用严格检查（exact match）
+- 当 `send_size > recv_size`：自动宽松截断
+- 移除 `exact_size` 参数，行为由实际数据量驱动

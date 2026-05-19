@@ -13,6 +13,7 @@ header() { echo; echo -e "\033[1;36m==>\033[m \033[1m$*\033[m"; }
 ok()     { echo -e "  \033[1;32mOK\033[m   $*"; }
 
 do_build() {
+    rm -rf ${BUILD_DIR}
     local cuda_label=""
     [[ "$USE_CUDA" == "ON" ]] && cuda_label=" + USE_CUDA=ON"
 
@@ -39,7 +40,7 @@ do_build() {
 
 do_test() {
     header "Running TcpEndpoint tests"
-    export DLSLIME_LOG_LEVEL=0
+    export SLIME_LOG_LEVEL=1
     export LD_LIBRARY_PATH="$REPO_ROOT/dlslime"
     export PYTHONPATH="$REPO_ROOT"
     python3 "$SCRIPT_DIR/test_tcp_endpoint.py" 2>&1 | while IFS= read -r line; do

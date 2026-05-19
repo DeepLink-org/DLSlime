@@ -23,6 +23,13 @@ add_library(_slime_tcp SHARED
 
 target_compile_definitions(_slime_tcp PRIVATE ASIO_STANDALONE)
 
+if (USE_CUDA)
+    find_package(CUDAToolkit REQUIRED)
+    target_compile_definitions(_slime_tcp PRIVATE USE_CUDA)
+    target_include_directories(_slime_tcp PRIVATE ${CUDAToolkit_INCLUDE_DIRS})
+    target_link_libraries(_slime_tcp PUBLIC CUDA::cudart)
+endif()
+
 target_link_libraries(_slime_tcp PUBLIC
     asio::asio
     _slime_device
