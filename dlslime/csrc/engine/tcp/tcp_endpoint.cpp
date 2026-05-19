@@ -239,6 +239,8 @@ TcpEndpoint::async_recv(const chunk_tuple_t& chunk, bool exact_size) {
 }
 
 // ── async_read ──────────────────────────────────────────
+// Each assign creates an independent ClientSession; all share one OpState.
+// Future.wait() blocks until every session has signalled its bit.
 
 std::shared_ptr<TcpReadWriteFuture>
 TcpEndpoint::async_read(const std::vector<assign_tuple_t>& assign,
@@ -246,65 +248,71 @@ TcpEndpoint::async_read(const std::vector<assign_tuple_t>& assign,
     if (assign.empty())
         throw std::runtime_error("TcpEndpoint::async_read: empty assignment");
 
-    const auto& a = assign[0];
-    int32_t  local_h   = static_cast<int32_t>(std::get<0>(a));
-    int32_t  remote_h  = static_cast<int32_t>(std::get<1>(a));
-    uint64_t remote_off = std::get<2>(a);
-    uint64_t local_off  = std::get<3>(a);
-    size_t   length     = std::get<4>(a);
-
-    auto local  = local_pool_->get_mr_fast(local_h);
-    auto remote = remote_pool_->get_remote_mr_fast(remote_h);
-    if (local.length == 0 || remote.length == 0)
-        throw std::runtime_error("TcpEndpoint::async_read: invalid MR handle");
-
-    auto op = TcpOpState::create();
+    size_t N = assign.size();
+    auto op  = TcpOpState::create();
     op->signal->reset_all();
-    uintptr_t local_dst = local.addr + local_off;
-    op->user_buffer = local_dst;
-    op->user_length = length;
+    op->expected_mask  = (N < 32) ? (1u << N) - 1 : 0xFFFFFFFFu;
+    op->completion_status.store(TCP_SUCCESS, std::memory_order_release);
+    op->completion_mask.store(0, std::memory_order_release);
 
-    auto conn = ctx_->conn_pool().getConnection(peer_host_, peer_port_);
-    if (!conn) {
-        op->completion_status.store(TCP_FAILED, std::memory_order_release);
-        op->signal->force_complete();
-        return std::make_shared<TcpReadWriteFuture>(op);
-    }
-
-    SessionHeader hdr{length, remote.addr + remote_off, OP_READ};
     auto& pool = ctx_->conn_pool();
 
-    auto* read_dst = reinterpret_cast<char*>(local_dst);
-    bool  is_cuda  = false;
+    for (size_t i = 0; i < N; i++) {
+        const auto& a = assign[i];
+        int32_t  local_h    = static_cast<int32_t>(std::get<0>(a));
+        int32_t  remote_h   = static_cast<int32_t>(std::get<1>(a));
+        uint64_t remote_off = std::get<2>(a);
+        uint64_t local_off  = std::get<3>(a);
+        size_t   length     = std::get<4>(a);
+
+        auto local  = local_pool_->get_mr_fast(local_h);
+        auto remote = remote_pool_->get_remote_mr_fast(remote_h);
+        if (local.length == 0 || remote.length == 0)
+            throw std::runtime_error("TcpEndpoint::async_read: invalid MR handle");
+
+        uintptr_t local_dst = local.addr + local_off;
+        SessionHeader hdr{length, remote.addr + remote_off, OP_READ};
+
+        auto conn = pool.getConnection(peer_host_, peer_port_);
+        if (!conn) {
+            op->completion_status.store(TCP_FAILED, std::memory_order_release);
+            op->signal->set_comm_done(i);
+            continue;
+        }
+
+        auto* read_dst = reinterpret_cast<char*>(local_dst);
+        bool  is_cuda  = false;
 #ifdef USE_CUDA
-    if (is_cuda_memory(read_dst)) {
-        read_dst = new char[length];
-        is_cuda  = true;
-    }
+        if (is_cuda_memory(read_dst)) {
+            read_dst = new char[length];
+            is_cuda  = true;
+        }
 #endif
 
-    auto session = std::make_shared<ClientSession>(
-        std::move(conn->socket),
-        [op, conn, &pool, read_dst, is_cuda,
-         real_dst = local_dst, len = length](asio::error_code ec) {
+        auto session = std::make_shared<ClientSession>(
+            std::move(conn->socket),
+            [op, conn, i, &pool, read_dst, is_cuda,
+             real_dst = local_dst, len = length](asio::error_code ec) {
 #ifdef USE_CUDA
-            if (!ec && is_cuda) {
-                cudaMemcpy(reinterpret_cast<void*>(real_dst),
-                           read_dst, len, cudaMemcpyHostToDevice);
-                delete[] read_dst;
-            }
+                if (!ec && is_cuda) {
+                    cudaMemcpy(reinterpret_cast<void*>(real_dst),
+                               read_dst, len, cudaMemcpyHostToDevice);
+                    delete[] read_dst;
+                }
 #endif
-            op->completion_status.store(
-                ec ? TCP_FAILED : TCP_SUCCESS, std::memory_order_release);
-            if (op->signal) op->signal->set_comm_done(0);
-            pool.returnConnection(conn);
-        });
-    session->start_read(hdr, read_dst);
+                if (ec)
+                    op->completion_status.store(TCP_FAILED, std::memory_order_release);
+                if (op->signal) op->signal->set_comm_done(i);
+                pool.returnConnection(conn);
+            });
+        session->start_read(hdr, read_dst);
+    }
 
     return std::make_shared<TcpReadWriteFuture>(op);
 }
 
 // ── async_write ─────────────────────────────────────────
+// Each assign creates an independent ClientSession; all share one OpState.
 
 std::shared_ptr<TcpReadWriteFuture>
 TcpEndpoint::async_write(const std::vector<assign_tuple_t>& assign,
@@ -312,56 +320,62 @@ TcpEndpoint::async_write(const std::vector<assign_tuple_t>& assign,
     if (assign.empty())
         throw std::runtime_error("TcpEndpoint::async_write: empty assignment");
 
-    const auto& a = assign[0];
-    int32_t  local_h   = static_cast<int32_t>(std::get<0>(a));
-    int32_t  remote_h  = static_cast<int32_t>(std::get<1>(a));
-    uint64_t remote_off = std::get<2>(a);
-    uint64_t local_off  = std::get<3>(a);
-    size_t   length     = std::get<4>(a);
-
-    auto local  = local_pool_->get_mr_fast(local_h);
-    auto remote = remote_pool_->get_remote_mr_fast(remote_h);
-    if (local.length == 0 || remote.length == 0)
-        throw std::runtime_error("TcpEndpoint::async_write: invalid MR handle");
-
-    uintptr_t src = local.addr + local_off;
-
-    auto conn = ctx_->conn_pool().getConnection(peer_host_, peer_port_);
-    auto op   = TcpOpState::create();
+    size_t N = assign.size();
+    auto op  = TcpOpState::create();
     op->signal->reset_all();
+    op->expected_mask  = (N < 32) ? (1u << N) - 1 : 0xFFFFFFFFu;
+    op->completion_status.store(TCP_SUCCESS, std::memory_order_release);
+    op->completion_mask.store(0, std::memory_order_release);
 
-    if (!conn) {
-        op->completion_status.store(TCP_FAILED, std::memory_order_release);
-        op->signal->force_complete();
-        return std::make_shared<TcpReadWriteFuture>(op);
-    }
-
-    SessionHeader hdr{length, remote.addr + remote_off, OP_WRITE};
     auto& pool = ctx_->conn_pool();
 
-    auto* send_ptr = reinterpret_cast<const char*>(src);
-    bool  is_cuda  = false;
+    for (size_t i = 0; i < N; i++) {
+        const auto& a = assign[i];
+        int32_t  local_h    = static_cast<int32_t>(std::get<0>(a));
+        int32_t  remote_h   = static_cast<int32_t>(std::get<1>(a));
+        uint64_t remote_off = std::get<2>(a);
+        uint64_t local_off  = std::get<3>(a);
+        size_t   length     = std::get<4>(a);
+
+        auto local  = local_pool_->get_mr_fast(local_h);
+        auto remote = remote_pool_->get_remote_mr_fast(remote_h);
+        if (local.length == 0 || remote.length == 0)
+            throw std::runtime_error("TcpEndpoint::async_write: invalid MR handle");
+
+        uintptr_t    src = local.addr + local_off;
+        SessionHeader hdr{length, remote.addr + remote_off, OP_WRITE};
+
+        auto conn = pool.getConnection(peer_host_, peer_port_);
+        if (!conn) {
+            op->completion_status.store(TCP_FAILED, std::memory_order_release);
+            op->signal->set_comm_done(i);
+            continue;
+        }
+
+        auto* send_ptr = reinterpret_cast<const char*>(src);
+        bool  is_cuda  = false;
 #ifdef USE_CUDA
-    if (is_cuda_memory(send_ptr)) {
-        auto* buf = new char[length];
-        cudaMemcpy(buf, send_ptr, length, cudaMemcpyDeviceToHost);
-        send_ptr = buf;
-        is_cuda  = true;
-    }
+        if (is_cuda_memory(send_ptr)) {
+            auto* buf = new char[length];
+            cudaMemcpy(buf, send_ptr, length, cudaMemcpyDeviceToHost);
+            send_ptr = buf;
+            is_cuda  = true;
+        }
 #endif
 
-    auto session = std::make_shared<ClientSession>(
-        std::move(conn->socket),
-        [op, conn, &pool, send_ptr, is_cuda](asio::error_code ec) {
-            op->completion_status.store(
-                ec ? TCP_FAILED : TCP_SUCCESS, std::memory_order_release);
-            if (op->signal) op->signal->set_comm_done(0);
-            pool.returnConnection(conn);
+        auto session = std::make_shared<ClientSession>(
+            std::move(conn->socket),
+            [op, conn, i, &pool, send_ptr, is_cuda](asio::error_code ec) {
+                if (ec)
+                    op->completion_status.store(TCP_FAILED, std::memory_order_release);
+                if (op->signal) op->signal->set_comm_done(i);
+                pool.returnConnection(conn);
 #ifdef USE_CUDA
-            if (is_cuda) delete[] send_ptr;
+                if (is_cuda) delete[] send_ptr;
 #endif
-        });
-    session->start_write(hdr, send_ptr);
+            });
+        session->start_write(hdr, send_ptr);
+    }
 
     return std::make_shared<TcpReadWriteFuture>(op);
 }
