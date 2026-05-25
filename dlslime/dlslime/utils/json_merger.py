@@ -322,9 +322,12 @@ def _merge_json_v2(
     ParallelJsonDumper("traceEvents", 100000).dump(trace, Path(output_json))
 
     if compress:
-        with gzip.open(
-            output_json.with_suffix(".tar.gz"), mode="wb", compresslevel=3
-        ) as g, open(output_json, "rb") as f:
+        with (
+            gzip.open(
+                output_json.with_suffix(".tar.gz"), mode="wb", compresslevel=3
+            ) as g,
+            open(output_json, "rb") as f,
+        ):
             logging.info("compress...")
             g.write(f.read())
         output_json.unlink()

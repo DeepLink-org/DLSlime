@@ -12,15 +12,15 @@ inside JSON metadata.
 
 ## Responsibilities
 
-| Area                    | Responsibility                                                        |
-| ----------------------- | --------------------------------------------------------------------- |
-| Service registry        | Register, discover, heartbeat, and unregister generic entities        |
-| Microservice governance | Track service kind, endpoint, metadata, resource hints, and TTL       |
+| Area                    | Responsibility                                                            |
+| ----------------------- | ------------------------------------------------------------------------- |
+| Service registry        | Register, discover, heartbeat, and unregister generic entities            |
+| Microservice governance | Track service kind, endpoint, metadata, resource hints, and TTL           |
 | Scope isolation         | Partition Redis keys by scope so multiple jobs can share one dlslime-ctrl |
-| PeerAgent control       | Register PeerAgents, publish resource records, and clean stale state  |
-| RDMA metadata           | Store and query memory-region metadata for remote access              |
-| Topology control        | Store desired PeerAgent topology and push connection intents          |
-| Redis access            | Expose the Redis address that remote DLSlime clients should use       |
+| PeerAgent control       | Register PeerAgents, publish resource records, and clean stale state      |
+| RDMA metadata           | Store and query memory-region metadata for remote access                  |
+| Topology control        | Store desired PeerAgent topology and push connection intents              |
+| Redis access            | Expose the Redis address that remote DLSlime clients should use           |
 
 ## Concepts
 
@@ -281,12 +281,12 @@ client.stop()
 | `register(entity_id, kind, endpoint=None, metadata=None, resource=None, entity_type="service")` | Register a generic entity                       |
 | `unregister()`                                                                                  | Unregister the entity registered by this client |
 | `heartbeat()`                                                                                   | Refresh the entity TTL                          |
-| `start_heartbeat(interval=15.0, on_not_found=None, name="dlslime-ctrl-hb")`                         | Start background heartbeat                      |
+| `start_heartbeat(interval=15.0, on_not_found=None, name="dlslime-ctrl-hb")`                     | Start background heartbeat                      |
 | `stop_heartbeat(timeout=2.0)`                                                                   | Stop background heartbeat                       |
 | `stop(timeout=2.0)`                                                                             | Stop heartbeat and unregister                   |
 | `get_entity_info(entity_id, entity_type="service")`                                             | Query one entity                                |
 | `list_entities(entity_type="service", kind=None)`                                               | List entities                                   |
-| `get_redis_url()`                                                                               | Resolve Redis URL through dlslime-ctrl              |
+| `get_redis_url()`                                                                               | Resolve Redis URL through dlslime-ctrl          |
 
 PeerAgent helpers are also available on the same client:
 
@@ -340,12 +340,12 @@ Without scope, the same keys are used without the prefix, for example
 
 ## Environment Variables
 
-| Variable               | Description                                                  |
-| ---------------------- | ------------------------------------------------------------ |
-| `DLSLIME_CTRL_REDIS_URL`   | Redis URL used by dlslime-ctrl                                   |
-| `DLSLIME_CTRL_RUST_LOG`    | Rust log level, default `info`                               |
-| `REDIS_PUBLIC_ADDRESS` | Optional public Redis `host:port` returned to remote clients |
-| `DLSLIME_CTRL_SCOPE`       | Optional client-side scope used by DLSlime services          |
+| Variable                 | Description                                                  |
+| ------------------------ | ------------------------------------------------------------ |
+| `DLSLIME_CTRL_REDIS_URL` | Redis URL used by dlslime-ctrl                               |
+| `DLSLIME_CTRL_RUST_LOG`  | Rust log level, default `info`                               |
+| `REDIS_PUBLIC_ADDRESS`   | Optional public Redis `host:port` returned to remote clients |
+| `DLSLIME_CTRL_SCOPE`     | Optional client-side scope used by DLSlime services          |
 
 ## Notes
 

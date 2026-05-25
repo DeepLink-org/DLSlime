@@ -2,18 +2,18 @@
 
 Two compose recipes for the DLSlime control plane:
 
-| File | Redis | Use case |
-|---|---|---|
-| `docker-compose.yml` | Bundled (host port `16379`) | Self-contained dev / test / CI |
-| `docker-compose.external-redis.yml` | External | Production sharing existing Redis |
+| File                                | Redis                       | Use case                          |
+| ----------------------------------- | --------------------------- | --------------------------------- |
+| `docker-compose.yml`                | Bundled (host port `16379`) | Self-contained dev / test / CI    |
+| `docker-compose.external-redis.yml` | External                    | Production sharing existing Redis |
 
 Both build the same image from [`ctrl.Dockerfile`](./ctrl.Dockerfile) (multi-stage Rust → `debian:bookworm-slim`, ~80 MB).
 
 ## Default host ports
 
-| Service | Host port | Override env |
-|---|---|---|
-| dlslime-ctrl HTTP | **4479** | `DLSLIME_CTRL_PORT` |
+| Service                      | Host port | Override env                   |
+| ---------------------------- | --------- | ------------------------------ |
+| dlslime-ctrl HTTP            | **4479**  | `DLSLIME_CTRL_PORT`            |
 | Redis (bundled compose only) | **16379** | `DLSLIME_CTRL_REDIS_HOST_PORT` |
 
 Both are intentionally non-standard so they don't collide with a local Redis on `6379` or an existing HTTP service on `3000` / `8080`. Override them in `docker/.env` if you want.
@@ -58,14 +58,14 @@ Common external Redis URLs:
 
 ## Configuration
 
-| Variable | Default | Description |
-|---|---|---|
-| `DLSLIME_CTRL_PORT` | `4479` | Host port mapped to dlslime-ctrl |
-| `DLSLIME_CTRL_REDIS_HOST_PORT` | `16379` | Host port mapped to bundled Redis |
-| `DLSLIME_CTRL_ADVERTISE_HOST` | `127.0.0.1` | Hostname/IP that ctrl tells PeerAgents to use for Redis |
-| `DLSLIME_CTRL_REDIS_URL` | `redis://redis:6379` (bundled) | What ctrl uses to connect to Redis itself |
-| `DLSLIME_CTRL_REDIS_ADVERTISE` | derived in compose | Overrides what ctrl returns from `/get_redis_address`; used to decouple internal vs external Redis URLs |
-| `DLSLIME_CTRL_RUST_LOG` | `info` | Rust log level (`error` / `warn` / `info` / `debug` / `trace`) |
+| Variable                       | Default                        | Description                                                                                             |
+| ------------------------------ | ------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| `DLSLIME_CTRL_PORT`            | `4479`                         | Host port mapped to dlslime-ctrl                                                                        |
+| `DLSLIME_CTRL_REDIS_HOST_PORT` | `16379`                        | Host port mapped to bundled Redis                                                                       |
+| `DLSLIME_CTRL_ADVERTISE_HOST`  | `127.0.0.1`                    | Hostname/IP that ctrl tells PeerAgents to use for Redis                                                 |
+| `DLSLIME_CTRL_REDIS_URL`       | `redis://redis:6379` (bundled) | What ctrl uses to connect to Redis itself                                                               |
+| `DLSLIME_CTRL_REDIS_ADVERTISE` | derived in compose             | Overrides what ctrl returns from `/get_redis_address`; used to decouple internal vs external Redis URLs |
+| `DLSLIME_CTRL_RUST_LOG`        | `info`                         | Rust log level (`error` / `warn` / `info` / `debug` / `trace`)                                          |
 
 ## Smoke test
 
@@ -113,22 +113,22 @@ docker compose -f docker/docker-compose.yml --env-file docker/.env up -d
 
 `pull_policy` values:
 
-| Value | Behavior |
-|---|---|
-| `build` *(default in compose)* | Always build locally, never pull |
-| `missing` | Pull only if the tag is not present locally |
-| `always` | Always pull on `up` |
-| `never` | Use local tag, error if missing |
+| Value                          | Behavior                                    |
+| ------------------------------ | ------------------------------------------- |
+| `build` *(default in compose)* | Always build locally, never pull            |
+| `missing`                      | Pull only if the tag is not present locally |
+| `always`                       | Always pull on `up`                         |
+| `never`                        | Use local tag, error if missing             |
 
 ### Automated publish via GitHub Actions
 
 The workflow [`.github/workflows/docker-publish.yml`](../.github/workflows/docker-publish.yml) builds & pushes automatically — no secrets needed.
 
-| Trigger | Tags published |
-|---|---|
-| Push to `main` / `master` | `edge`, `sha-<short>` |
-| Push tag `v0.1.1` | `0.1.1`, `0.1`, `latest`, `sha-<short>` |
-| Manual `workflow_dispatch` | optional extra tag from the input |
+| Trigger                    | Tags published                          |
+| -------------------------- | --------------------------------------- |
+| Push to `main` / `master`  | `edge`, `sha-<short>`                   |
+| Push tag `v0.1.1`          | `0.1.1`, `0.1`, `latest`, `sha-<short>` |
+| Manual `workflow_dispatch` | optional extra tag from the input       |
 
 One-time setup after the **first** successful workflow run, in the GitHub UI:
 
@@ -173,6 +173,7 @@ docker buildx build \
 ```
 
 > Behind a corporate / China proxy? The `dlslime-builder` container can't reach a proxy on the host's `127.0.0.1`. Make the proxy listen on `0.0.0.0` (e.g. `allow-lan: true` in Clash) and pass the docker-bridge gateway in via build-args:
+>
 > ```bash
 > docker buildx build \
 >     --build-arg HTTP_PROXY=http://172.17.0.1:7897 \

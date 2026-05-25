@@ -5,10 +5,10 @@
 #include <atomic>
 #include <stdexcept>
 
+#include "dlslime/csrc/common/pause.h"
 #include "dlslime/csrc/device/signal.h"
 #include "dlslime/csrc/engine/rdma/rdma_env.h"
 #include "dlslime/csrc/logging.h"
-#include "dlslime/csrc/common/pause.h"
 #include "nvtx_helper.h"
 
 namespace dlslime {

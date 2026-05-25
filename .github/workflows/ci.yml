@@ -71,11 +71,13 @@ jobs:
             -DBUILD_TORCH_PLUGIN=OFF
             -DBUILD_ASCEND_DIRECT=OFF
             -DBUILD_TEST=OFF
-        run: python -m build --wheel
+        # The repo root is a meta-package (`dlslime-workspace`). The actual
+        # native wheel lives under `dlslime/`.
+        run: python -m build --wheel --outdir dist dlslime
 
       - name: Install wheel smoke test
         run: |
-          python -m pip install dist/*.whl --no-deps
+          python -m pip install dist/dlslime-*.whl --no-deps
           cd /tmp
           python - <<'PY'
           import dlslime

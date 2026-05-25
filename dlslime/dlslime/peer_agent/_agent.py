@@ -25,9 +25,8 @@ except ImportError as e:
         "Install them with: pip install httpx redis"
     ) from e
 
-from dlslime.ctrl import NanoCtrlClient
-
 from dlslime import discover_topology, RDMAContext, RDMAEndpoint, RDMAMemoryPool
+from dlslime.ctrl import NanoCtrlClient
 from dlslime.logging import get_logger
 from ._mailbox import StreamMailbox
 from ._obs import _tlog
@@ -203,9 +202,7 @@ class PeerAgent:
         self._redis_key_prefix = scope or ""
 
         # NanoCtrl HTTP client
-        self._client = NanoCtrlClient(
-            ctrl_url, scope=self._redis_key_prefix or None
-        )
+        self._client = NanoCtrlClient(ctrl_url, scope=self._redis_key_prefix or None)
 
         # Local topology is discovered before registration and published through
         # NanoCtrl/Redis. RDMA resources are created lazily per selected

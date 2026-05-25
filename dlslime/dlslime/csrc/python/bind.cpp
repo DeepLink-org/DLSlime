@@ -529,93 +529,103 @@ PYBIND11_MODULE(_slime_c, m)
     // =========================================================================
     // TCP Transport
     // =========================================================================
-    py::class_<dlslime::tcp::TcpSendFuture, std::shared_ptr<dlslime::tcp::TcpSendFuture>>(
-        m, "SlimeTcpSendFuture")
-        .def("wait", &dlslime::tcp::TcpSendFuture::wait,
-             py::call_guard<py::gil_scoped_release>())
-        .def("wait_for",
-             [](const dlslime::tcp::TcpSendFuture& self, double sec) -> py::object {
-                 int32_t st = 0;
-                 int64_t ms = static_cast<int64_t>(sec * 1000.0);
-                 if (ms < 0) ms = 0;
-                 if (self.wait_for(ms, &st)) return py::cast(st);
-                 return py::none();
-             },
-             py::arg("timeout_seconds"));
+    py::class_<dlslime::tcp::TcpSendFuture, std::shared_ptr<dlslime::tcp::TcpSendFuture>>(m, "SlimeTcpSendFuture")
+        .def("wait", &dlslime::tcp::TcpSendFuture::wait, py::call_guard<py::gil_scoped_release>())
+        .def(
+            "wait_for",
+            [](const dlslime::tcp::TcpSendFuture& self, double sec) -> py::object {
+                int32_t st = 0;
+                int64_t ms = static_cast<int64_t>(sec * 1000.0);
+                if (ms < 0)
+                    ms = 0;
+                if (self.wait_for(ms, &st))
+                    return py::cast(st);
+                return py::none();
+            },
+            py::arg("timeout_seconds"));
 
-    py::class_<dlslime::tcp::TcpRecvFuture, std::shared_ptr<dlslime::tcp::TcpRecvFuture>>(
-        m, "SlimeTcpRecvFuture")
-        .def("wait", &dlslime::tcp::TcpRecvFuture::wait,
-             py::call_guard<py::gil_scoped_release>())
-        .def("wait_for",
-             [](const dlslime::tcp::TcpRecvFuture& self, double sec) -> py::object {
-                 int32_t st = 0;
-                 int64_t ms = static_cast<int64_t>(sec * 1000.0);
-                 if (ms < 0) ms = 0;
-                 if (self.wait_for(ms, &st)) return py::cast(st);
-                 return py::none();
-             },
-             py::arg("timeout_seconds"));
+    py::class_<dlslime::tcp::TcpRecvFuture, std::shared_ptr<dlslime::tcp::TcpRecvFuture>>(m, "SlimeTcpRecvFuture")
+        .def("wait", &dlslime::tcp::TcpRecvFuture::wait, py::call_guard<py::gil_scoped_release>())
+        .def(
+            "wait_for",
+            [](const dlslime::tcp::TcpRecvFuture& self, double sec) -> py::object {
+                int32_t st = 0;
+                int64_t ms = static_cast<int64_t>(sec * 1000.0);
+                if (ms < 0)
+                    ms = 0;
+                if (self.wait_for(ms, &st))
+                    return py::cast(st);
+                return py::none();
+            },
+            py::arg("timeout_seconds"));
 
     py::class_<dlslime::tcp::TcpReadWriteFuture, std::shared_ptr<dlslime::tcp::TcpReadWriteFuture>>(
         m, "SlimeTcpReadWriteFuture")
-        .def("wait", &dlslime::tcp::TcpReadWriteFuture::wait,
-             py::call_guard<py::gil_scoped_release>())
-        .def("wait_for",
-             [](const dlslime::tcp::TcpReadWriteFuture& self, double sec) -> py::object {
-                 int32_t st = 0;
-                 int64_t ms = static_cast<int64_t>(sec * 1000.0);
-                 if (ms < 0) ms = 0;
-                 if (self.wait_for(ms, &st)) return py::cast(st);
-                 return py::none();
-             },
-             py::arg("timeout_seconds"));
+        .def("wait", &dlslime::tcp::TcpReadWriteFuture::wait, py::call_guard<py::gil_scoped_release>())
+        .def(
+            "wait_for",
+            [](const dlslime::tcp::TcpReadWriteFuture& self, double sec) -> py::object {
+                int32_t st = 0;
+                int64_t ms = static_cast<int64_t>(sec * 1000.0);
+                if (ms < 0)
+                    ms = 0;
+                if (self.wait_for(ms, &st))
+                    return py::cast(st);
+                return py::none();
+            },
+            py::arg("timeout_seconds"));
 
-    py::class_<dlslime::tcp::TcpMemoryPool, std::shared_ptr<dlslime::tcp::TcpMemoryPool>>(
-        m, "TcpMemoryPool")
+    py::class_<dlslime::tcp::TcpMemoryPool, std::shared_ptr<dlslime::tcp::TcpMemoryPool>>(m, "TcpMemoryPool")
         .def(py::init<>())
         .def("register_memory_region",
              &dlslime::tcp::TcpMemoryPool::register_memory_region,
-             py::arg("addr"), py::arg("length"), py::arg("name"))
-        .def("register_remote_memory_region",
-             [](dlslime::tcp::TcpMemoryPool& self, const json& mr_info,
-                py::object name_obj) {
-                 std::optional<std::string> name;
-                 if (!name_obj.is_none()) name = name_obj.cast<std::string>();
-                 return self.register_remote_memory_region(mr_info, name);
-             },
-             py::arg("mr_info"), py::arg("name") = py::none())
-        .def("get_mr_handle", &dlslime::tcp::TcpMemoryPool::get_mr_handle,
+             py::arg("addr"),
+             py::arg("length"),
              py::arg("name"))
+        .def(
+            "register_remote_memory_region",
+            [](dlslime::tcp::TcpMemoryPool& self, const json& mr_info, py::object name_obj) {
+                std::optional<std::string> name;
+                if (!name_obj.is_none())
+                    name = name_obj.cast<std::string>();
+                return self.register_remote_memory_region(mr_info, name);
+            },
+            py::arg("mr_info"),
+            py::arg("name") = py::none())
+        .def("get_mr_handle", &dlslime::tcp::TcpMemoryPool::get_mr_handle, py::arg("name"))
         .def("mr_info", &dlslime::tcp::TcpMemoryPool::mr_info);
 
-    py::class_<dlslime::tcp::TcpEndpoint, std::shared_ptr<dlslime::tcp::TcpEndpoint>>(
-        m, "TcpEndpoint")
-        .def(py::init<const std::string&, uint16_t>(),
-             py::arg("ip") = "0.0.0.0", py::arg("port") = 0)
-        .def("connect", &dlslime::tcp::TcpEndpoint::connect,
-             py::arg("remote_info"), py::call_guard<py::gil_scoped_release>())
+    py::class_<dlslime::tcp::TcpEndpoint, std::shared_ptr<dlslime::tcp::TcpEndpoint>>(m, "TcpEndpoint")
+        .def(py::init<const std::string&, uint16_t>(), py::arg("ip") = "0.0.0.0", py::arg("port") = 0)
+        .def("connect",
+             &dlslime::tcp::TcpEndpoint::connect,
+             py::arg("remote_info"),
+             py::call_guard<py::gil_scoped_release>())
         .def("endpoint_info", &dlslime::tcp::TcpEndpoint::endpoint_info)
         .def("mr_info", &dlslime::tcp::TcpEndpoint::mr_info)
-        .def("shutdown", &dlslime::tcp::TcpEndpoint::shutdown,
-             py::call_guard<py::gil_scoped_release>())
+        .def("shutdown", &dlslime::tcp::TcpEndpoint::shutdown, py::call_guard<py::gil_scoped_release>())
         .def("is_connected", &dlslime::tcp::TcpEndpoint::is_connected)
         .def("register_memory_region",
              &dlslime::tcp::TcpEndpoint::register_memory_region,
-             py::arg("name"), py::arg("data_ptr"), py::arg("offset"), py::arg("length"),
+             py::arg("name"),
+             py::arg("data_ptr"),
+             py::arg("offset"),
+             py::arg("length"),
              py::call_guard<py::gil_scoped_release>())
         .def("register_remote_memory_region",
              &dlslime::tcp::TcpEndpoint::register_remote_memory_region,
-             py::arg("name"), py::arg("mr_info"), py::call_guard<py::gil_scoped_release>())
+             py::arg("name"),
+             py::arg("mr_info"),
+             py::call_guard<py::gil_scoped_release>())
         .def("async_send",
-             py::overload_cast<const dlslime::chunk_tuple_t&, int64_t>(
-                 &dlslime::tcp::TcpEndpoint::async_send),
+             py::overload_cast<const dlslime::chunk_tuple_t&, int64_t>(&dlslime::tcp::TcpEndpoint::async_send),
              py::arg("chunk"),
              py::arg("timeout_ms") = dlslime::tcp::TcpEndpoint::kDefaultTimeoutMs,
              py::call_guard<py::gil_scoped_release>())
         .def("async_recv",
              &dlslime::tcp::TcpEndpoint::async_recv,
-             py::arg("chunk"), py::arg("exact_size") = false,
+             py::arg("chunk"),
+             py::arg("exact_size") = false,
              py::call_guard<py::gil_scoped_release>())
         .def("async_read",
              py::overload_cast<const std::vector<dlslime::assign_tuple_t>&, int64_t>(

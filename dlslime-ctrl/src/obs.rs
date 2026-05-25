@@ -90,7 +90,8 @@ pub fn run_obs(args: ObsArgs) -> Result<()> {
 // ────────────────────────── Scan helper ──────────────────────────
 
 fn scan_snapshots(args: &ObsQueryArgs) -> Result<Vec<ObsSnapshot>> {
-    let redis_url = std::env::var("DLSLIME_CTRL_REDIS_URL").unwrap_or_else(|_| args.redis_url.clone());
+    let redis_url =
+        std::env::var("DLSLIME_CTRL_REDIS_URL").unwrap_or_else(|_| args.redis_url.clone());
     let client = redis::Client::open(redis_url.as_str())?;
     let mut conn = client.get_connection()?;
 
