@@ -2,12 +2,12 @@
 
 ## Node 0
 torchrun --master-addr 10.130.8.145 --master-port 6006 \
-    --nnodes 2 --nproc-per-node 1 --node-rank 1 bench/python/agg_transfer_bench_spmd.py \
+    --nnodes 2 --nproc-per-node 1 --node-rank 1 dlslime/bench/python/agg_transfer_bench_spmd.py \
     --qp-num 8 --transfer-engine dlslime --batch-size 94 --num-iteration 10 --num-concurrency 8
 
 ## Node 1
 torchrun --master-addr 10.130.8.145 --master-port 6006 \
-    --nnodes 2 --nproc-per-node 1 --node-rank 0 bench/python/agg_transfer_bench_spmd.py \
+    --nnodes 2 --nproc-per-node 1 --node-rank 0 dlslime/bench/python/agg_transfer_bench_spmd.py \
     --qp-num 8 --transfer-engine dlslime --batch-size 94 --num-iteration 10 --num-concurrency 8
 """
 

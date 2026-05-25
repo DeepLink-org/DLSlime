@@ -104,7 +104,7 @@ Why GHCR rather than Docker Hub:
 
 ```bash
 cat >> docker/.env <<'EOF'
-DLSLIME_CTRL_IMAGE=ghcr.io/deeplink-org/dlslime-ctrl:0.1.1
+DLSLIME_CTRL_IMAGE=ghcr.io/deeplink-org/dlslime-ctrl:0.1.2
 DLSLIME_CTRL_PULL_POLICY=missing
 EOF
 
@@ -127,7 +127,7 @@ The workflow [`.github/workflows/docker-publish.yml`](../.github/workflows/docke
 | Trigger                    | Tags published                          |
 | -------------------------- | --------------------------------------- |
 | Push to `main` / `master`  | `edge`, `sha-<short>`                   |
-| Push tag `v0.1.1`          | `0.1.1`, `0.1`, `latest`, `sha-<short>` |
+| Push tag `v0.1.2`          | `0.1.2`, `0.1`, `latest`, `sha-<short>` |
 | Manual `workflow_dispatch` | optional extra tag from the input       |
 
 One-time setup after the **first** successful workflow run, in the GitHub UI:
@@ -162,7 +162,7 @@ echo "$GHCR_PAT" | docker login ghcr.io -u <your-github-username> --password-std
 # 3. Build multi-arch and push.
 docker buildx create --use --name dlslime-builder 2>/dev/null || docker buildx use dlslime-builder
 
-VERSION=0.1.1
+VERSION=0.1.2
 docker buildx build \
     --platform linux/amd64,linux/arm64 \
     -f docker/ctrl.Dockerfile \

@@ -20,7 +20,7 @@ Three modes:
 
 Run directly:
 
-    pytest tests/python/test_stress_imm_recv.py -v
+    pytest dlslime/tests/python/test_stress_imm_recv.py -v
 """
 
 import os

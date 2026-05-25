@@ -22,5 +22,5 @@ dlslime-cache start --ctrl http://127.0.0.1:4479 \
   --port 8765 \
   --memory-size 1G
 
-python examples/python/cache_client_example.py --url http://127.0.0.1:8765
+python dlslime/examples/python/cache_client_example.py --url http://127.0.0.1:8765
 ```

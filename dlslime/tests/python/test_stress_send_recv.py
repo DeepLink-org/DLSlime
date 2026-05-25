@@ -40,12 +40,12 @@ Two tests:
 
 Run directly:
 
-    pytest tests/python/test_stress_send_recv.py -v
+    pytest dlslime/tests/python/test_stress_send_recv.py -v
 
 Overridable via env:
 
     SLIME_MAX_MSG_FIFO_DEPTH=4 STRESS_ROUNDS=32 STRESS_MSG_BYTES=1024 \\
-        pytest tests/python/test_stress_send_recv.py -v
+        pytest dlslime/tests/python/test_stress_send_recv.py -v
 """
 
 # Env must be set before `import dlslime` — the C++ layer reads these

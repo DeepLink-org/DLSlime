@@ -9,7 +9,7 @@ Start NanoCtrl and the cache service first:
 
 Then run this client:
 
-    python examples/python/cache_client_example.py --url http://127.0.0.1:8765
+    python dlslime/examples/python/cache_client_example.py --url http://127.0.0.1:8765
 
 The client asks the cache service for its PeerAgent, creates a local
 PeerAgent, connects over an available RDMA NIC, stores a generated read

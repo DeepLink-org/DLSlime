@@ -89,7 +89,7 @@ The cache service composes a real `PeerAgent`:
 8. The consumer feeds the returned assignments to `agent.read(...)`.
 9. The client removes the manifest with `POST /delete` when done.
 
-The example at `examples/python/cache_client_example.py` performs this full
+The example at `dlslime/examples/python/cache_client_example.py` performs this full
 roundtrip and checks correctness.
 
 ## HTTP API
@@ -328,7 +328,7 @@ dlslime-cache start --ctrl http://127.0.0.1:4479 \
 Run the client:
 
 ```bash
-python examples/python/cache_client_example.py --url http://127.0.0.1:8765
+python dlslime/examples/python/cache_client_example.py --url http://127.0.0.1:8765
 ```
 
 Expected success signal:

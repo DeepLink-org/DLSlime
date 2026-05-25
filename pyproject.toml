@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dlslime-workspace"
-version = "0.1.1"
+version = "0.1.2"
 description = "DLSlime monorepo meta-package (data plane + control plane)"
 authors = [{ name = "JimyMa", email = "hit16s105116@gmail.com" }]
 readme = "README.md"

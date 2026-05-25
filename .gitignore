@@ -221,4 +221,4 @@ scripts/.bin/
 
 .codex
 
-bench/results/**
+dlslime/bench/results/**

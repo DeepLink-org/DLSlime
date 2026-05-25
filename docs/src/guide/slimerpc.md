@@ -34,7 +34,7 @@ SlimeRPC requires:
 
 ```bash
 nanoctrl start
-python examples/python/rpc_example.py --ctrl http://127.0.0.1:4479
+python dlslime/examples/python/rpc_example.py --ctrl http://127.0.0.1:4479
 ```
 
 ## Basic Service
@@ -199,7 +199,7 @@ assert response == b"HELLO"
 ```
 
 This is the right mode for FlatBuffers, Cap'n Proto, protobuf bytes, or custom
-binary layouts. See `examples/python/rpc_flatbuf_example.py` for a complete
+binary layouts. See `dlslime/examples/python/rpc_flatbuf_example.py` for a complete
 FlatBuffers loopback.
 
 ## In-Place Raw Replies
@@ -269,7 +269,7 @@ print(monitor.total_delta())
 
 ## Full Examples
 
-- `examples/python/rpc_example.py`: typed pickle RPC loopback.
-- `examples/python/rpc_flatbuf_example.py`: raw FlatBuffers RPC loopback.
-- `bench/python/rpc_bench_slime_worker.py`: benchmark worker.
-- `bench/python/rpc_bench_slime_driver.py`: benchmark driver.
+- `dlslime/examples/python/rpc_example.py`: typed pickle RPC loopback.
+- `dlslime/examples/python/rpc_flatbuf_example.py`: raw FlatBuffers RPC loopback.
+- `dlslime/bench/python/rpc_bench_slime_worker.py`: benchmark worker.
+- `dlslime/bench/python/rpc_bench_slime_driver.py`: benchmark driver.

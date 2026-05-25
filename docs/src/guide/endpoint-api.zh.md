@@ -56,4 +56,4 @@ Redis、调度器或已有服务注册系统完成。
 ```
 
 `target_offset` 和 `source_offset` 的含义随操作方向变化。建议在接入初期使用小 buffer 做校验，
-并参考 `examples/python/p2p_rdma_rc_read.py` 等示例。
+并参考 `dlslime/examples/python/p2p_rdma_rc_read.py` 等示例。

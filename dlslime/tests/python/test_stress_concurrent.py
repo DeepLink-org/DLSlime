@@ -15,12 +15,12 @@ trivial case; num_qp>=2 actually exercises the mask arithmetic.
 
 Run directly:
 
-    pytest tests/python/test_stress_concurrent.py -v
+    pytest dlslime/tests/python/test_stress_concurrent.py -v
 
 Or drive with a custom depth / op count:
 
     SLIME_MAX_IO_FIFO_DEPTH=32 STRESS_NUM_READS=512 \\
-        pytest tests/python/test_stress_concurrent.py -v
+        pytest dlslime/tests/python/test_stress_concurrent.py -v
 """
 
 # Env must be set before `import dlslime` — the C++ layer reads these

@@ -64,7 +64,7 @@ endif()
 
 
 if (BUILD_TEST)
-    add_subdirectory(tests-cpp)
+    add_subdirectory(tests/cpp)
 endif (BUILD_TEST)
 
 # --- Installation & Export ---

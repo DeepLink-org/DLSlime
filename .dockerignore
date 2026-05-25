@@ -39,9 +39,6 @@ Thumbs.db
 
 # Top-level dirs not needed by ctrl.Dockerfile
 docs/
-bench/
-examples/
-tests/
 docker/
 dlslime/
 cmake/

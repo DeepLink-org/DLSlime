@@ -39,7 +39,7 @@ Node 0:
 ```bash
 torchrun --master-addr <node0-ip> --master-port 6006 \
   --nnodes 2 --nproc-per-node 8 --node-rank 0 \
-  bench/python/agg_transfer_bench_spmd.py \
+  dlslime/bench/python/agg_transfer_bench_spmd.py \
   --qp-num 8 \
   --transfer-engine dlslime \
   --batch-size 64 \
@@ -52,7 +52,7 @@ Node 1:
 ```bash
 torchrun --master-addr <node0-ip> --master-port 6006 \
   --nnodes 2 --nproc-per-node 8 --node-rank 1 \
-  bench/python/agg_transfer_bench_spmd.py \
+  dlslime/bench/python/agg_transfer_bench_spmd.py \
   --qp-num 8 \
   --transfer-engine dlslime \
   --batch-size 64 \
@@ -77,8 +77,8 @@ Endpoint benchmarks are useful when isolating lower-level send/recv or
 read/write behavior before running aggregate workloads:
 
 ```bash
-python bench/python/endpoint_io_bench.py --help
-python bench/python/endpoint_sendrecv_bench.py --help
+python dlslime/bench/python/endpoint_io_bench.py --help
+python dlslime/bench/python/endpoint_sendrecv_bench.py --help
 ```
 
 Use the script help output for the exact transport and message-size arguments,
@@ -90,7 +90,7 @@ because these scripts are closer to the endpoint implementation surface.
 against a Python dict baseline. It does not transfer payload bytes over RDMA.
 
 ```bash
-python bench/python/cache_bench.py \
+python dlslime/bench/python/cache_bench.py \
   --keys 100000 \
   --items-per-key 1 \
   --csv bench/results/cache_assignments.csv
@@ -104,7 +104,7 @@ nanoctrl start
 dlslime-cache start --ctrl http://127.0.0.1:4479 \
   --host 127.0.0.1 --port 8765 --memory-size 1G
 
-python examples/python/cache_client_example.py --url http://127.0.0.1:8765
+python dlslime/examples/python/cache_client_example.py --url http://127.0.0.1:8765
 
 dlslime-cache stop
 ```
@@ -116,21 +116,21 @@ actor baseline. A Pulsing (`@pul.remote`) actor baseline is available as an
 opt-in third comparator.
 
 ```bash
-bash bench/python/run_rpc_bench.sh
+bash dlslime/bench/python/run_rpc_bench.sh
 ```
 
 Include the Pulsing baseline (requires `pip install pulsing`):
 
 ```bash
-bash bench/python/run_rpc_bench.sh --with-pulsing
+bash dlslime/bench/python/run_rpc_bench.sh --with-pulsing
 # or
-WITH_PULSING=1 bash bench/python/run_rpc_bench.sh
+WITH_PULSING=1 bash dlslime/bench/python/run_rpc_bench.sh
 ```
 
 With explicit parameters:
 
 ```bash
-bash bench/python/run_rpc_bench.sh \
+bash dlslime/bench/python/run_rpc_bench.sh \
   --ctrl http://127.0.0.1:4479 \
   --buf-mb 256 \
   --max-size-mb 16

@@ -186,7 +186,7 @@ target.shutdown()
 
 ## Examples
 
-- `examples/python/p2p_rdma_rc_read_ctrl_plane.py`
-- `examples/python/p2p_rdma_multi_agents_ctrl_plane.py`
-- `examples/python/cache_client_example.py`
-- `examples/python/rpc_example.py`
+- `dlslime/examples/python/p2p_rdma_rc_read_ctrl_plane.py`
+- `dlslime/examples/python/p2p_rdma_multi_agents_ctrl_plane.py`
+- `dlslime/examples/python/cache_client_example.py`
+- `dlslime/examples/python/rpc_example.py`
