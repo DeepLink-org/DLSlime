@@ -190,7 +190,7 @@ Coming soon.
 ### PyPI 安装
 
 ```bash
-pip install dlslime==0.0.3.rc2
+pip install dlslime dlslime-ctrl
 ```
 
 PyPI 包使用默认 CMake flags 构建。需要可选传输后端或本地 C++ 改动时，建议

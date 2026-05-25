@@ -207,7 +207,7 @@ Coming soon.
 ### From PyPI
 
 ```bash
-pip install dlslime==0.0.3.rc2
+pip install dlslime dlslime-ctrl
 ```
 
 The PyPI package is built with the default CMake flags. Build from source when

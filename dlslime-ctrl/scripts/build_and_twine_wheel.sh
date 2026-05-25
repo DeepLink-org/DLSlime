@@ -1,29 +1,38 @@
 #!/bin/bash
 set -e
 
-PYTHON_VERSIONS=("cp38-cp38")
+# Build & twine-upload the `dlslime-ctrl` Rust bin wheel.
+#
+# Run from anywhere — anchors to dlslime-ctrl/ automatically.
+#
+# `dlslime-ctrl` is a `bindings = "bin"` maturin project: it ships a single
+# `py3-none-manylinux_*.whl` containing the compiled Rust binary, so we only
+# need ONE build (not per-Python-version) and no `--interpreter` flag.
+#
+# Set NO_UPLOAD=1 to build the wheel but skip `twine upload`.
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"   # dlslime-ctrl/
+cd "$PROJECT_DIR"
+
+PYBIN="${PYBIN:-/opt/python/cp312-cp312/bin}"   # any working python+twine will do
 
 rm -rf dist build
 
-for py_version in "${PYTHON_VERSIONS[@]}"; do
-    echo "====================================="
-    echo "Processing Python version: $py_version"
-    echo "====================================="
+echo "Building wheel with maturin (bin crate, py3-none-*)..."
+"$PYBIN/pip" install --quiet "maturin>=1.0,<2.0"
+"$PYBIN/maturin" build --release --out dist
 
-    export PYTHON_PATH="/opt/python/$py_version/bin/"
-    export PYTHON_EXE="$PYTHON_PATH/python"
-    export PIP_EXE="$PYTHON_PATH/pip"
+echo
+echo "Built wheels:"
+ls -la dist/
 
-    echo "Building wheel with maturin..."
-    $PIP_EXE install "maturin>=1.0,<2.0"
-    $PYTHON_PATH/maturin build --release --interpreter "$PYTHON_EXE" --out dist
+if [[ "${NO_UPLOAD:-0}" == "1" ]]; then
+  echo
+  echo "NO_UPLOAD=1 — skipping twine upload."
+  exit 0
+fi
 
-    $PIP_EXE uninstall -y dlslime-ctrl
-
-    echo "Completed processing $py_version"
-    echo ""
-done
-
-echo "Ready for upload..."
-
-/opt/python/cp38-cp38/bin/twine upload dist/*
+echo
+echo "Uploading to PyPI..."
+"$PYBIN/twine" upload dist/*

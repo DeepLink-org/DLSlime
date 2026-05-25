@@ -1,0 +1,112 @@
+# Build & publish `dlslime` and `dlslime-ctrl` wheels to PyPI on tag push.
+#
+# Auth: PyPI Trusted Publishing via OIDC — no secrets needed.
+# See RELEASING.md for the one-time PyPI configuration.
+#
+# Triggered by `vX.Y.Z` tags (e.g. as produced by scripts/release.sh).
+
+name: pypi-publish
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build wheels but skip the upload step"
+        type: boolean
+        default: false
+
+permissions:
+  id-token: write   # required for OIDC token exchange with PyPI
+  contents: read
+
+jobs:
+  # ---------------- dlslime (Python + C++ via scikit-build-core) -----------------
+  build-dlslime-sdist:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: python -m pip install build
+      - run: python -m build --sdist --outdir dist dlslime
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-dlslime-sdist
+          path: dist/*.tar.gz
+
+  build-dlslime-wheels:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["cp310", "cp311", "cp312", "cp313"]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pypa/cibuildwheel@v2
+        env:
+          # Build only the matching Python ABI on x86_64 manylinux.
+          CIBW_BUILD: "${{ matrix.python }}-manylinux_x86_64"
+          CIBW_BEFORE_ALL_LINUX: |
+            yum install -y libibverbs-devel numactl-devel || \
+            (apt-get update && apt-get install -y libibverbs-dev libnuma-dev)
+          CIBW_ENVIRONMENT: >-
+            CMAKE_ARGS=-DBUILD_RDMA=ON -DBUILD_PYTHON=ON
+            -DBUILD_NVLINK=OFF -DBUILD_TORCH_PLUGIN=OFF
+            -DBUILD_ASCEND_DIRECT=OFF -DBUILD_TEST=OFF
+        with:
+          package-dir: dlslime
+          output-dir: dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-dlslime-${{ matrix.python }}
+          path: dist/*.whl
+
+  # ---------------- dlslime-ctrl (Rust bin wheel via maturin) --------------------
+  build-dlslime-ctrl:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@stable
+      - run: python -m pip install "maturin>=1.0,<2.0"
+      - run: maturin build --release --out dist --manifest-path dlslime-ctrl/Cargo.toml
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-dlslime-ctrl
+          path: dist/*.whl
+
+  # ---------------- Publish to PyPI (Trusted Publishing) -------------------------
+  publish-dlslime:
+    needs: [build-dlslime-sdist, build-dlslime-wheels]
+    if: ${{ github.event_name == 'push' || !inputs.dry_run }}
+    runs-on: ubuntu-24.04
+    environment: pypi   # add manual-approval gate via repo Settings → Environments
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dist-dlslime-*
+          path: dist
+          merge-multiple: true
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
+          # No `password:` — OIDC handles auth.
+
+  publish-dlslime-ctrl:
+    needs: [build-dlslime-ctrl]
+    if: ${{ github.event_name == 'push' || !inputs.dry_run }}
+    runs-on: ubuntu-24.04
+    environment: pypi
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-dlslime-ctrl
+          path: dist
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist

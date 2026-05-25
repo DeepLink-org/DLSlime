@@ -1,6 +1,13 @@
 #!/bin/bash
 set -e
 
+# Build & twine-upload the `dlslime` (data plane) wheels for every Python ABI.
+# Run from anywhere — the script always operates on dlslime/ regardless of CWD.
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"   # dlslime/
+cd "$PROJECT_DIR"
+
 PYTHON_VERSIONS=("cp38-cp38" "cp39-cp39" "cp310-cp310" "cp311-cp311" "cp312-cp312" "cp313-cp313")
 
 rm -rf dist build
@@ -28,7 +35,7 @@ for py_version in "${PYTHON_VERSIONS[@]}"; do
 
     echo "Generating pyi stubs for $py_version..."
 
-    bash scripts/gen_stubs.sh
+    bash "$SCRIPT_DIR/gen_stubs.sh"
 
     find dlslime -name "*.pyi" -print0 | xargs -0 sed -i 's/: json/: dict/g; s/-> json/-> dict/g; s/typing_extensions.CapsuleType/typing.Any/g'
 

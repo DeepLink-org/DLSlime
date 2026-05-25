@@ -92,7 +92,7 @@ handler = initiator_agent.register_memory_region(
     local_tensor.numel() * local_tensor.itemsize,
 )
 
-remote_tensor = torch.ones([16], device="cuda", dtype=torch.uint8)
+remote_tensor = torch.ones([16], device="cpu", dtype=torch.uint8)
 target_agent.register_memory_region(
     "kv",
     remote_tensor.data_ptr(),
