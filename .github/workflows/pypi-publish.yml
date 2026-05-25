@@ -45,7 +45,7 @@ jobs:
         python: ["cp310", "cp311", "cp312", "cp313"]
     steps:
       - uses: actions/checkout@v6
-      - uses: pypa/cibuildwheel@v2
+      - uses: pypa/cibuildwheel@v3.4
         env:
           # Build only the matching Python ABI on x86_64 manylinux.
           CIBW_BUILD: "${{ matrix.python }}-manylinux_x86_64"
