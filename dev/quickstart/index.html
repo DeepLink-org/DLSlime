@@ -1371,31 +1371,31 @@
 <h2 id="direct-endpoint-access">Direct Endpoint Access<a class="headerlink" href="#direct-endpoint-access" title="Permanent link">&para;</a></h2>
 <p>Use the Endpoint API directly when the application already controls peer
 placement, metadata exchange, and memory lifetime.</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>python<span class="w"> </span>examples/python/p2p_rdma_rc_read.py
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>python<span class="w"> </span>examples/python/p2p_rdma_rc_write.py
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>python<span class="w"> </span>examples/python/p2p_rdma_rc_write_with_imm_data.py
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>python<span class="w"> </span>examples/python/p2p_rdma_rc_send_recv_gdr.py
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>torchrun<span class="w"> </span>--nproc_per_node<span class="o">=</span><span class="m">2</span><span class="w"> </span>examples/python/p2p_nvlink.py
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>python<span class="w"> </span>examples/python/p2p_ascend_read.py
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>python<span class="w"> </span>dlslime/examples/python/p2p_rdma_rc_read.py
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>python<span class="w"> </span>dlslime/examples/python/p2p_rdma_rc_write.py
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>python<span class="w"> </span>dlslime/examples/python/p2p_rdma_rc_write_with_imm_data.py
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>python<span class="w"> </span>dlslime/examples/python/p2p_rdma_rc_send_recv_gdr.py
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>torchrun<span class="w"> </span>--nproc_per_node<span class="o">=</span><span class="m">2</span><span class="w"> </span>dlslime/examples/python/p2p_nvlink.py
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>python<span class="w"> </span>dlslime/examples/python/p2p_ascend_read.py
 </span></code></pre></div>
 <h2 id="peeragent-to-peeragent-access">PeerAgent-to-PeerAgent Access<a class="headerlink" href="#peeragent-to-peeragent-access" title="Permanent link">&para;</a></h2>
 <p>Use PeerAgent when the application wants peer-to-peer data movement without
 owning connection setup and memory-region discovery.</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>nanoctrl<span class="w"> </span>start
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>python<span class="w"> </span>examples/python/p2p_rdma_rc_read_ctrl_plane.py
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>python<span class="w"> </span>dlslime/examples/python/p2p_rdma_rc_read_ctrl_plane.py
 </span></code></pre></div>
 <h2 id="dlslimecache-service">DLSlimeCache Service<a class="headerlink" href="#dlslimecache-service" title="Permanent link">&para;</a></h2>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>nanoctrl<span class="w"> </span>start
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>dlslime-cache<span class="w"> </span>start<span class="w"> </span>--ctrl<span class="w"> </span>http://127.0.0.1:3000<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>dlslime-cache<span class="w"> </span>start<span class="w"> </span>--ctrl<span class="w"> </span>http://127.0.0.1:4479<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span>--host<span class="w"> </span><span class="m">127</span>.0.0.1<span class="w"> </span>--port<span class="w"> </span><span class="m">8765</span><span class="w"> </span>--memory-size<span class="w"> </span>1G
 </span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>
-</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>python<span class="w"> </span>examples/python/cache_client_example.py<span class="w"> </span>--url<span class="w"> </span>http://127.0.0.1:8765
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>python<span class="w"> </span>dlslime/examples/python/cache_client_example.py<span class="w"> </span>--url<span class="w"> </span>http://127.0.0.1:8765
 </span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>
 </span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>dlslime-cache<span class="w"> </span>stop
 </span></code></pre></div>
 <h2 id="slimerpc-service">SlimeRPC Service<a class="headerlink" href="#slimerpc-service" title="Permanent link">&para;</a></h2>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>nanoctrl<span class="w"> </span>start
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>python<span class="w"> </span>examples/python/rpc_example.py<span class="w"> </span>--ctrl<span class="w"> </span>http://127.0.0.1:3000
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>python<span class="w"> </span>dlslime/examples/python/rpc_example.py<span class="w"> </span>--ctrl<span class="w"> </span>http://127.0.0.1:4479
 </span></code></pre></div>
 
 

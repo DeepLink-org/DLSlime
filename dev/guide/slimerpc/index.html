@@ -1577,7 +1577,7 @@ DLSlime.</p>
   <code>BUILD_RPC=ON</code>.</li>
 </ul>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>nanoctrl<span class="w"> </span>start
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>python<span class="w"> </span>examples/python/rpc_example.py<span class="w"> </span>--ctrl<span class="w"> </span>http://127.0.0.1:3000
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>python<span class="w"> </span>dlslime/examples/python/rpc_example.py<span class="w"> </span>--ctrl<span class="w"> </span>http://127.0.0.1:4479
 </span></code></pre></div>
 <h2 id="basic-service">Basic Service<a class="headerlink" href="#basic-service" title="Permanent link">&para;</a></h2>
 <p>Define a service class and mark RPC-callable methods with <code>@method</code>:</p>
@@ -1601,8 +1601,8 @@ are assigned deterministically by sorted method name.</p>
 agents:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">dlslime</span><span class="w"> </span><span class="kn">import</span> <span class="n">PeerAgent</span>
 </span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="n">worker</span> <span class="o">=</span> <span class="n">PeerAgent</span><span class="p">(</span><span class="n">nanoctrl_url</span><span class="o">=</span><span class="s2">&quot;http://127.0.0.1:3000&quot;</span><span class="p">,</span> <span class="n">alias</span><span class="o">=</span><span class="s2">&quot;worker:0&quot;</span><span class="p">)</span>
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="n">driver</span> <span class="o">=</span> <span class="n">PeerAgent</span><span class="p">(</span><span class="n">nanoctrl_url</span><span class="o">=</span><span class="s2">&quot;http://127.0.0.1:3000&quot;</span><span class="p">,</span> <span class="n">alias</span><span class="o">=</span><span class="s2">&quot;driver:0&quot;</span><span class="p">)</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="n">worker</span> <span class="o">=</span> <span class="n">PeerAgent</span><span class="p">(</span><span class="n">ctrl_url</span><span class="o">=</span><span class="s2">&quot;http://127.0.0.1:4479&quot;</span><span class="p">,</span> <span class="n">alias</span><span class="o">=</span><span class="s2">&quot;worker:0&quot;</span><span class="p">)</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="n">driver</span> <span class="o">=</span> <span class="n">PeerAgent</span><span class="p">(</span><span class="n">ctrl_url</span><span class="o">=</span><span class="s2">&quot;http://127.0.0.1:4479&quot;</span><span class="p">,</span> <span class="n">alias</span><span class="o">=</span><span class="s2">&quot;driver:0&quot;</span><span class="p">)</span>
 </span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>
 </span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="n">driver_conn</span> <span class="o">=</span> <span class="n">driver</span><span class="o">.</span><span class="n">connect_to</span><span class="p">(</span><span class="s2">&quot;worker:0&quot;</span><span class="p">,</span> <span class="n">ib_port</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">qp_num</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 </span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="n">worker_conn</span> <span class="o">=</span> <span class="n">worker</span><span class="o">.</span><span class="n">connect_to</span><span class="p">(</span><span class="s2">&quot;driver:0&quot;</span><span class="p">,</span> <span class="n">ib_port</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">qp_num</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
@@ -1732,7 +1732,7 @@ request pointer, and request byte length:</p>
 </span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="k">assert</span> <span class="n">response</span> <span class="o">==</span> <span class="sa">b</span><span class="s2">&quot;HELLO&quot;</span>
 </span></code></pre></div>
 <p>This is the right mode for FlatBuffers, Cap'n Proto, protobuf bytes, or custom
-binary layouts. See <code>examples/python/rpc_flatbuf_example.py</code> for a complete
+binary layouts. See <code>dlslime/examples/python/rpc_flatbuf_example.py</code> for a complete
 FlatBuffers loopback.</p>
 <h2 id="in-place-raw-replies">In-Place Raw Replies<a class="headerlink" href="#in-place-raw-replies" title="Permanent link">&para;</a></h2>
 <p>For very small hot-path handlers, <code>@method(raw=True, inplace=True)</code> lets the
@@ -1800,10 +1800,10 @@ tests and controlled loops:</p>
 </span></code></pre></div>
 <h2 id="full-examples">Full Examples<a class="headerlink" href="#full-examples" title="Permanent link">&para;</a></h2>
 <ul>
-<li><code>examples/python/rpc_example.py</code>: typed pickle RPC loopback.</li>
-<li><code>examples/python/rpc_flatbuf_example.py</code>: raw FlatBuffers RPC loopback.</li>
-<li><code>bench/python/rpc_bench_slime_worker.py</code>: benchmark worker.</li>
-<li><code>bench/python/rpc_bench_slime_driver.py</code>: benchmark driver.</li>
+<li><code>dlslime/examples/python/rpc_example.py</code>: typed pickle RPC loopback.</li>
+<li><code>dlslime/examples/python/rpc_flatbuf_example.py</code>: raw FlatBuffers RPC loopback.</li>
+<li><code>dlslime/bench/python/rpc_bench_slime_worker.py</code>: benchmark worker.</li>
+<li><code>dlslime/bench/python/rpc_bench_slime_driver.py</code>: benchmark driver.</li>
 </ul>
 
 

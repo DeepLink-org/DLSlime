@@ -1327,20 +1327,21 @@
 
 <h1 id="_1">安装指南<a class="headerlink" href="#_1" title="Permanent link">&para;</a></h1>
 <h2 id="pypi">从 PyPI 安装<a class="headerlink" href="#pypi" title="Permanent link">&para;</a></h2>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="nv">dlslime</span><span class="o">==</span><span class="m">0</span>.0.3
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pip<span class="w"> </span>install<span class="w"> </span>dlslime<span class="w"> </span>dlslime-ctrl
 </span></code></pre></div>
 <p>PyPI 包使用默认 CMake 选项构建。如果需要可选传输后端或本地 C++ 修改，请从源码构建。</p>
 <h2 id="_2">从源码安装<a class="headerlink" href="#_2" title="Permanent link">&para;</a></h2>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/DeepLink-org/DLSlime.git
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nb">cd</span><span class="w"> </span>DLSlime
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>pip<span class="w"> </span>install<span class="w"> </span>-v<span class="w"> </span>--no-build-isolation<span class="w"> </span>-e<span class="w"> </span>.
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>pip<span class="w"> </span>install<span class="w"> </span>-v<span class="w"> </span>--no-build-isolation<span class="w"> </span>-e<span class="w"> </span>dlslime
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span>dlslime-ctrl<span class="w">                 </span><span class="c1"># 可选：Rust 控制面</span>
 </span></code></pre></div>
 <p>启用可选组件时，可以通过环境变量传递 CMake 选项：</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nv">BUILD_NVLINK</span><span class="o">=</span>ON<span class="w"> </span><span class="nv">BUILD_TORCH_PLUGIN</span><span class="o">=</span>ON<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span>pip<span class="w"> </span>install<span class="w"> </span>-v<span class="w"> </span>--no-build-isolation<span class="w"> </span>-e<span class="w"> </span>.
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span>pip<span class="w"> </span>install<span class="w"> </span>-v<span class="w"> </span>--no-build-isolation<span class="w"> </span>-e<span class="w"> </span>dlslime
 </span></code></pre></div>
 <p>纯 C++ 构建：</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>cmake<span class="w"> </span>-S<span class="w"> </span>.<span class="w"> </span>-B<span class="w"> </span>build<span class="w"> </span>-GNinja<span class="w"> </span>-DBUILD_PYTHON<span class="o">=</span>OFF<span class="w"> </span>-DBUILD_RDMA<span class="o">=</span>ON
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>cmake<span class="w"> </span>-S<span class="w"> </span>dlslime<span class="w"> </span>-B<span class="w"> </span>build<span class="w"> </span>-GNinja<span class="w"> </span>-DBUILD_PYTHON<span class="o">=</span>OFF<span class="w"> </span>-DBUILD_RDMA<span class="o">=</span>ON
 </span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>cmake<span class="w"> </span>--build<span class="w"> </span>build
 </span></code></pre></div>
 

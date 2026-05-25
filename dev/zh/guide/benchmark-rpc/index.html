@@ -1466,12 +1466,12 @@ bytes echo RPC across payload sizes from <code>1KB</code> up to <code>16MB</code
 </ul>
 <h2 id="files">Files<a class="headerlink" href="#files" title="Permanent link">&para;</a></h2>
 <ul>
-<li><code>bench/python/run_rpc_bench.sh</code></li>
-<li><code>bench/python/rpc_bench_slime_worker.py</code></li>
-<li><code>bench/python/rpc_bench_slime_driver.py</code></li>
-<li><code>bench/python/rpc_bench_ray.py</code></li>
-<li><code>bench/python/rpc_bench_pulsing.py</code></li>
-<li><code>bench/python/rpc_bench_compare.py</code></li>
+<li><code>dlslime/bench/python/run_rpc_bench.sh</code></li>
+<li><code>dlslime/bench/python/rpc_bench_slime_worker.py</code></li>
+<li><code>dlslime/bench/python/rpc_bench_slime_driver.py</code></li>
+<li><code>dlslime/bench/python/rpc_bench_ray.py</code></li>
+<li><code>dlslime/bench/python/rpc_bench_pulsing.py</code></li>
+<li><code>dlslime/bench/python/rpc_bench_compare.py</code></li>
 </ul>
 <h2 id="prerequisites">Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">&para;</a></h2>
 <p>Before running the SlimeRPC side:</p>
@@ -1484,22 +1484,22 @@ bytes echo RPC across payload sizes from <code>1KB</code> up to <code>16MB</code
 (<code>pip install pulsing</code>) in the same environment.</p>
 <h2 id="run">Run<a class="headerlink" href="#run" title="Permanent link">&para;</a></h2>
 <p>Default run (SlimeRPC + Ray, Pulsing disabled):</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>bash<span class="w"> </span>bench/python/run_rpc_bench.sh
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>bash<span class="w"> </span>dlslime/bench/python/run_rpc_bench.sh
 </span></code></pre></div>
 <p>Include the Pulsing baseline:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>bash<span class="w"> </span>bench/python/run_rpc_bench.sh<span class="w"> </span>--with-pulsing
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>bash<span class="w"> </span>dlslime/bench/python/run_rpc_bench.sh<span class="w"> </span>--with-pulsing
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="c1"># or</span>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="nv">WITH_PULSING</span><span class="o">=</span><span class="m">1</span><span class="w"> </span>bash<span class="w"> </span>bench/python/run_rpc_bench.sh
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="nv">WITH_PULSING</span><span class="o">=</span><span class="m">1</span><span class="w"> </span>bash<span class="w"> </span>dlslime/bench/python/run_rpc_bench.sh
 </span></code></pre></div>
 <p>Specify control-plane address or buffer size:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>bash<span class="w"> </span>bench/python/run_rpc_bench.sh<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span>--ctrl<span class="w"> </span>http://127.0.0.1:3000<span class="w"> </span><span class="se">\</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>bash<span class="w"> </span>dlslime/bench/python/run_rpc_bench.sh<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span>--ctrl<span class="w"> </span>http://127.0.0.1:4479<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span>--buf-mb<span class="w"> </span><span class="m">256</span><span class="w"> </span><span class="se">\</span>
 </span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span>--max-size-mb<span class="w"> </span><span class="m">16</span>
 </span></code></pre></div>
 <p>Environment-variable form:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nv">CTRL</span><span class="o">=</span>http://127.0.0.1:3000<span class="w"> </span><span class="nv">BUF_MB</span><span class="o">=</span><span class="m">256</span><span class="w"> </span><span class="nv">MAX_SIZE_MB</span><span class="o">=</span><span class="m">16</span><span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span>bash<span class="w"> </span>bench/python/run_rpc_bench.sh
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nv">CTRL</span><span class="o">=</span>http://127.0.0.1:4479<span class="w"> </span><span class="nv">BUF_MB</span><span class="o">=</span><span class="m">256</span><span class="w"> </span><span class="nv">MAX_SIZE_MB</span><span class="o">=</span><span class="m">16</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span>bash<span class="w"> </span>dlslime/bench/python/run_rpc_bench.sh
 </span></code></pre></div>
 <h2 id="output">Output<a class="headerlink" href="#output" title="Permanent link">&para;</a></h2>
 <p>The script always writes:</p>

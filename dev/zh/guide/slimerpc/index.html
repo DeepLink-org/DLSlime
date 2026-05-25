@@ -1530,7 +1530,7 @@ Python 服务调用，同时把连接建立、内存注册和 request/reply 传�
 <li>DLSlime 构建时启用了 C++ RPC session。若未启用，<code>proxy()</code> 会提示需要用 <code>BUILD_RPC=ON</code> 重新构建。</li>
 </ul>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>nanoctrl<span class="w"> </span>start
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>python<span class="w"> </span>examples/python/rpc_example.py<span class="w"> </span>--ctrl<span class="w"> </span>http://127.0.0.1:3000
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>python<span class="w"> </span>dlslime/examples/python/rpc_example.py<span class="w"> </span>--ctrl<span class="w"> </span>http://127.0.0.1:4479
 </span></code></pre></div>
 <h2 id="_2">定义服务<a class="headerlink" href="#_2" title="Permanent link">&para;</a></h2>
 <p>用 <code>@method</code> 标记可远程调用的方法：</p>
@@ -1551,8 +1551,8 @@ Python 服务调用，同时把连接建立、内存注册和 request/reply 传�
 <p>SlimeRPC 依赖 PeerAgent 连接，不替代 discovery 流程：</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">dlslime</span><span class="w"> </span><span class="kn">import</span> <span class="n">PeerAgent</span>
 </span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="n">worker</span> <span class="o">=</span> <span class="n">PeerAgent</span><span class="p">(</span><span class="n">nanoctrl_url</span><span class="o">=</span><span class="s2">&quot;http://127.0.0.1:3000&quot;</span><span class="p">,</span> <span class="n">alias</span><span class="o">=</span><span class="s2">&quot;worker:0&quot;</span><span class="p">)</span>
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="n">driver</span> <span class="o">=</span> <span class="n">PeerAgent</span><span class="p">(</span><span class="n">nanoctrl_url</span><span class="o">=</span><span class="s2">&quot;http://127.0.0.1:3000&quot;</span><span class="p">,</span> <span class="n">alias</span><span class="o">=</span><span class="s2">&quot;driver:0&quot;</span><span class="p">)</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="n">worker</span> <span class="o">=</span> <span class="n">PeerAgent</span><span class="p">(</span><span class="n">ctrl_url</span><span class="o">=</span><span class="s2">&quot;http://127.0.0.1:4479&quot;</span><span class="p">,</span> <span class="n">alias</span><span class="o">=</span><span class="s2">&quot;worker:0&quot;</span><span class="p">)</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="n">driver</span> <span class="o">=</span> <span class="n">PeerAgent</span><span class="p">(</span><span class="n">ctrl_url</span><span class="o">=</span><span class="s2">&quot;http://127.0.0.1:4479&quot;</span><span class="p">,</span> <span class="n">alias</span><span class="o">=</span><span class="s2">&quot;driver:0&quot;</span><span class="p">)</span>
 </span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>
 </span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="n">driver_conn</span> <span class="o">=</span> <span class="n">driver</span><span class="o">.</span><span class="n">connect_to</span><span class="p">(</span><span class="s2">&quot;worker:0&quot;</span><span class="p">,</span> <span class="n">ib_port</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">qp_num</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 </span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="n">worker_conn</span> <span class="o">=</span> <span class="n">worker</span><span class="o">.</span><span class="n">connect_to</span><span class="p">(</span><span class="s2">&quot;driver:0&quot;</span><span class="p">,</span> <span class="n">ib_port</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">qp_num</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
@@ -1642,7 +1642,7 @@ Python 服务调用，同时把连接建立、内存注册和 request/reply 传�
 </span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="n">response</span> <span class="o">=</span> <span class="n">raw</span><span class="o">.</span><span class="n">echo</span><span class="p">(</span><span class="sa">b</span><span class="s2">&quot;hello&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
 </span></code></pre></div>
 <p>Raw 模式适合 FlatBuffers、protobuf bytes 或自定义二进制布局。完整示例见
-<code>examples/python/rpc_flatbuf_example.py</code>。</p>
+<code>dlslime/examples/python/rpc_flatbuf_example.py</code>。</p>
 <h2 id="in-place-raw">In-Place Raw 回复<a class="headerlink" href="#in-place-raw" title="Permanent link">&para;</a></h2>
 <p><code>@method(raw=True, inplace=True)</code> 允许 handler 直接把回复写入已注册的 send buffer：</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">InplaceService</span><span class="p">:</span>
@@ -1687,10 +1687,10 @@ Python 服务调用，同时把连接建立、内存注册和 request/reply 传�
 </span></code></pre></div>
 <h2 id="_4">示例<a class="headerlink" href="#_4" title="Permanent link">&para;</a></h2>
 <ul>
-<li><code>examples/python/rpc_example.py</code>：typed pickle RPC loopback。</li>
-<li><code>examples/python/rpc_flatbuf_example.py</code>：raw FlatBuffers RPC loopback。</li>
-<li><code>bench/python/rpc_bench_slime_worker.py</code>：benchmark worker。</li>
-<li><code>bench/python/rpc_bench_slime_driver.py</code>：benchmark driver。</li>
+<li><code>dlslime/examples/python/rpc_example.py</code>：typed pickle RPC loopback。</li>
+<li><code>dlslime/examples/python/rpc_flatbuf_example.py</code>：raw FlatBuffers RPC loopback。</li>
+<li><code>dlslime/bench/python/rpc_bench_slime_worker.py</code>：benchmark worker。</li>
+<li><code>dlslime/bench/python/rpc_bench_slime_driver.py</code>：benchmark driver。</li>
 </ul>
 
 

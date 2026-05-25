@@ -1449,7 +1449,7 @@ named memory regions, and automatic cleanup around stale control-plane state.</p
 <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">dlslime</span><span class="w"> </span><span class="kn">import</span> <span class="n">start_peer_agent</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">agent</span> <span class="o">=</span> <span class="n">start_peer_agent</span><span class="p">(</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">nanoctrl_url</span><span class="o">=</span><span class="s2">&quot;http://127.0.0.1:3000&quot;</span><span class="p">,</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">ctrl_url</span><span class="o">=</span><span class="s2">&quot;http://127.0.0.1:4479&quot;</span><span class="p">,</span>
 </span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">alias</span><span class="o">=</span><span class="s2">&quot;worker-a&quot;</span><span class="p">,</span>       <span class="c1"># optional; NanoCtrl can allocate one</span>
 </span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">device</span><span class="o">=</span><span class="s2">&quot;mlx5_0&quot;</span><span class="p">,</span>        <span class="c1"># optional preferred NIC</span>
 </span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">scope</span><span class="o">=</span><span class="s2">&quot;job-123&quot;</span><span class="p">,</span>        <span class="c1"># optional isolation prefix</span>
@@ -1635,8 +1635,8 @@ remote handles:</p>
 </span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>
 </span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="n">scope</span> <span class="o">=</span> <span class="s2">&quot;peeragent-api-demo&quot;</span>
 </span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>
-</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="n">initiator</span> <span class="o">=</span> <span class="n">start_peer_agent</span><span class="p">(</span><span class="n">nanoctrl_url</span><span class="o">=</span><span class="s2">&quot;http://127.0.0.1:3000&quot;</span><span class="p">,</span> <span class="n">scope</span><span class="o">=</span><span class="n">scope</span><span class="p">)</span>
-</span><span id="__span-10-7"><a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="n">target</span> <span class="o">=</span> <span class="n">start_peer_agent</span><span class="p">(</span><span class="n">nanoctrl_url</span><span class="o">=</span><span class="s2">&quot;http://127.0.0.1:3000&quot;</span><span class="p">,</span> <span class="n">scope</span><span class="o">=</span><span class="n">scope</span><span class="p">)</span>
+</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="n">initiator</span> <span class="o">=</span> <span class="n">start_peer_agent</span><span class="p">(</span><span class="n">ctrl_url</span><span class="o">=</span><span class="s2">&quot;http://127.0.0.1:4479&quot;</span><span class="p">,</span> <span class="n">scope</span><span class="o">=</span><span class="n">scope</span><span class="p">)</span>
+</span><span id="__span-10-7"><a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="n">target</span> <span class="o">=</span> <span class="n">start_peer_agent</span><span class="p">(</span><span class="n">ctrl_url</span><span class="o">=</span><span class="s2">&quot;http://127.0.0.1:4479&quot;</span><span class="p">,</span> <span class="n">scope</span><span class="o">=</span><span class="n">scope</span><span class="p">)</span>
 </span><span id="__span-10-8"><a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a>
 </span><span id="__span-10-9"><a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a><span class="n">initiator_conn</span> <span class="o">=</span> <span class="n">initiator</span><span class="o">.</span><span class="n">connect_to</span><span class="p">(</span><span class="n">target</span><span class="o">.</span><span class="n">alias</span><span class="p">,</span> <span class="n">ib_port</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">qp_num</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 </span><span id="__span-10-10"><a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a><span class="n">target_conn</span> <span class="o">=</span> <span class="n">target</span><span class="o">.</span><span class="n">connect_to</span><span class="p">(</span><span class="n">initiator</span><span class="o">.</span><span class="n">alias</span><span class="p">,</span> <span class="n">ib_port</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">qp_num</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
@@ -1657,10 +1657,10 @@ remote handles:</p>
 </span></code></pre></div>
 <h2 id="examples">Examples<a class="headerlink" href="#examples" title="Permanent link">&para;</a></h2>
 <ul>
-<li><code>examples/python/p2p_rdma_rc_read_ctrl_plane.py</code></li>
-<li><code>examples/python/p2p_rdma_multi_agents_ctrl_plane.py</code></li>
-<li><code>examples/python/cache_client_example.py</code></li>
-<li><code>examples/python/rpc_example.py</code></li>
+<li><code>dlslime/examples/python/p2p_rdma_rc_read_ctrl_plane.py</code></li>
+<li><code>dlslime/examples/python/p2p_rdma_multi_agents_ctrl_plane.py</code></li>
+<li><code>dlslime/examples/python/cache_client_example.py</code></li>
+<li><code>dlslime/examples/python/rpc_example.py</code></li>
 </ul>
 
 

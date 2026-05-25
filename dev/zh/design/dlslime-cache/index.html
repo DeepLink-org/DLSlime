@@ -1773,7 +1773,7 @@ consumer's RDMA read path.</p>
 <li>The consumer feeds the returned assignments to <code>agent.read(...)</code>.</li>
 <li>The client removes the manifest with <code>POST /delete</code> when done.</li>
 </ol>
-<p>The example at <code>examples/python/cache_client_example.py</code> performs this full
+<p>The example at <code>dlslime/examples/python/cache_client_example.py</code> performs this full
 roundtrip and checks correctness.</p>
 <h2 id="http-api">HTTP API<a class="headerlink" href="#http-api" title="Permanent link">&para;</a></h2>
 <h3 id="get-healthz"><code>GET /healthz</code><a class="headerlink" href="#get-healthz" title="Permanent link">&para;</a></h3>
@@ -1800,7 +1800,7 @@ roundtrip and checks correctness.</p>
 </span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span><span class="nt">&quot;peer_agent_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;cache-agent:0&quot;</span><span class="p">,</span>
 </span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">  </span><span class="nt">&quot;cache_mr_name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;cache&quot;</span><span class="p">,</span>
 </span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">  </span><span class="nt">&quot;cache_mr_handle&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">123</span><span class="p">,</span>
-</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">  </span><span class="nt">&quot;nanoctrl_url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;http://127.0.0.1:3000&quot;</span><span class="p">,</span>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">  </span><span class="nt">&quot;ctrl_url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;http://127.0.0.1:4479&quot;</span><span class="p">,</span>
 </span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="w">  </span><span class="nt">&quot;scope&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
 </span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="w">  </span><span class="nt">&quot;slab_size&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">262144</span><span class="p">,</span>
 </span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="w">  </span><span class="nt">&quot;memory_size&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1073741824</span><span class="p">,</span>
@@ -1865,7 +1865,7 @@ cache MR.</p>
 </span></code></pre></div>
 <p>Data mode requires preallocated memory:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>nanoctrl<span class="w"> </span>start
-</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>dlslime-cache<span class="w"> </span>start<span class="w"> </span>--ctrl<span class="w"> </span>http://127.0.0.1:3000<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>dlslime-cache<span class="w"> </span>start<span class="w"> </span>--ctrl<span class="w"> </span>http://127.0.0.1:4479<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="w">    </span>--host<span class="w"> </span><span class="m">127</span>.0.0.1<span class="w"> </span>--port<span class="w"> </span><span class="m">8765</span><span class="w"> </span>--memory-size<span class="w"> </span>1G
 </span></code></pre></div>
 <p><code>--metadata-only</code> exists only for parser/control-plane tests. It starts the
@@ -1878,7 +1878,7 @@ use it.</p>
 <li><code>--memory-size</code>: preallocated cache MR size. Accepts suffixes such as
   <code>512M</code> and <code>1G</code>.</li>
 <li><code>--cache-mr-name</code>: PeerAgent memory-region name, default <code>cache</code>.</li>
-<li><code>--ctrl</code>: NanoCtrl address, default <code>http://127.0.0.1:3000</code>.</li>
+<li><code>--ctrl</code>: NanoCtrl address, default <code>http://127.0.0.1:4479</code>.</li>
 <li><code>--peer-agent-alias</code>: optional fixed alias for the service PeerAgent.</li>
 </ul>
 <h2 id="python-client">Python Client<a class="headerlink" href="#python-client" title="Permanent link">&para;</a></h2>
@@ -1985,11 +1985,11 @@ semantics ambiguous in the current V0 directory.</p>
 <h2 id="example">Example<a class="headerlink" href="#example" title="Permanent link">&para;</a></h2>
 <p>Start services:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>nanoctrl<span class="w"> </span>start
-</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>dlslime-cache<span class="w"> </span>start<span class="w"> </span>--ctrl<span class="w"> </span>http://127.0.0.1:3000<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>dlslime-cache<span class="w"> </span>start<span class="w"> </span>--ctrl<span class="w"> </span>http://127.0.0.1:4479<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-14-3"><a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="w">    </span>--host<span class="w"> </span><span class="m">127</span>.0.0.1<span class="w"> </span>--port<span class="w"> </span><span class="m">8765</span><span class="w"> </span>--memory-size<span class="w"> </span>1G
 </span></code></pre></div>
 <p>Run the client:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>python<span class="w"> </span>examples/python/cache_client_example.py<span class="w"> </span>--url<span class="w"> </span>http://127.0.0.1:8765
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>python<span class="w"> </span>dlslime/examples/python/cache_client_example.py<span class="w"> </span>--url<span class="w"> </span>http://127.0.0.1:8765
 </span></code></pre></div>
 <p>Expected success signal:</p>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>correctness: ok
