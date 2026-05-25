@@ -56,6 +56,21 @@ jobs:
             CMAKE_ARGS=-DBUILD_RDMA=ON -DBUILD_PYTHON=ON
             -DBUILD_NVLINK=OFF -DBUILD_TORCH_PLUGIN=OFF
             -DBUILD_ASCEND_DIRECT=OFF -DBUILD_TEST=OFF
+          # Don't try to bundle libibverbs / libnuma into the wheel:
+          # they're system-level libraries (provided by the rdma-core / numactl
+          # packages on the user's host) and are NOT in the manylinux policy
+          # whitelist, so auditwheel would otherwise fail with
+          # `auditwheel repair ... failed with code 1`.
+          CIBW_REPAIR_WHEEL_COMMAND_LINUX: >-
+            auditwheel repair
+            --exclude libibverbs.so.1
+            --exclude libnuma.so.1
+            --exclude libmlx5.so.1
+            --exclude libmlx4.so.1
+            --exclude librdmacm.so.1
+            --exclude libibumad.so.3
+            --exclude libefa.so.1
+            -w {dest_dir} {wheel}
         with:
           package-dir: dlslime
           output-dir: dist
