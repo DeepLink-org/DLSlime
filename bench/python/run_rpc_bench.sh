@@ -2,17 +2,17 @@
 # run_rpc_bench.sh — run SlimeRPC + Ray benchmarks (+ optional Pulsing) and print comparison.
 #
 # Usage:
-#   bash run_rpc_bench.sh [--ctrl http://127.0.0.1:3000] [--buf-mb 256] [--max-size-mb 16] \
+#   bash run_rpc_bench.sh [--ctrl http://127.0.0.1:4479] [--buf-mb 256] [--max-size-mb 16] \
 #                         [--scope rpc-bench-...] [--with-pulsing]
 #
 # Environment overrides:
-#   CTRL=http://host:3000 MAX_SIZE_MB=16 WITH_PULSING=1 bash run_rpc_bench.sh
+#   CTRL=http://host:4479 MAX_SIZE_MB=16 WITH_PULSING=1 bash run_rpc_bench.sh
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RESULTS_DIR="$SCRIPT_DIR/../results"
-CTRL="${CTRL:-http://127.0.0.1:3000}"
+CTRL="${CTRL:-http://127.0.0.1:4479}"
 BUF_MB="${BUF_MB:-256}"
 MAX_SIZE_MB="${MAX_SIZE_MB:-16}"
 SCOPE="${SCOPE:-rpc-bench-$(date +%s)-$$}"

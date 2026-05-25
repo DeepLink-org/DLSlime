@@ -14,7 +14,7 @@ named memory regions, and automatic cleanup around stale control-plane state.
 from dlslime import start_peer_agent
 
 agent = start_peer_agent(
-    nanoctrl_url="http://127.0.0.1:3000",
+    ctrl_url="http://127.0.0.1:4479",
     alias="worker-a",       # optional; NanoCtrl can allocate one
     device="mlx5_0",        # optional preferred NIC
     scope="job-123",        # optional isolation prefix
@@ -163,8 +163,8 @@ from dlslime import start_peer_agent
 
 scope = "peeragent-api-demo"
 
-initiator = start_peer_agent(nanoctrl_url="http://127.0.0.1:3000", scope=scope)
-target = start_peer_agent(nanoctrl_url="http://127.0.0.1:3000", scope=scope)
+initiator = start_peer_agent(ctrl_url="http://127.0.0.1:4479", scope=scope)
+target = start_peer_agent(ctrl_url="http://127.0.0.1:4479", scope=scope)
 
 initiator_conn = initiator.connect_to(target.alias, ib_port=1, qp_num=1)
 target_conn = target.connect_to(initiator.alias, ib_port=1, qp_num=1)

@@ -98,7 +98,7 @@ with contextlib.ExitStack() as stack:
             # NanoCtrl auto-generates unique name (no alias parameter)
             agent = start_peer_agent(
                 # alias=None (default) - NanoCtrl will auto-generate unique name
-                nanoctrl_url="http://127.0.0.1:3000",
+                ctrl_url="http://127.0.0.1:4479",
             )
             stack.enter_context(agent)  # Auto-cleanup on exit
             # Use allocated name as key

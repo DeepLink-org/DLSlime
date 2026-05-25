@@ -1,0 +1,69 @@
+# DLSlime control plane — bundled with Redis, both exposed on the host.
+#
+# Default host ports (override via docker/.env or shell env):
+#   dlslime-ctrl HTTP   : 4479    (override DLSLIME_CTRL_PORT)
+#   Redis                : 16379  (override DLSLIME_CTRL_REDIS_HOST_PORT)
+#
+# Both are deliberately non-standard so they do not collide with a host's
+# existing Redis on 6379 or any local HTTP service on 3000/8080.
+#
+# How traffic flows:
+#   * ctrl ↔ Redis : compose-internal DNS (redis://redis:6379), zero-cost.
+#   * PeerAgent (outside compose) → ctrl : http://<host>:4479
+#   * PeerAgent (outside compose) → Redis : redis://<host>:16379
+#     (ctrl tells PeerAgent this URL via DLSLIME_CTRL_REDIS_ADVERTISE.)
+#
+# Usage (from the DLSlime repo root):
+#   docker compose -f docker/docker-compose.yml up -d
+#   docker compose -f docker/docker-compose.yml logs -f ctrl
+#   docker compose -f docker/docker-compose.yml down
+
+services:
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "${DLSLIME_CTRL_REDIS_HOST_PORT:-16379}:6379"
+    networks:
+      - dlslime
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 10
+    restart: unless-stopped
+
+  ctrl:
+    build:
+      context: ..
+      dockerfile: docker/ctrl.Dockerfile
+      # Use host network during build so apt / cargo can reach a proxy
+      # listening on 127.0.0.1 on the host (e.g. http_proxy=127.0.0.1:7890).
+      network: host
+    # Defaults to a locally-built tag. Override to a published GHCR image
+    # (e.g. `ghcr.io/deeplink-org/dlslime-ctrl:0.1.1`) to skip the local build:
+    #   echo "DLSLIME_CTRL_IMAGE=ghcr.io/deeplink-org/dlslime-ctrl:0.1.1"  >> docker/.env
+    #   echo "DLSLIME_CTRL_PULL_POLICY=missing"                            >> docker/.env
+    image: ${DLSLIME_CTRL_IMAGE:-dlslime-ctrl:local}
+    pull_policy: ${DLSLIME_CTRL_PULL_POLICY:-build}
+    environment:
+      # ctrl's own connection to Redis — internal DNS, never leaves the bridge.
+      DLSLIME_CTRL_REDIS_URL: redis://redis:6379
+      # What ctrl tells external PeerAgents about Redis. They must be able to
+      # reach this URL from wherever they run. Defaults to the docker host's
+      # loopback; override DLSLIME_CTRL_ADVERTISE_HOST to your LAN IP / FQDN
+      # when PeerAgents live on a different machine.
+      DLSLIME_CTRL_REDIS_ADVERTISE: redis://${DLSLIME_CTRL_ADVERTISE_HOST:-127.0.0.1}:${DLSLIME_CTRL_REDIS_HOST_PORT:-16379}
+      DLSLIME_CTRL_RUST_LOG: ${DLSLIME_CTRL_RUST_LOG:-info}
+    ports:
+      - "${DLSLIME_CTRL_PORT:-4479}:4479"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - dlslime
+    restart: unless-stopped
+
+networks:
+  dlslime:
+    driver: bridge

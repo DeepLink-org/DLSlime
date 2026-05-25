@@ -12,7 +12,7 @@ PeerAgent 是 DLSlime 面向服务场景的 endpoint facade。它会向 NanoCtrl
 from dlslime import start_peer_agent
 
 agent = start_peer_agent(
-    nanoctrl_url="http://127.0.0.1:3000",
+    ctrl_url="http://127.0.0.1:4479",
     alias="worker-a",   # 可选；也可由 NanoCtrl 自动分配
     device="mlx5_0",    # 可选首选 NIC
     scope="job-123",    # 可选隔离前缀

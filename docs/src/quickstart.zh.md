@@ -26,7 +26,7 @@ python examples/python/p2p_rdma_rc_read_ctrl_plane.py
 
 ```bash
 nanoctrl start
-dlslime-cache start --ctrl http://127.0.0.1:3000 \
+dlslime-cache start --ctrl http://127.0.0.1:4479 \
   --host 127.0.0.1 --port 8765 --memory-size 1G
 
 python examples/python/cache_client_example.py --url http://127.0.0.1:8765

@@ -81,8 +81,8 @@ def test_multi_qp_completion_is_counted_once():
     if not getattr(_c, "_BUILD_RDMA", False):
         pytest.skip("build does not include RDMA")
 
-    nanoctrl_url = os.environ.get("NANOCTRL_URL", "http://127.0.0.1:3000")
-    _need_nanoctrl(nanoctrl_url)
+    ctrl_url = os.environ.get("DLSLIME_CTRL_URL", "http://127.0.0.1:4479")
+    _need_nanoctrl(ctrl_url)
 
     try:
         from dlslime import start_peer_agent
@@ -103,12 +103,12 @@ def test_multi_qp_completion_is_counted_once():
     try:
         try:
             initiator = start_peer_agent(
-                nanoctrl_url=nanoctrl_url,
+                ctrl_url=ctrl_url,
                 alias=f"obs-init-{uuid.uuid4().hex[:6]}",
                 scope=scope,
             )
             target = start_peer_agent(
-                nanoctrl_url=nanoctrl_url,
+                ctrl_url=ctrl_url,
                 alias=f"obs-tgt-{uuid.uuid4().hex[:6]}",
                 scope=scope,
             )
@@ -225,8 +225,8 @@ def test_multi_qp_pending_never_negative_across_writes():
     if not getattr(_c, "_BUILD_RDMA", False):
         pytest.skip("build does not include RDMA")
 
-    nanoctrl_url = os.environ.get("NANOCTRL_URL", "http://127.0.0.1:3000")
-    _need_nanoctrl(nanoctrl_url)
+    ctrl_url = os.environ.get("DLSLIME_CTRL_URL", "http://127.0.0.1:4479")
+    _need_nanoctrl(ctrl_url)
 
     try:
         from dlslime import start_peer_agent
@@ -241,12 +241,12 @@ def test_multi_qp_pending_never_negative_across_writes():
     try:
         try:
             initiator = start_peer_agent(
-                nanoctrl_url=nanoctrl_url,
+                ctrl_url=ctrl_url,
                 alias=f"obs-burst-init-{uuid.uuid4().hex[:6]}",
                 scope=scope,
             )
             target = start_peer_agent(
-                nanoctrl_url=nanoctrl_url,
+                ctrl_url=ctrl_url,
                 alias=f"obs-burst-tgt-{uuid.uuid4().hex[:6]}",
                 scope=scope,
             )

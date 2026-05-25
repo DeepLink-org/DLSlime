@@ -66,7 +66,7 @@ Specify control-plane address or buffer size:
 
 ```bash
 bash bench/python/run_rpc_bench.sh \
-  --ctrl http://127.0.0.1:3000 \
+  --ctrl http://127.0.0.1:4479 \
   --buf-mb 256 \
   --max-size-mb 16
 ```
@@ -74,7 +74,7 @@ bash bench/python/run_rpc_bench.sh \
 Environment-variable form:
 
 ```bash
-CTRL=http://127.0.0.1:3000 BUF_MB=256 MAX_SIZE_MB=16 \
+CTRL=http://127.0.0.1:4479 BUF_MB=256 MAX_SIZE_MB=16 \
   bash bench/python/run_rpc_bench.sh
 ```
 

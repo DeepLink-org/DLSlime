@@ -6,8 +6,8 @@ Prerequisites:
     2. Redis must be reachable (NanoCtrl returns its address automatically).
 
 Usage:
-    python rpc_example.py                       # default NanoCtrl at localhost:3000
-    python rpc_example.py --ctrl http://host:3000
+    python rpc_example.py                       # default NanoCtrl at localhost:4479
+    python rpc_example.py --ctrl http://host:4479
 """
 
 import argparse
@@ -37,10 +37,10 @@ class CalcService:
 
 
 def main(ctrl_url: str):
-    worker = PeerAgent(nanoctrl_url=ctrl_url, alias="worker:0")
+    worker = PeerAgent(ctrl_url=ctrl_url, alias="worker:0")
 
     # --- driver agent ---
-    driver = PeerAgent(nanoctrl_url=ctrl_url, alias="driver:0")
+    driver = PeerAgent(ctrl_url=ctrl_url, alias="driver:0")
     driver_conn = driver.connect_to("worker:0", ib_port=1, qp_num=1)
     worker_conn = worker.connect_to("driver:0", ib_port=1, qp_num=1)
 
@@ -83,5 +83,5 @@ def main(ctrl_url: str):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="SlimeRPC loopback test")
-    parser.add_argument("--ctrl", default="http://127.0.0.1:3000", help="NanoCtrl URL")
+    parser.add_argument("--ctrl", default="http://127.0.0.1:4479", help="NanoCtrl URL")
     main(parser.parse_args().ctrl)

@@ -1,0 +1,10 @@
+# Pin the Rust toolchain for `dlslime-ctrl` so that local builds, CI, and the
+# Docker builder (`docker/ctrl.Dockerfile`) all use the same compiler.
+#
+# Keep this in sync with the `FROM rust:<version>-slim-bookworm AS builder`
+# line in `docker/ctrl.Dockerfile`.
+
+[toolchain]
+channel = "1.95"
+components = ["rustfmt", "clippy"]
+profile = "minimal"

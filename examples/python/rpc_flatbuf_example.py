@@ -11,7 +11,7 @@ Prerequisites:
 
 Usage:
     python rpc_flatbuf_example.py
-    python rpc_flatbuf_example.py --ctrl http://host:3000
+    python rpc_flatbuf_example.py --ctrl http://host:4479
 """
 
 import argparse
@@ -139,10 +139,10 @@ class CalcServiceFB:
 
 def main(ctrl_url: str):
     # --- worker agent ---
-    worker = PeerAgent(nanoctrl_url=ctrl_url, alias="worker:0")
+    worker = PeerAgent(ctrl_url=ctrl_url, alias="worker:0")
 
     # --- driver agent ---
-    driver = PeerAgent(nanoctrl_url=ctrl_url, alias="driver:0")
+    driver = PeerAgent(ctrl_url=ctrl_url, alias="driver:0")
     driver_conn = driver.connect_to("worker:0", ib_port=1, qp_num=1)
     worker_conn = worker.connect_to("driver:0", ib_port=1, qp_num=1)
 
@@ -197,5 +197,5 @@ def main(ctrl_url: str):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="SlimeRPC FlatBuffers test")
-    parser.add_argument("--ctrl", default="http://127.0.0.1:3000", help="NanoCtrl URL")
+    parser.add_argument("--ctrl", default="http://127.0.0.1:4479", help="NanoCtrl URL")
     main(parser.parse_args().ctrl)

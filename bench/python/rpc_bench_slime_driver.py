@@ -5,7 +5,7 @@ Measures round-trip latency and bandwidth for raw-bytes echo across a range
 of payload sizes.  Results are saved to a CSV for comparison with Ray.
 
 Usage:
-    python rpc_bench_slime_driver.py [--ctrl http://127.0.0.1:3000] [--out results/slime.csv]
+    python rpc_bench_slime_driver.py [--ctrl http://127.0.0.1:4479] [--out results/slime.csv]
 """
 
 import argparse
@@ -73,7 +73,7 @@ def _label(size: int) -> str:
 
 def main():
     parser = argparse.ArgumentParser(description="SlimeRPC benchmark driver")
-    parser.add_argument("--ctrl", default="http://127.0.0.1:3000")
+    parser.add_argument("--ctrl", default="http://127.0.0.1:4479")
     parser.add_argument("--scope", default="rpc-bench")
     parser.add_argument(
         "--buf-mb",
@@ -114,7 +114,7 @@ def main():
     # Only test sizes that fit in the buffer (payload must be < buffer size)
     sizes = [s for s in SIZES if s < buf_bytes and s <= max_size_bytes]
 
-    driver = PeerAgent(nanoctrl_url=args.ctrl, alias="bench-driver", scope=args.scope)
+    driver = PeerAgent(ctrl_url=args.ctrl, alias="bench-driver", scope=args.scope)
     driver._rpc_buffer_size = buf_bytes
     driver._rpc_max_inflight = max(1, int(getattr(args, "max_inflight", 4)))
 

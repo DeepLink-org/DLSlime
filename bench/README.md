@@ -101,7 +101,7 @@ DLSlimeCache, then run the example client:
 
 ```bash
 nanoctrl start
-dlslime-cache start --ctrl http://127.0.0.1:3000 \
+dlslime-cache start --ctrl http://127.0.0.1:4479 \
   --host 127.0.0.1 --port 8765 --memory-size 1G
 
 python examples/python/cache_client_example.py --url http://127.0.0.1:8765
@@ -131,7 +131,7 @@ With explicit parameters:
 
 ```bash
 bash bench/python/run_rpc_bench.sh \
-  --ctrl http://127.0.0.1:3000 \
+  --ctrl http://127.0.0.1:4479 \
   --buf-mb 256 \
   --max-size-mb 16
 ```

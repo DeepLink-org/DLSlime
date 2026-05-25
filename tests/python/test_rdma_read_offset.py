@@ -27,12 +27,12 @@ def test_rdma_read_offset_order():
     # Start two peer agents
     print("\n1. Starting peer agents...")
     agent1 = start_peer_agent(
-        nanoctrl_url="http://127.0.0.1:3000",
+        ctrl_url="http://127.0.0.1:4479",
         alias="test_agent_1",
     )
 
     agent2 = start_peer_agent(
-        nanoctrl_url="http://127.0.0.1:3000",
+        ctrl_url="http://127.0.0.1:4479",
         alias="test_agent_2",
     )
 

@@ -4,7 +4,7 @@
 Start this first, then run rpc_bench_slime_driver.py in another terminal.
 
 Usage:
-    python rpc_bench_slime_worker.py [--ctrl http://127.0.0.1:3000] [--buf-mb 256]
+    python rpc_bench_slime_worker.py [--ctrl http://127.0.0.1:4479] [--buf-mb 256]
 """
 
 import argparse
@@ -41,7 +41,7 @@ class EchoService:
 
 def main():
     parser = argparse.ArgumentParser(description="SlimeRPC benchmark worker")
-    parser.add_argument("--ctrl", default="http://127.0.0.1:3000")
+    parser.add_argument("--ctrl", default="http://127.0.0.1:4479")
     parser.add_argument("--scope", default="rpc-bench")
     parser.add_argument(
         "--buf-mb",
@@ -61,7 +61,7 @@ def main():
     )
     args = parser.parse_args()
 
-    worker = PeerAgent(nanoctrl_url=args.ctrl, alias="bench-worker", scope=args.scope)
+    worker = PeerAgent(ctrl_url=args.ctrl, alias="bench-worker", scope=args.scope)
     worker._rpc_buffer_size = args.buf_mb * 1024 * 1024
     # Bench uses single-flight RPCs; cap max_inflight so we don't pin
     # buf_mb * SLIME_RPC_MAX_INFLIGHT bytes of CPU memory needlessly.

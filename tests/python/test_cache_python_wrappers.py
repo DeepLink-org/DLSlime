@@ -12,7 +12,7 @@ from dlslime.cache import (
 
 class DummyPeerAgent:
     alias = "engine:0"
-    nanoctrl_url = "http://127.0.0.1:3000"
+    ctrl_url = "http://127.0.0.1:4479"
     _redis_key_prefix = "s0"
 
     def __init__(self):
@@ -95,7 +95,7 @@ def test_cache_service_exposes_peer_agent_info():
     info = service.peer_agent_info()
 
     assert info["peer_agent_id"] == "engine:0"
-    assert info["nanoctrl_url"] == "http://127.0.0.1:3000"
+    assert info["ctrl_url"] == "http://127.0.0.1:4479"
     assert info["scope"] == "s0"
     assert info["cache_mr_name"] == "cache"
     assert info["cache_mr_handle"] == 123
@@ -161,7 +161,7 @@ def test_cache_client_connects_to_server_peer_agent(monkeypatch):
         assert path == "/peer-agent"
         return {
             "peer_agent_id": "cache-agent:0",
-            "nanoctrl_url": "http://127.0.0.1:3000",
+            "ctrl_url": "http://127.0.0.1:4479",
             "scope": "s0",
             "cache_mr_name": "cache",
         }

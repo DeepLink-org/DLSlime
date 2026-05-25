@@ -43,7 +43,7 @@ def test_start_parser_defaults():
     assert start.metadata_only is False
 
 
-def test_start_parser_accepts_peer_agent_and_nanoctrl_args():
+def test_start_parser_accepts_peer_agent_and_ctrl_args():
     cfg = build_parser().parse_args(
         [
             "start",
@@ -51,7 +51,7 @@ def test_start_parser_accepts_peer_agent_and_nanoctrl_args():
             "--port=9000",
             "--slab-size=128K",
             "--memory-size=1G",
-            "--ctrl=127.0.0.1:3000",
+            "--ctrl=127.0.0.1:4479",
             "--scope=s0",
             "--service-id=cache:test",
             "--peer-agent-alias=cache-agent:0",
@@ -67,7 +67,7 @@ def test_start_parser_accepts_peer_agent_and_nanoctrl_args():
     assert start.port == 9000
     assert parse_slab_size(start.slab_size) == 128 * 1024
     assert parse_size(start.memory_size) == 1024**3
-    assert start.ctrl == "127.0.0.1:3000"
+    assert start.ctrl == "127.0.0.1:4479"
     assert start.scope == "s0"
     assert start.service_id == "cache:test"
     assert start.peer_agent_alias == "cache-agent:0"
@@ -86,7 +86,7 @@ def test_start_parser_accepts_background_args_and_service_args():
             "--slab-size=128K",
             "--memory-size=512M",
             "--quiet",
-            "--ctrl=127.0.0.1:3000",
+            "--ctrl=127.0.0.1:4479",
             "--service-id=cache:bg",
             "--health-host=127.0.0.1",
             "--health-port=9001",
@@ -102,7 +102,7 @@ def test_start_parser_accepts_background_args_and_service_args():
     assert parse_slab_size(start.slab_size) == 128 * 1024
     assert parse_size(start.memory_size) == 512 * 1024**2
     assert start.quiet is True
-    assert start.ctrl == "127.0.0.1:3000"
+    assert start.ctrl == "127.0.0.1:4479"
     assert start.service_id == "cache:bg"
     assert start.health_host == "127.0.0.1"
     assert start.health_port == 9001

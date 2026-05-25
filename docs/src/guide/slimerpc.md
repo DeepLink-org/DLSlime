@@ -34,7 +34,7 @@ SlimeRPC requires:
 
 ```bash
 nanoctrl start
-python examples/python/rpc_example.py --ctrl http://127.0.0.1:3000
+python examples/python/rpc_example.py --ctrl http://127.0.0.1:4479
 ```
 
 ## Basic Service
@@ -67,8 +67,8 @@ agents:
 ```python
 from dlslime import PeerAgent
 
-worker = PeerAgent(nanoctrl_url="http://127.0.0.1:3000", alias="worker:0")
-driver = PeerAgent(nanoctrl_url="http://127.0.0.1:3000", alias="driver:0")
+worker = PeerAgent(ctrl_url="http://127.0.0.1:4479", alias="worker:0")
+driver = PeerAgent(ctrl_url="http://127.0.0.1:4479", alias="driver:0")
 
 driver_conn = driver.connect_to("worker:0", ib_port=1, qp_num=1)
 worker_conn = worker.connect_to("driver:0", ib_port=1, qp_num=1)
