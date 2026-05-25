@@ -1,8 +1,6 @@
 from ._slime_c import *
 import os
 
-from .ctrl import NanoCtrlClient
-
 from .logging import get_logger, set_log_level
 
 try:
@@ -23,6 +21,16 @@ except ImportError as e:
             "PeerAgent requires 'httpx' and 'redis' packages. "
             "Install them with: pip install httpx redis"
         ) from _peer_agent_import_error
+
+
+def __getattr__(name):
+    # Lazily expose dlslime.ctrl.NanoCtrlClient at the package root so a bare
+    # `import dlslime` does not require `httpx` to be installed.
+    if name == "NanoCtrlClient":
+        from .ctrl import NanoCtrlClient
+
+        return NanoCtrlClient
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def get_cmake_dir():
