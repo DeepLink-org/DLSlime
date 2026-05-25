@@ -34,7 +34,3 @@ endif()
 if (BUILD_RDMA)
     add_subdirectory(rdma)
 endif()
-
-if (BUILD_TCP)
-    add_subdirectory(tcp)
-endif()
