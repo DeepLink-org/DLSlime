@@ -132,7 +132,7 @@ fn scan_snapshots(args: &ObsQueryArgs) -> Result<Vec<ObsSnapshot>> {
     };
 
     let mut snapshots = Vec::new();
-    for (key, val) in keys.iter().zip(values.into_iter()) {
+    for (key, val) in keys.iter().zip(values) {
         let Some(val_str) = val else { continue };
         if let Some(snap) = parse_snapshot(key, &val_str, now_ms, args.stale_ms) {
             snapshots.push(snap);

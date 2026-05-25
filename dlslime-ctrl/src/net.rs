@@ -69,7 +69,9 @@ pub fn resolve_public_redis_url(url: &str) -> String {
 pub fn resolve_redis_for_client(redis_url: &str, client_address: &str) -> String {
     static REDIS_ADVERTISE: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
     if let Some(advertised) = REDIS_ADVERTISE.get_or_init(|| {
-        std::env::var("DLSLIME_CTRL_REDIS_ADVERTISE").ok().filter(|s| !s.is_empty())
+        std::env::var("DLSLIME_CTRL_REDIS_ADVERTISE")
+            .ok()
+            .filter(|s| !s.is_empty())
     }) {
         // Strip scheme so the caller (PeerAgent) gets the host:port form
         // it already expects to split with `:`.
