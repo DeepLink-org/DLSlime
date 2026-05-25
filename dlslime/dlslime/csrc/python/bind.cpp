@@ -27,12 +27,6 @@
 #include "dlslime/csrc/engine/ascend_direct/ascend_remote_memory_pool.h"
 #endif
 
-#ifdef BUILD_TCP
-#include "dlslime/csrc/engine/tcp/tcp_endpoint.h"
-#include "dlslime/csrc/engine/tcp/tcp_future.h"
-#include "dlslime/csrc/engine/tcp/tcp_memory_pool.h"
-#endif
-
 #include "dlslime/csrc/device/signal.h"
 
 #ifdef BUILD_RDMA
@@ -95,12 +89,6 @@ namespace py = pybind11;
 #define BUILD_RPC_ENABLED false
 #endif
 
-#ifdef BUILD_TCP
-#define BUILD_TCP_ENABLED true
-#else
-#define BUILD_TCP_ENABLED false
-#endif
-
 // Ops moved to NanoCCL
 #define BUILD_INTRA_OPS_ENABLED false
 #define BUILD_INTER_OPS_ENABLED false
@@ -114,7 +102,6 @@ PYBIND11_MODULE(_slime_c, m)
     EXPOSE_BUILD_FLAG(m, BUILD_INTRA_OPS);
     EXPOSE_BUILD_FLAG(m, BUILD_INTER_OPS);
     EXPOSE_BUILD_FLAG(m, BUILD_RPC);
-    EXPOSE_BUILD_FLAG(m, BUILD_TCP);
 
     m.def("discover_topology",
           &dlslime::topology::discoverTopology,
@@ -524,150 +511,6 @@ PYBIND11_MODULE(_slime_c, m)
              py::arg("stream") = nullptr,
              py::call_guard<py::gil_scoped_release>());
 #endif
-
-#ifdef BUILD_TCP
-    // =========================================================================
-    // TCP Transport
-    // =========================================================================
-    py::class_<dlslime::tcp::TcpSendFuture, std::shared_ptr<dlslime::tcp::TcpSendFuture>>(m, "SlimeTcpSendFuture")
-        .def("wait", &dlslime::tcp::TcpSendFuture::wait, py::call_guard<py::gil_scoped_release>())
-        .def(
-            "wait_for",
-            [](const dlslime::tcp::TcpSendFuture& self, double sec) -> py::object {
-                int32_t st = 0;
-                int64_t ms = static_cast<int64_t>(sec * 1000.0);
-                if (ms < 0)
-                    ms = 0;
-                if (self.wait_for(ms, &st))
-                    return py::cast(st);
-                return py::none();
-            },
-            py::arg("timeout_seconds"));
-
-    py::class_<dlslime::tcp::TcpRecvFuture, std::shared_ptr<dlslime::tcp::TcpRecvFuture>>(m, "SlimeTcpRecvFuture")
-        .def("wait", &dlslime::tcp::TcpRecvFuture::wait, py::call_guard<py::gil_scoped_release>())
-        .def(
-            "wait_for",
-            [](const dlslime::tcp::TcpRecvFuture& self, double sec) -> py::object {
-                int32_t st = 0;
-                int64_t ms = static_cast<int64_t>(sec * 1000.0);
-                if (ms < 0)
-                    ms = 0;
-                if (self.wait_for(ms, &st))
-                    return py::cast(st);
-                return py::none();
-            },
-            py::arg("timeout_seconds"));
-
-    py::class_<dlslime::tcp::TcpReadWriteFuture, std::shared_ptr<dlslime::tcp::TcpReadWriteFuture>>(
-        m, "SlimeTcpReadWriteFuture")
-        .def("wait", &dlslime::tcp::TcpReadWriteFuture::wait, py::call_guard<py::gil_scoped_release>())
-        .def(
-            "wait_for",
-            [](const dlslime::tcp::TcpReadWriteFuture& self, double sec) -> py::object {
-                int32_t st = 0;
-                int64_t ms = static_cast<int64_t>(sec * 1000.0);
-                if (ms < 0)
-                    ms = 0;
-                if (self.wait_for(ms, &st))
-                    return py::cast(st);
-                return py::none();
-            },
-            py::arg("timeout_seconds"));
-
-    py::class_<dlslime::tcp::TcpMemoryPool, std::shared_ptr<dlslime::tcp::TcpMemoryPool>>(m, "TcpMemoryPool")
-        .def(py::init<>())
-        .def("register_memory_region",
-             &dlslime::tcp::TcpMemoryPool::register_memory_region,
-             py::arg("addr"),
-             py::arg("length"),
-             py::arg("name"))
-        .def(
-            "register_remote_memory_region",
-            [](dlslime::tcp::TcpMemoryPool& self, const json& mr_info, py::object name_obj) {
-                std::optional<std::string> name;
-                if (!name_obj.is_none())
-                    name = name_obj.cast<std::string>();
-                return self.register_remote_memory_region(mr_info, name);
-            },
-            py::arg("mr_info"),
-            py::arg("name") = py::none())
-        .def("get_mr_handle", &dlslime::tcp::TcpMemoryPool::get_mr_handle, py::arg("name"))
-        .def("mr_info", &dlslime::tcp::TcpMemoryPool::mr_info);
-
-    py::class_<dlslime::tcp::TcpEndpoint, std::shared_ptr<dlslime::tcp::TcpEndpoint>>(m, "TcpEndpoint")
-        .def(py::init<const std::string&, uint16_t>(), py::arg("ip") = "0.0.0.0", py::arg("port") = 0)
-        .def("connect",
-             &dlslime::tcp::TcpEndpoint::connect,
-             py::arg("remote_info"),
-             py::call_guard<py::gil_scoped_release>())
-        .def("endpoint_info", &dlslime::tcp::TcpEndpoint::endpoint_info)
-        .def("mr_info", &dlslime::tcp::TcpEndpoint::mr_info)
-        .def("shutdown", &dlslime::tcp::TcpEndpoint::shutdown, py::call_guard<py::gil_scoped_release>())
-        .def("is_connected", &dlslime::tcp::TcpEndpoint::is_connected)
-        .def("register_memory_region",
-             &dlslime::tcp::TcpEndpoint::register_memory_region,
-             py::arg("name"),
-             py::arg("data_ptr"),
-             py::arg("offset"),
-             py::arg("length"),
-             py::call_guard<py::gil_scoped_release>())
-        .def("register_remote_memory_region",
-             &dlslime::tcp::TcpEndpoint::register_remote_memory_region,
-             py::arg("name"),
-             py::arg("mr_info"),
-             py::call_guard<py::gil_scoped_release>())
-        .def("async_send",
-             py::overload_cast<const dlslime::chunk_tuple_t&, int64_t>(&dlslime::tcp::TcpEndpoint::async_send),
-             py::arg("chunk"),
-             py::arg("timeout_ms") = dlslime::tcp::TcpEndpoint::kDefaultTimeoutMs,
-             py::call_guard<py::gil_scoped_release>())
-        .def("async_recv",
-             &dlslime::tcp::TcpEndpoint::async_recv,
-             py::arg("chunk"),
-             py::arg("exact_size") = false,
-             py::call_guard<py::gil_scoped_release>())
-        .def("async_read",
-             py::overload_cast<const std::vector<dlslime::assign_tuple_t>&, int64_t>(
-                 &dlslime::tcp::TcpEndpoint::async_read),
-             py::arg("assign"),
-             py::arg("timeout_ms") = dlslime::tcp::TcpEndpoint::kDefaultTimeoutMs,
-             py::call_guard<py::gil_scoped_release>())
-        .def("async_write",
-             py::overload_cast<const std::vector<dlslime::assign_tuple_t>&, int64_t>(
-                 &dlslime::tcp::TcpEndpoint::async_write),
-             py::arg("assign"),
-             py::arg("timeout_ms") = dlslime::tcp::TcpEndpoint::kDefaultTimeoutMs,
-             py::call_guard<py::gil_scoped_release>());
-#endif  // BUILD_TCP
-
-    // Ops moved to NanoCCL - Python bindings should be in NanoCCL's Python module
-    // #ifdef BUILD_INTRA_OPS
-    //     py::class_<dlslime::AllToAllIntraLLBuffer>(m, "AllToAllIntraLLBuffer")
-    //         .def(py::init<int32_t, int32_t, int32_t, int32_t, int64_t>())
-    //         .def("buffer_info", &dlslime::AllToAllIntraLLBuffer::buffer_info)
-    //         .def("connect_full_mesh", &dlslime::AllToAllIntraLLBuffer::connectFullMesh)
-    //         .def("get_local_buffer", &dlslime::AllToAllIntraLLBuffer::getLocalBuffer)
-    //         .def("get_buffer_size_hint", &dlslime::AllToAllIntraLLBuffer::get_buffer_size_hint)
-    //         .def("set_max_bs", &dlslime::AllToAllIntraLLBuffer::setMaxBs)
-    //         .def("all_to_all_ll",
-    //              &dlslime::AllToAllIntraLLBuffer::allToAllLL2D,
-    //              py::arg("x"),
-    //              py::arg("is_transpose") = false,
-    //              py::arg("mask")         = py::none(),
-    //              py::arg("offsets")      = py::none(),
-    //              "AllGather with optional mask and offsets");
-    // #endif
-    //
-    // #ifdef BUILD_INTER_OPS
-    //     py::class_<dlslime::AllGatherInterLLBuffer>(m, "AllGatherInterLLBuffer")
-    //         .def(py::init<int32_t, int32_t, torch::Dtype, int32_t, int32_t, int32_t>())
-    //         .def(py::init<int32_t, int32_t, torch::Dtype, int32_t, int32_t, int32_t, bool>())
-    //         .def("buffer_info", &dlslime::AllGatherInterLLBuffer::bufferInfo)
-    //         .def("connect_full_mesh", &dlslime::AllGatherInterLLBuffer::connectFullMesh)
-    //         .def("all_gather_ll", &dlslime::AllGatherInterLLBuffer::allGatherLL)
-    //         .def("all_gather_ll_hook", &dlslime::AllGatherInterLLBuffer::allGatherLLHook);
-    // #endif
 
     // =========================================================================
     // Observability (always available, independent of backend)
