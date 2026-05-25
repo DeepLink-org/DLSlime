@@ -67,15 +67,16 @@ pub fn resolve_public_redis_url(url: &str) -> String {
 /// Otherwise, if the Redis URL points to localhost but the client is remote,
 /// try to resolve to a public IP the client can reach.
 pub fn resolve_redis_for_client(redis_url: &str, client_address: &str) -> String {
-    if let Ok(advertised) = std::env::var("DLSLIME_CTRL_REDIS_ADVERTISE") {
-        if !advertised.is_empty() {
-            // Strip scheme so the caller (PeerAgent) gets the host:port form
-            // it already expects to split with `:`.
-            return advertised
-                .strip_prefix("redis://")
-                .unwrap_or(&advertised)
-                .to_string();
-        }
+    static REDIS_ADVERTISE: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
+    if let Some(advertised) = REDIS_ADVERTISE.get_or_init(|| {
+        std::env::var("DLSLIME_CTRL_REDIS_ADVERTISE").ok().filter(|s| !s.is_empty())
+    }) {
+        // Strip scheme so the caller (PeerAgent) gets the host:port form
+        // it already expects to split with `:`.
+        return advertised
+            .strip_prefix("redis://")
+            .unwrap_or(advertised)
+            .to_string();
     }
 
     if redis_url.starts_with("redis://") {
