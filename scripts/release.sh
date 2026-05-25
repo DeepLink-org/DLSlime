@@ -160,7 +160,7 @@ fi
 # --- 5. confirm ---------------------------------------------------------------
 
 echo
-read -r "?Commit, tag v$NEW, and push? [y/N] " ans
+read -r -p "Commit, tag v$NEW, and push? [y/N] " ans
 case "$ans" in
   y|Y|yes|YES) ;;
   *) echo "Aborted. Changes left in working tree."; exit 1 ;;
