@@ -201,20 +201,21 @@ PyPI 包使用默认 CMake flags 构建。需要可选传输后端或本地 C++ 
 ```bash
 git clone https://github.com/deeplink-org/DLSlime.git
 cd DLSlime
-pip install -v --no-build-isolation -e .
+pip install -v --no-build-isolation -e dlslime
+pip install -e dlslime-ctrl                 # 可选：Rust 控制面
 ```
 
 通过环境变量传递 CMake flags：
 
 ```bash
 BUILD_NVLINK=ON BUILD_TORCH_PLUGIN=ON \
-  pip install -v --no-build-isolation -e .
+  pip install -v --no-build-isolation -e dlslime
 ```
 
 仅构建 C++：
 
 ```bash
-cmake -S . -B build -GNinja -DBUILD_PYTHON=OFF -DBUILD_RDMA=ON
+cmake -S dlslime -B build -GNinja -DBUILD_PYTHON=OFF -DBUILD_RDMA=ON
 cmake --build build
 ```
 

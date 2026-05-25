@@ -71,8 +71,7 @@ jobs:
             -DBUILD_TORCH_PLUGIN=OFF
             -DBUILD_ASCEND_DIRECT=OFF
             -DBUILD_TEST=OFF
-        # The repo root is a meta-package (`dlslime-workspace`). The actual
-        # native wheel lives under `dlslime/`.
+        # The native wheel lives under dlslime/ (dlslime-ctrl/ is a separate Rust crate).
         run: python -m build --wheel --outdir dist dlslime
 
       - name: Install wheel smoke test
@@ -110,6 +109,9 @@ jobs:
           }
           trap cleanup EXIT
 
+          # Mount the runner-checked-out workspace into the container so the
+          # tests always run against the exact commit being CI'd, not whatever
+          # stale tree happens to live on the host.
           docker run -d \
             --gpus all \
             --network host \
@@ -118,15 +120,15 @@ jobs:
             --cap-add SYS_ADMIN \
             --cap-add SYS_PTRACE \
             --name "${container_name}" \
-            -v /mnt/nvme1n1/ml_research/majinming:/mnt/nvme1n1/ml_research/majinming \
+            -v "${GITHUB_WORKSPACE}:/workspace" \
             -v /mnt/nvme1n1/ml_research/models:/models \
-            -w /mnt/nvme1n1/ml_research/majinming/src/DLSlime \
+            -w /workspace \
             majinming_lmdeploy:v1 \
             sleep infinity
 
           docker exec "${container_name}" bash -lc '
             set -euxo pipefail
-            cd /mnt/nvme1n1/ml_research/majinming/src/DLSlime
+            cd /workspace
             export PIP_CONFIG_FILE=/dev/null
             export PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
             export PIP_TRUSTED_HOST=mirrors.aliyun.com
@@ -139,7 +141,7 @@ jobs:
             python -m pip install -U pip pytest
             python -m pip show dlslime || true
             python -m pip uninstall -y dlslime || true
-            python -m pip install -e .
+            python -m pip install -e dlslime
             python -m pip show dlslime
             python -c "import dlslime; print(\"dlslime:\", dlslime.__file__); print(\"available_nic:\", dlslime.available_nic())"
             pytest dlslime/tests/python -v

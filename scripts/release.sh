@@ -9,11 +9,10 @@
 #
 # What it does (in order):
 #   1. Validates the new version (semver MAJOR.MINOR.PATCH).
-#   2. Reads the current version from the root pyproject.toml.
+#   2. Reads the current version from dlslime/pyproject.toml (the data plane).
 #   3. Rewrites the version in every authoritative manifest:
-#        pyproject.toml, dlslime/pyproject.toml,
-#        dlslime-ctrl/pyproject.toml, docs/pyproject.toml,
-#        dlslime-ctrl/Cargo.toml
+#        dlslime/pyproject.toml, dlslime-ctrl/pyproject.toml,
+#        docs/pyproject.toml, dlslime-ctrl/Cargo.toml
 #   4. Refreshes dlslime-ctrl/Cargo.lock via `cargo update -p dlslime-ctrl`.
 #   5. Replaces old-version references in user-facing docs:
 #        docker/README.md, docker/.env.example, docker/docker-compose.yml,
@@ -66,9 +65,9 @@ cd "$REPO_ROOT"
 
 # --- discover current version -------------------------------------------------
 
-OLD="$(grep -E '^version = "' pyproject.toml | head -1 | sed -E 's/version = "([^"]+)"/\1/')"
+OLD="$(grep -E '^version = "' dlslime/pyproject.toml | head -1 | sed -E 's/version = "([^"]+)"/\1/')"
 if [[ -z "$OLD" ]]; then
-  echo "ERROR: could not parse current version from pyproject.toml" >&2
+  echo "ERROR: could not parse current version from dlslime/pyproject.toml" >&2
   exit 1
 fi
 
@@ -93,7 +92,6 @@ fi
 # --- 1. authoritative manifests ----------------------------------------------
 
 MANIFESTS=(
-  "pyproject.toml"
   "dlslime/pyproject.toml"
   "dlslime-ctrl/pyproject.toml"
   "docs/pyproject.toml"
