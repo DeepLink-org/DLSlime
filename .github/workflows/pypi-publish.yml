@@ -79,8 +79,13 @@ jobs:
             --exclude librdmacm.so.1
             --exclude libibumad.so.3
             --exclude libefa.so.1
-            --exclude lib_slime_rdma.so
+            --exclude lib_slime_topology.so
+            --exclude lib_slime_engine.so
+            --exclude lib_slime_device.so
             --exclude lib_slime_obs.so
+            --exclude lib_slime_rdma.so
+            --exclude lib_slime_nvlink.so
+            --exclude libascend_direct.so
             -w {dest_dir} {wheel}
         with:
           package-dir: dlslime
