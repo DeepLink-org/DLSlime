@@ -23,9 +23,9 @@ struct SessionHeader {
 static_assert(sizeof(SessionHeader) == 17, "SessionHeader must be 17 bytes");
 
 enum OpCode : uint8_t {
-    OP_SEND  = 0x00,   // header + payload → peer recv matches
-    OP_READ  = 0x01,   // header only → peer reads local memory → sends data back
-    OP_WRITE = 0x02,   // header + payload → peer writes to local memory
+    OP_SEND  = 0x00,  // header + payload → peer recv matches
+    OP_READ  = 0x01,  // header only → peer reads local memory → sends data back
+    OP_WRITE = 0x02,  // header + payload → peer writes to local memory
 };
 
 }  // namespace tcp

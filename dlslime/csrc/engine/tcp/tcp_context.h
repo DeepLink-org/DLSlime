@@ -1,10 +1,9 @@
 #pragma once
 
-#include <utility>
 #include <asio.hpp>
-
 #include <memory>
 #include <thread>
+#include <utility>
 
 #include "tcp_connection_pool.h"
 
@@ -22,11 +21,17 @@ public:
     TcpContext();
     ~TcpContext();
 
-    TcpContext(const TcpContext&) = delete;
+    TcpContext(const TcpContext&)            = delete;
     TcpContext& operator=(const TcpContext&) = delete;
 
-    asio::io_context& io_context() { return io_ctx_; }
-    TcpConnectionPool& conn_pool() { return conn_pool_; }
+    asio::io_context& io_context()
+    {
+        return io_ctx_;
+    }
+    TcpConnectionPool& conn_pool()
+    {
+        return conn_pool_;
+    }
 
     void shutdown();
 

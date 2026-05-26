@@ -1,11 +1,10 @@
 #pragma once
 
-#include <utility>
 #include <asio.hpp>
-
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <utility>
 
 #include "tcp_header.h"
 #include "tcp_memory_pool.h"
@@ -27,13 +26,11 @@ struct RecvSlot {
 // ── ServerSession: handles incoming requests on one persistent connection ──
 //
 // Lifecycle: start() → readHeader → dispatch → readBody/writeBody → readHeader ↻
-class ServerSession : public std::enable_shared_from_this<ServerSession> {
+class ServerSession: public std::enable_shared_from_this<ServerSession> {
 public:
     using RecvMatcher = std::function<RecvSlot()>;
 
-    ServerSession(asio::ip::tcp::socket socket,
-                  TcpMemoryPool*         local_pool,
-                  RecvMatcher            recv_matcher);
+    ServerSession(asio::ip::tcp::socket socket, TcpMemoryPool* local_pool, RecvMatcher recv_matcher);
 
     void start();
 
@@ -53,7 +50,7 @@ private:
 //
 // Lifecycle: construct → start_write/start_read → on_done → self-destruct
 // Does NOT own OpState or PooledConnection — only drives the I/O and reports ec.
-class ClientSession : public std::enable_shared_from_this<ClientSession> {
+class ClientSession: public std::enable_shared_from_this<ClientSession> {
 public:
     using DoneCallback = std::function<void(asio::error_code ec)>;
 

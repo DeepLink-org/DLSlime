@@ -17,7 +17,8 @@ struct TcpMr {
     uintptr_t addr{0};
     size_t    length{0};
 
-    json json_info(const std::string& name) const {
+    json json_info(const std::string& name) const
+    {
         return {{"name", name}, {"addr", addr}, {"length", length}};
     }
 };
@@ -28,13 +29,11 @@ public:
     TcpMemoryPool() = default;
 
     // name must be non-empty and unique; returns -1 on violation.
-    int32_t register_memory_region(uintptr_t addr, size_t length,
-                                   const std::string& name);
+    int32_t register_memory_region(uintptr_t addr, size_t length, const std::string& name);
     int32_t unregister_memory_region(int32_t handle);
 
     // remote MR — name is optional (may come from peer's mr_info).
-    int32_t register_remote_memory_region(const json& mr_info,
-                                          std::optional<std::string> name = std::nullopt);
+    int32_t register_remote_memory_region(const json& mr_info, std::optional<std::string> name = std::nullopt);
     int32_t unregister_remote_memory_region(int32_t handle);
 
     TcpMr   get_mr_fast(int32_t handle) const;

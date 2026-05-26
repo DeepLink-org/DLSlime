@@ -55,7 +55,8 @@ jobs:
             cmake \
             ninja-build \
             libnuma-dev \
-            libibverbs-dev
+            libibverbs-dev \
+            libasio-dev
 
       - name: Install build dependencies
         run: |
@@ -66,11 +67,13 @@ jobs:
         env:
           CMAKE_ARGS: >-
             -DBUILD_RDMA=ON
+            -DBUILD_TCP=ON
             -DBUILD_PYTHON=ON
             -DBUILD_NVLINK=OFF
             -DBUILD_TORCH_PLUGIN=OFF
             -DBUILD_ASCEND_DIRECT=OFF
             -DBUILD_TEST=OFF
+            -DUSE_CUDA=ON
         run: python -m build --wheel
 
       - name: Install wheel smoke test
