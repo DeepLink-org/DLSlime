@@ -28,7 +28,7 @@ from dlslime.rpc import (
 
 ```bash
 nanoctrl start
-python examples/python/rpc_example.py --ctrl http://127.0.0.1:3000
+python dlslime/examples/python/rpc_example.py --ctrl http://127.0.0.1:4479
 ```
 
 ## 定义服务
@@ -58,8 +58,8 @@ SlimeRPC 依赖 PeerAgent 连接，不替代 discovery 流程：
 ```python
 from dlslime import PeerAgent
 
-worker = PeerAgent(nanoctrl_url="http://127.0.0.1:3000", alias="worker:0")
-driver = PeerAgent(nanoctrl_url="http://127.0.0.1:3000", alias="driver:0")
+worker = PeerAgent(ctrl_url="http://127.0.0.1:4479", alias="worker:0")
+driver = PeerAgent(ctrl_url="http://127.0.0.1:4479", alias="driver:0")
 
 driver_conn = driver.connect_to("worker:0", ib_port=1, qp_num=1)
 worker_conn = worker.connect_to("driver:0", ib_port=1, qp_num=1)
@@ -157,7 +157,7 @@ response = raw.echo(b"hello").wait()
 ```
 
 Raw 模式适合 FlatBuffers、protobuf bytes 或自定义二进制布局。完整示例见
-`examples/python/rpc_flatbuf_example.py`。
+`dlslime/examples/python/rpc_flatbuf_example.py`。
 
 ## In-Place Raw 回复
 
@@ -195,7 +195,7 @@ except RemoteRpcError as exc:
 
 ## 示例
 
-- `examples/python/rpc_example.py`：typed pickle RPC loopback。
-- `examples/python/rpc_flatbuf_example.py`：raw FlatBuffers RPC loopback。
-- `bench/python/rpc_bench_slime_worker.py`：benchmark worker。
-- `bench/python/rpc_bench_slime_driver.py`：benchmark driver。
+- `dlslime/examples/python/rpc_example.py`：typed pickle RPC loopback。
+- `dlslime/examples/python/rpc_flatbuf_example.py`：raw FlatBuffers RPC loopback。
+- `dlslime/bench/python/rpc_bench_slime_worker.py`：benchmark worker。
+- `dlslime/bench/python/rpc_bench_slime_driver.py`：benchmark driver。

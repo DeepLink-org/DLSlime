@@ -1,0 +1,30 @@
+# DLSlime control plane — pointing at an EXTERNAL Redis (not started here).
+#
+# Usage (from the DLSlime repo root):
+#   cp docker/.env.example docker/.env
+#   $EDITOR docker/.env                # set DLSLIME_CTRL_REDIS_URL
+#   docker compose -f docker/docker-compose.external-redis.yml --env-file docker/.env up -d
+#
+# Common DLSLIME_CTRL_REDIS_URL values:
+#   redis://my-redis.internal:6379          # LAN/cluster Redis
+#   redis://host.docker.internal:6379       # Redis running on the Docker host
+#                                           #   (on Linux, also uncomment extra_hosts below)
+
+services:
+  ctrl:
+    build:
+      context: ..
+      dockerfile: docker/ctrl.Dockerfile
+      network: host
+    image: ${DLSLIME_CTRL_IMAGE:-dlslime-ctrl:local}
+    pull_policy: ${DLSLIME_CTRL_PULL_POLICY:-build}
+    environment:
+      DLSLIME_CTRL_REDIS_URL: ${DLSLIME_CTRL_REDIS_URL:?must be set, e.g. redis://your-host:6379}
+      DLSLIME_CTRL_RUST_LOG: ${DLSLIME_CTRL_RUST_LOG:-info}
+    ports:
+      - "${DLSLIME_CTRL_PORT:-4479}:4479"
+    # Linux Docker does not automatically resolve host.docker.internal.
+    # Uncomment if you point DLSLIME_CTRL_REDIS_URL at the Docker host:
+    # extra_hosts:
+    #   - "host.docker.internal:host-gateway"
+    restart: unless-stopped

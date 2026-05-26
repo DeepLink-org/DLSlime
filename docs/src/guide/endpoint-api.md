@@ -151,7 +151,7 @@ freeing a registered buffer before `wait()` returns can corrupt transfers.
 
 ## Examples
 
-- `examples/python/p2p_rdma_rc_read.py`
-- `examples/python/p2p_rdma_rc_write.py`
-- `examples/python/p2p_rdma_rc_write_with_imm_data.py`
-- `examples/python/p2p_rdma_rc_send_recv_torch.py`
+- `dlslime/examples/python/p2p_rdma_rc_read.py`
+- `dlslime/examples/python/p2p_rdma_rc_write.py`
+- `dlslime/examples/python/p2p_rdma_rc_write_with_imm_data.py`
+- `dlslime/examples/python/p2p_rdma_rc_send_recv_torch.py`

@@ -1,0 +1,262 @@
+"""
+Example: Multiple Peer Agents using Control Plane (Declarative Topology).
+
+8 agents, mesh network (each agent connects to all others). Measures timing.
+Uses connect_to() and TopologyReconciler for connection setup.
+"""
+
+import contextlib
+import json
+import threading
+import time
+
+import torch
+from dlslime import start_peer_agent
+
+
+# Helper: Time measurement context manager
+@contextlib.contextmanager
+def time_measure(operation_name):
+    """Context manager to measure and print execution time."""
+    t0 = time.perf_counter()
+    yield
+    elapsed = time.perf_counter() - t0
+    print(f"[TIME] {operation_name}: {elapsed:.3f}s")
+
+
+# Helper: Run function in parallel for all agents
+def run_parallel(agents, func):
+    """Run a function in parallel for all agents."""
+    threads = []
+    for alias, agent in agents.items():
+        t = threading.Thread(target=func, args=(alias, agent))
+        t.start()
+        threads.append(t)
+    for t in threads:
+        t.join()
+
+
+def describe_resource(alias, resource):
+    if resource is None:
+        return f"{alias}: <unavailable>"
+
+    host = resource.get("host", {})
+    host_addr = host.get("address") if isinstance(host, dict) else host
+    nic_parts = []
+    for nic in resource.get("nics") or []:
+        port_parts = []
+        for port in nic.get("ports") or []:
+            port_parts.append(
+                "port={port} link={link_type} state={state}".format(
+                    port=port.get("port", 1),
+                    link_type=port.get("link_type", "UNKNOWN"),
+                    state=port.get("state", "UNKNOWN"),
+                )
+            )
+        nic_parts.append(
+            "{name} health={health} [{ports}]".format(
+                name=nic.get("name", "<unknown>"),
+                health=nic.get("health", "UNKNOWN"),
+                ports=", ".join(port_parts) or "no ports",
+            )
+        )
+
+    return "  {alias}: host={host} nics={nics} memory_keys={memory_keys}".format(
+        alias=alias,
+        host=host_addr,
+        nics="; ".join(nic_parts) or "<none>",
+        memory_keys=resource.get("memory_keys", []),
+    )
+
+
+def print_topology_discovery(observer_alias, observer_agent, aliases):
+    print(f"Observer: {observer_alias}")
+    print("Active agents:", observer_agent.list_agents())
+    for alias in aliases:
+        if alias == observer_alias:
+            resource = observer_agent.get_resource()
+        else:
+            resource = observer_agent.get_resource(alias)
+        print(describe_resource(alias, resource))
+        if verbose and resource is not None:
+            print(json.dumps(resource, indent=2, sort_keys=True))
+
+
+# Start multiple peer agents
+num_agents = 8
+verbose = False  # Set True to print each init/connect/read
+
+print("=" * 60)
+print(f"Starting {num_agents} peer agents (mesh)...")
+print("=" * 60)
+
+# Use ExitStack to manage multiple context managers (auto-cleanup)
+with contextlib.ExitStack() as stack:
+    agents = {}
+    with time_measure("start"):
+        for i in range(num_agents):
+            # NanoCtrl auto-generates unique name (no alias parameter)
+            agent = start_peer_agent(
+                # alias=None (default) - NanoCtrl will auto-generate unique name
+                ctrl_url="http://127.0.0.1:4479",
+            )
+            stack.enter_context(agent)  # Auto-cleanup on exit
+            # Use allocated name as key
+            allocated_name = agent.alias
+            agents[allocated_name] = agent
+            if verbose:
+                print(f"Started {allocated_name}")
+
+    # Query available peers
+    print("\n" + "=" * 60)
+    print("Available peers:")
+    print("=" * 60)
+    for alias, agent in agents.items():
+        peers = agent.list_agents()
+        if verbose:
+            print(f"{alias} sees: {peers}")
+
+    print("\n" + "=" * 60)
+    print("Topology discovery:")
+    print("=" * 60)
+    observer_alias, observer_agent = next(iter(agents.items()))
+    print_topology_discovery(observer_alias, observer_agent, list(agents.keys()))
+
+    # Connect mesh - each agent connects to all others.
+    print("\n" + "=" * 60)
+    print("Connecting mesh...")
+    print("=" * 60)
+    connections = {}
+
+    def connect_agent(agent_alias, agent):
+        target_peers = [p for p in agents.keys() if p != agent_alias]
+        agent_connections = []
+        for peer in target_peers:
+            agent_connections.append(agent.connect_to(peer, ib_port=1, qp_num=1))
+        connections[agent_alias] = agent_connections
+        if verbose:
+            print(f"  {agent_alias}: target_peers={target_peers}")
+
+    with time_measure("connect_to"):
+        run_parallel(agents, connect_agent)
+
+    # Wait for TopologyReconciler to establish all connections
+    print("\n" + "=" * 60)
+    print("Waiting for connections (reconciliation)...")
+    print("=" * 60)
+
+    def wait_connections(agent_alias, agent):
+        for conn in connections[agent_alias]:
+            conn.wait(timeout=30)
+        if verbose:
+            print(f"  {agent_alias}: all peers connected")
+
+    with time_measure("conn.wait"):
+        run_parallel(agents, wait_connections)
+
+    # Register memory regions for each agent
+    print("\n" + "=" * 60)
+    print("Registering memory regions...")
+    print("=" * 60)
+
+    # Source tensors: each agent's data (never overwritten by reads)
+    source_tensors = {}
+    source_handlers = {}
+    # Receive buffers: per (reader, peer) to avoid overwrite when one agent reads from multiple peers
+    recv_buffers = {}  # (reader_alias, peer_alias) -> tensor
+    recv_handlers = {}  # (reader_alias, peer_alias) -> handler
+
+    with time_measure("register"):
+        for idx, (alias, agent) in enumerate(agents.items()):
+            # Use enumeration index instead of parsing alias
+            agent_id = idx
+            tensor = torch.full([32], agent_id, device="cpu", dtype=torch.uint8)
+            source_tensors[alias] = tensor
+
+            try:
+                handler = agent.register_memory_region(
+                    "data",
+                    tensor.data_ptr(),
+                    int(tensor.storage_offset()),
+                    tensor.numel() * tensor.itemsize,
+                )
+                source_handlers[alias] = handler
+                if verbose:
+                    print(f"  {alias} registered MR 'data' (self)")
+            except Exception as e:
+                print(f"  {alias}: register MR FAILED - {e}")
+
+        # Each agent needs a recv buffer per peer (to avoid overwriting when reading from multiple peers)
+        for reader_alias, agent in agents.items():
+            for peer_alias in agents.keys():
+                if peer_alias != reader_alias:
+                    recv_tensor = torch.zeros([32], device="cpu", dtype=torch.uint8)
+                    recv_buffers[(reader_alias, peer_alias)] = recv_tensor
+                    recv_name = f"recv_{reader_alias}_from_{peer_alias}"
+                    handler = agent.register_memory_region(
+                        recv_name,
+                        recv_tensor.data_ptr(),
+                        int(recv_tensor.storage_offset()),
+                        recv_tensor.numel() * recv_tensor.itemsize,
+                    )
+                    recv_handlers[(reader_alias, peer_alias)] = handler
+
+    # Perform RDMA operations: each agent reads from all others
+    print("\n" + "=" * 60)
+    print("Performing RDMA reads...")
+    print("=" * 60)
+
+    def perform_reads(agent_alias, agent):
+        """Agent reads from all other agents."""
+        # Get our index to know what value we expect
+        agent_list = list(agents.keys())
+        for peer_alias in agent_list:
+            if peer_alias != agent_alias:
+                try:
+                    try:
+                        remote_handler = agent.get_handle("data", peer_alias)
+                    except RuntimeError:
+                        print(f"  {agent_alias} -> {peer_alias}: MR info not found")
+                        continue
+
+                    local_handler = recv_handlers.get((agent_alias, peer_alias))
+                    if local_handler is None:
+                        print(
+                            f"  {agent_alias} -> {peer_alias}: local handler not found"
+                        )
+                        continue
+
+                    slot = agent.read(
+                        peer_alias, [(local_handler, remote_handler, 0, 0, 8)], None
+                    )
+                    slot.wait()
+
+                    # Use index from agent_list instead of parsing alias
+                    expected_value = agent_list.index(peer_alias)
+                    read_value = recv_buffers[(agent_alias, peer_alias)][0].item()
+
+                    if verbose:
+                        if read_value == expected_value:
+                            print(
+                                f"  {agent_alias} <- {peer_alias}: read OK (value={read_value})"
+                            )
+                        else:
+                            print(
+                                f"  {agent_alias} <- {peer_alias}: read MISMATCH (got={read_value}, expected={expected_value})"
+                            )
+                    elif read_value != expected_value:
+                        print(
+                            f"  {agent_alias} <- {peer_alias}: MISMATCH (got={read_value}, expected={expected_value})"
+                        )
+
+                except Exception as e:
+                    print(f"  {agent_alias} -> {peer_alias}: read FAILED - {e}")
+
+    with time_measure("read (56 ops)"):
+        run_parallel(agents, perform_reads)
+
+    # Cleanup is automatic via ExitStack context manager
+    print("\n" + "=" * 60)
+    print("Multi-agent control plane example completed!")
+    print("=" * 60)
+    print("(Cleanup will happen automatically when exiting context)")

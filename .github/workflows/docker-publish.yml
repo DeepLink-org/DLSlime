@@ -1,0 +1,95 @@
+# Build & publish the `dlslime-ctrl` image to GitHub Container Registry (GHCR).
+#
+# Triggers:
+#   - Push to main / master            -> publish `:edge` (and the commit SHA)
+#   - Push of a tag like v0.1.7        -> publish `:0.1.7`, `:0.1`, `:latest`
+#   - Manual workflow_dispatch         -> custom tag via input
+#
+# No external secrets needed — uses the built-in GITHUB_TOKEN for auth.
+# After the first successful run, go to:
+#   https://github.com/orgs/DeepLink-org/packages/container/dlslime-ctrl/settings
+# and set the package visibility to "Public" so anonymous `docker pull` works.
+
+name: docker-publish
+
+on:
+  push:
+    branches: [main, master]
+    tags: ["v*"]
+    paths:
+      - "dlslime-ctrl/**"
+      - "docker/**"
+      - ".github/workflows/docker-publish.yml"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Extra tag to publish (e.g. dev, rc1)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  # GHCR requires lowercase. ${{ github.repository_owner }} = "DeepLink-org",
+  # so we explicitly lower-case it via the `tolower` toy below.
+  IMAGE_NAME: deeplink-org/dlslime-ctrl
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up QEMU (for multi-arch)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Generate tags + OCI labels automatically based on the git ref.
+      #   v1.2.3    -> 1.2.3, 1.2, latest
+      #   main      -> edge
+      #   any push  -> sha-<short>
+      - name: Compute image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=edge,enable={{is_default_branch}}
+            type=sha,prefix=sha-,format=short
+            type=raw,value=${{ github.event.inputs.tag }},enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag != '' }}
+          labels: |
+            org.opencontainers.image.title=dlslime-ctrl
+            org.opencontainers.image.description=DLSlime control plane server
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.licenses=MIT
+
+      - name: Build & push (linux/amd64, linux/arm64)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/ctrl.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Print published tags
+        run: |
+          echo "Published tags:"
+          echo "${{ steps.meta.outputs.tags }}"

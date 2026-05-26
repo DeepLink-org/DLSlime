@@ -28,12 +28,12 @@ The comparison script prints:
 
 ## Files
 
-- `bench/python/run_rpc_bench.sh`
-- `bench/python/rpc_bench_slime_worker.py`
-- `bench/python/rpc_bench_slime_driver.py`
-- `bench/python/rpc_bench_ray.py`
-- `bench/python/rpc_bench_pulsing.py`
-- `bench/python/rpc_bench_compare.py`
+- `dlslime/bench/python/run_rpc_bench.sh`
+- `dlslime/bench/python/rpc_bench_slime_worker.py`
+- `dlslime/bench/python/rpc_bench_slime_driver.py`
+- `dlslime/bench/python/rpc_bench_ray.py`
+- `dlslime/bench/python/rpc_bench_pulsing.py`
+- `dlslime/bench/python/rpc_bench_compare.py`
 
 ## Prerequisites
 
@@ -51,22 +51,22 @@ For the optional Pulsing baseline, also install `pulsing`
 Default run (SlimeRPC + Ray, Pulsing disabled):
 
 ```bash
-bash bench/python/run_rpc_bench.sh
+bash dlslime/bench/python/run_rpc_bench.sh
 ```
 
 Include the Pulsing baseline:
 
 ```bash
-bash bench/python/run_rpc_bench.sh --with-pulsing
+bash dlslime/bench/python/run_rpc_bench.sh --with-pulsing
 # or
-WITH_PULSING=1 bash bench/python/run_rpc_bench.sh
+WITH_PULSING=1 bash dlslime/bench/python/run_rpc_bench.sh
 ```
 
 Specify control-plane address or buffer size:
 
 ```bash
-bash bench/python/run_rpc_bench.sh \
-  --ctrl http://127.0.0.1:3000 \
+bash dlslime/bench/python/run_rpc_bench.sh \
+  --ctrl http://127.0.0.1:4479 \
   --buf-mb 256 \
   --max-size-mb 16
 ```
@@ -74,8 +74,8 @@ bash bench/python/run_rpc_bench.sh \
 Environment-variable form:
 
 ```bash
-CTRL=http://127.0.0.1:3000 BUF_MB=256 MAX_SIZE_MB=16 \
-  bash bench/python/run_rpc_bench.sh
+CTRL=http://127.0.0.1:4479 BUF_MB=256 MAX_SIZE_MB=16 \
+  bash dlslime/bench/python/run_rpc_bench.sh
 ```
 
 ## Output

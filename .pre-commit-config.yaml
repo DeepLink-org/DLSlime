@@ -3,6 +3,9 @@ repos:
     rev: v2.9.0
     hooks:
       - id: ufmt
+        # black 25.x requires Python >= 3.9; pin a recent stable to avoid
+        # pre-commit defaulting to whatever system python happens to be.
+        language_version: python3.12
         additional_dependencies:
           - black==25.9.0
           - usort==1.0.8.post1
@@ -33,7 +36,7 @@ repos:
     rev: v2.1.0
     hooks:
       - id: codespell
-        args: ["-L", "CANN,cann,crate"]
+        args: ["-L", "CANN,cann,crate,ans"]
         exclude: >
           (?x)^(
               (?:.*/)?docs/imgs/.*|
@@ -46,19 +49,18 @@ repos:
     rev: v1.0
     hooks:
       - id: fmt
-        name: fmt (NanoCtrl)
-        args: ["--manifest-path", "NanoCtrl/Cargo.toml"]
-        files: ^NanoCtrl/
+        name: fmt (dlslime-ctrl)
+        args: ["--manifest-path", "dlslime-ctrl/Cargo.toml"]
+        files: ^dlslime-ctrl/
         pass_filenames: false
-      # NanoCtrl
       - id: cargo-check
-        name: cargo check (NanoCtrl)
-        args: ["--manifest-path", "NanoCtrl/Cargo.toml"]
-        files: ^NanoCtrl/
+        name: cargo check (dlslime-ctrl)
+        args: ["--manifest-path", "dlslime-ctrl/Cargo.toml"]
+        files: ^dlslime-ctrl/
       - id: clippy
-        name: clippy (NanoCtrl)
-        args: ["--manifest-path", "NanoCtrl/Cargo.toml", "--", "-D", "warnings"]
-        files: ^NanoCtrl/
+        name: clippy (dlslime-ctrl)
+        args: ["--manifest-path", "dlslime-ctrl/Cargo.toml", "--", "-D", "warnings"]
+        files: ^dlslime-ctrl/
 
   - repo: https://github.com/pre-commit/mirrors-clang-format
     rev: v18.1.6

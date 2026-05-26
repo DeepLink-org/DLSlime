@@ -79,18 +79,18 @@ logic straight onto endpoint-to-endpoint data movement.
 Typical examples are two-process RDMA read/write tests, NVLink transfer checks,
 and backend bring-up where explicit setup is more useful than service discovery.
 
-Example: [p2p_rdma_rc_read.py](examples/python/p2p_rdma_rc_read.py),
-[p2p_rdma_rc_write.py](examples/python/p2p_rdma_rc_write.py),
-[p2p_nvlink.py](examples/python/p2p_nvlink.py), and
-[p2p_ascend_read.py](examples/python/p2p_ascend_read.py).
+Example: [p2p_rdma_rc_read.py](dlslime/examples/python/p2p_rdma_rc_read.py),
+[p2p_rdma_rc_write.py](dlslime/examples/python/p2p_rdma_rc_write.py),
+[p2p_nvlink.py](dlslime/examples/python/p2p_nvlink.py), and
+[p2p_ascend_read.py](dlslime/examples/python/p2p_ascend_read.py).
 
 ```bash
-python examples/python/p2p_rdma_rc_read.py
-python examples/python/p2p_rdma_rc_write.py
-python examples/python/p2p_rdma_rc_write_with_imm_data.py
-python examples/python/p2p_rdma_rc_send_recv_gdr.py
-torchrun --nproc_per_node=2 examples/python/p2p_nvlink.py
-python examples/python/p2p_ascend_read.py
+python dlslime/examples/python/p2p_rdma_rc_read.py
+python dlslime/examples/python/p2p_rdma_rc_write.py
+python dlslime/examples/python/p2p_rdma_rc_write_with_imm_data.py
+python dlslime/examples/python/p2p_rdma_rc_send_recv_gdr.py
+torchrun --nproc_per_node=2 dlslime/examples/python/p2p_nvlink.py
+python dlslime/examples/python/p2p_ascend_read.py
 ```
 
 Ascend Direct setup details live in
@@ -114,13 +114,13 @@ as SlimeRPC and DLSlimeCache.
 </p>
 
 Example:
-[p2p_rdma_rc_read_ctrl_plane.py](examples/python/p2p_rdma_rc_read_ctrl_plane.py)
+[p2p_rdma_rc_read_ctrl_plane.py](dlslime/examples/python/p2p_rdma_rc_read_ctrl_plane.py)
 and
-[p2p_rdma_multi_agents_ctrl_plane.py](examples/python/p2p_rdma_multi_agents_ctrl_plane.py).
+[p2p_rdma_multi_agents_ctrl_plane.py](dlslime/examples/python/p2p_rdma_multi_agents_ctrl_plane.py).
 
 ```bash
 nanoctrl start
-python examples/python/p2p_rdma_rc_read_ctrl_plane.py
+python dlslime/examples/python/p2p_rdma_rc_read_ctrl_plane.py
 ```
 
 ### DLSlimeCache Service
@@ -139,15 +139,15 @@ cache placement logic into each application process.
   <img src="docs/imgs/cacheService.png" alt="DLSlimeCache service access" width="88%">
 </p>
 
-Example: [cache_client_example.py](examples/python/cache_client_example.py) and
+Example: [cache_client_example.py](dlslime/examples/python/cache_client_example.py) and
 [dlslime-cache design](docs/design/dlslime-cache.md).
 
 ```bash
 nanoctrl start
-dlslime-cache start --ctrl http://127.0.0.1:3000 \
+dlslime-cache start --ctrl http://127.0.0.1:4479 \
   --host 127.0.0.1 --port 8765 --memory-size 1G
 
-python examples/python/cache_client_example.py --url http://127.0.0.1:8765
+python dlslime/examples/python/cache_client_example.py --url http://127.0.0.1:8765
 
 dlslime-cache stop
 ```
@@ -169,12 +169,12 @@ peer-to-peer flows.
   <img src="docs/imgs/slimeRPC.png" alt="SlimeRPC service access" width="88%">
 </p>
 
-Example: [rpc_example.py](examples/python/rpc_example.py) and
-[rpc_flatbuf_example.py](examples/python/rpc_flatbuf_example.py).
+Example: [rpc_example.py](dlslime/examples/python/rpc_example.py) and
+[rpc_flatbuf_example.py](dlslime/examples/python/rpc_flatbuf_example.py).
 
 ```bash
 nanoctrl start
-python examples/python/rpc_example.py --ctrl http://127.0.0.1:3000
+python dlslime/examples/python/rpc_example.py --ctrl http://127.0.0.1:4479
 ```
 
 ### Disaggregated Inference Service
@@ -207,7 +207,7 @@ Coming soon.
 ### From PyPI
 
 ```bash
-pip install dlslime==0.0.3.rc2
+pip install dlslime dlslime-ctrl
 ```
 
 The PyPI package is built with the default CMake flags. Build from source when
@@ -218,20 +218,21 @@ you need optional transports or local C++ changes.
 ```bash
 git clone https://github.com/deeplink-org/DLSlime.git
 cd DLSlime
-pip install -v --no-build-isolation -e .
+pip install -v --no-build-isolation -e dlslime
+pip install -e dlslime-ctrl                 # optional: Rust control plane
 ```
 
 Pass CMake flags through the environment when enabling optional components:
 
 ```bash
 BUILD_NVLINK=ON BUILD_TORCH_PLUGIN=ON \
-  pip install -v --no-build-isolation -e .
+  pip install -v --no-build-isolation -e dlslime
 ```
 
 For a pure C++ build:
 
 ```bash
-cmake -S . -B build -GNinja -DBUILD_PYTHON=OFF -DBUILD_RDMA=ON
+cmake -S dlslime -B build -GNinja -DBUILD_PYTHON=OFF -DBUILD_RDMA=ON
 cmake --build build
 ```
 
@@ -253,7 +254,7 @@ cmake --build build
 Benchmark commands and historical performance tables now live under the
 benchmark directory:
 
-- [bench/README.md](bench/README.md) - transfer, endpoint, cache, and RPC benchmark entry point
+- [dlslime/bench/README.md](dlslime/bench/README.md) - transfer, endpoint, cache, and RPC benchmark entry point
 - [docs/benchmark-rpc.md](docs/benchmark-rpc.md) - focused SlimeRPC vs Ray benchmark guide
 
 Common entry points:
@@ -262,23 +263,26 @@ Common entry points:
 # Aggregated RDMA transfer benchmark, two nodes
 torchrun --master-addr <addr> --master-port 6006 \
   --nnodes 2 --nproc-per-node 8 --node-rank <rank> \
-  bench/python/agg_transfer_bench_spmd.py \
+  dlslime/bench/python/agg_transfer_bench_spmd.py \
   --qp-num 8 --transfer-engine dlslime \
   --batch-size 64 --num-iteration 100 --num-concurrency 8
 
 # SlimeRPC vs Ray local benchmark
-bash bench/python/run_rpc_bench.sh
+bash dlslime/bench/python/run_rpc_bench.sh
 ```
 
 ## Repository Layout
 
 ```text
-dlslime/   Core Python package, C++ bindings, and transfer/runtime primitives
-NanoCtrl/  Service governance control plane
-examples/  Runnable examples for endpoint, PeerAgent, cache, and RPC flows
-bench/     Benchmark scripts and benchmark README
-docs/      Design notes, roadmap, and platform guides
-tests/     Python and C++ tests
+dlslime/         Core Python package, C++ bindings, runtime primitives
+  ├── dlslime/   Python sources
+  ├── examples/  Runnable examples for endpoint, PeerAgent, cache, RPC
+  ├── bench/     Benchmark scripts and benchmark README
+  └── tests/     Python and C++ tests
+dlslime-ctrl/    Rust control plane (service registry, observability)
+docker/          Docker Compose deployment for dlslime-ctrl
+docs/            Design notes, roadmap, and platform guides
+scripts/         Repo-wide automation (release.sh, ...)
 ```
 
 ## Documentation

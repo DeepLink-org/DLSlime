@@ -89,7 +89,7 @@ The cache service composes a real `PeerAgent`:
 8. The consumer feeds the returned assignments to `agent.read(...)`.
 9. The client removes the manifest with `POST /delete` when done.
 
-The example at `examples/python/cache_client_example.py` performs this full
+The example at `dlslime/examples/python/cache_client_example.py` performs this full
 roundtrip and checks correctness.
 
 ## HTTP API
@@ -129,7 +129,7 @@ Returns the cache service's PeerAgent and cache MR metadata:
   "peer_agent_id": "cache-agent:0",
   "cache_mr_name": "cache",
   "cache_mr_handle": 123,
-  "nanoctrl_url": "http://127.0.0.1:3000",
+  "ctrl_url": "http://127.0.0.1:4479",
   "scope": null,
   "slab_size": 262144,
   "memory_size": 1073741824,
@@ -222,7 +222,7 @@ Data mode requires preallocated memory:
 
 ```bash
 nanoctrl start
-dlslime-cache start --ctrl http://127.0.0.1:3000 \
+dlslime-cache start --ctrl http://127.0.0.1:4479 \
     --host 127.0.0.1 --port 8765 --memory-size 1G
 ```
 
@@ -237,7 +237,7 @@ Useful service knobs:
 - `--memory-size`: preallocated cache MR size. Accepts suffixes such as
   `512M` and `1G`.
 - `--cache-mr-name`: PeerAgent memory-region name, default `cache`.
-- `--ctrl`: NanoCtrl address, default `http://127.0.0.1:3000`.
+- `--ctrl`: NanoCtrl address, default `http://127.0.0.1:4479`.
 - `--peer-agent-alias`: optional fixed alias for the service PeerAgent.
 
 ## Python Client
@@ -321,14 +321,14 @@ Start services:
 
 ```bash
 nanoctrl start
-dlslime-cache start --ctrl http://127.0.0.1:3000 \
+dlslime-cache start --ctrl http://127.0.0.1:4479 \
     --host 127.0.0.1 --port 8765 --memory-size 1G
 ```
 
 Run the client:
 
 ```bash
-python examples/python/cache_client_example.py --url http://127.0.0.1:8765
+python dlslime/examples/python/cache_client_example.py --url http://127.0.0.1:8765
 ```
 
 Expected success signal:

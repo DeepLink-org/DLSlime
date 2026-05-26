@@ -70,18 +70,18 @@ NanoCtrl 和 PeerAgent，将应用传输逻辑直接映射到 endpoint-to-endpoi
 典型例子包括两进程 RDMA read/write 测试、NVLink 传输检查，以及需要显式控制
 初始化过程的 backend bring-up。
 
-示例：[p2p_rdma_rc_read.py](examples/python/p2p_rdma_rc_read.py),
-[p2p_rdma_rc_write.py](examples/python/p2p_rdma_rc_write.py),
-[p2p_nvlink.py](examples/python/p2p_nvlink.py) 和
-[p2p_ascend_read.py](examples/python/p2p_ascend_read.py)。
+示例：[p2p_rdma_rc_read.py](dlslime/examples/python/p2p_rdma_rc_read.py),
+[p2p_rdma_rc_write.py](dlslime/examples/python/p2p_rdma_rc_write.py),
+[p2p_nvlink.py](dlslime/examples/python/p2p_nvlink.py) 和
+[p2p_ascend_read.py](dlslime/examples/python/p2p_ascend_read.py)。
 
 ```bash
-python examples/python/p2p_rdma_rc_read.py
-python examples/python/p2p_rdma_rc_write.py
-python examples/python/p2p_rdma_rc_write_with_imm_data.py
-python examples/python/p2p_rdma_rc_send_recv_gdr.py
-torchrun --nproc_per_node=2 examples/python/p2p_nvlink.py
-python examples/python/p2p_ascend_read.py
+python dlslime/examples/python/p2p_rdma_rc_read.py
+python dlslime/examples/python/p2p_rdma_rc_write.py
+python dlslime/examples/python/p2p_rdma_rc_write_with_imm_data.py
+python dlslime/examples/python/p2p_rdma_rc_send_recv_gdr.py
+torchrun --nproc_per_node=2 dlslime/examples/python/p2p_nvlink.py
+python dlslime/examples/python/p2p_ascend_read.py
 ```
 
 Ascend Direct 设置见
@@ -102,13 +102,13 @@ Ascend Direct 设置见
 </p>
 
 示例：
-[p2p_rdma_rc_read_ctrl_plane.py](examples/python/p2p_rdma_rc_read_ctrl_plane.py)
+[p2p_rdma_rc_read_ctrl_plane.py](dlslime/examples/python/p2p_rdma_rc_read_ctrl_plane.py)
 和
-[p2p_rdma_multi_agents_ctrl_plane.py](examples/python/p2p_rdma_multi_agents_ctrl_plane.py)。
+[p2p_rdma_multi_agents_ctrl_plane.py](dlslime/examples/python/p2p_rdma_multi_agents_ctrl_plane.py)。
 
 ```bash
 nanoctrl start
-python examples/python/p2p_rdma_rc_read_ctrl_plane.py
+python dlslime/examples/python/p2p_rdma_rc_read_ctrl_plane.py
 ```
 
 ### DLSlimeCache 服务
@@ -126,15 +126,15 @@ Service 拥有 cache memory region 和 assignment manifests；PeerAgent client
   <img src="docs/imgs/cacheService.png" alt="DLSlimeCache service access" width="88%">
 </p>
 
-示例：[cache_client_example.py](examples/python/cache_client_example.py) 和
+示例：[cache_client_example.py](dlslime/examples/python/cache_client_example.py) 和
 [dlslime-cache design](docs/design/dlslime-cache.md)。
 
 ```bash
 nanoctrl start
-dlslime-cache start --ctrl http://127.0.0.1:3000 \
+dlslime-cache start --ctrl http://127.0.0.1:4479 \
   --host 127.0.0.1 --port 8765 --memory-size 1G
 
-python examples/python/cache_client_example.py --url http://127.0.0.1:8765
+python dlslime/examples/python/cache_client_example.py --url http://127.0.0.1:8765
 
 dlslime-cache stop
 ```
@@ -154,12 +154,12 @@ mailbox 数据路径。
   <img src="docs/imgs/slimeRPC.png" alt="SlimeRPC service access" width="88%">
 </p>
 
-示例：[rpc_example.py](examples/python/rpc_example.py) 和
-[rpc_flatbuf_example.py](examples/python/rpc_flatbuf_example.py)。
+示例：[rpc_example.py](dlslime/examples/python/rpc_example.py) 和
+[rpc_flatbuf_example.py](dlslime/examples/python/rpc_flatbuf_example.py)。
 
 ```bash
 nanoctrl start
-python examples/python/rpc_example.py --ctrl http://127.0.0.1:3000
+python dlslime/examples/python/rpc_example.py --ctrl http://127.0.0.1:4479
 ```
 
 ### PD 分离推理服务
@@ -190,7 +190,7 @@ Coming soon.
 ### PyPI 安装
 
 ```bash
-pip install dlslime==0.0.3.rc2
+pip install dlslime dlslime-ctrl
 ```
 
 PyPI 包使用默认 CMake flags 构建。需要可选传输后端或本地 C++ 改动时，建议
@@ -201,20 +201,21 @@ PyPI 包使用默认 CMake flags 构建。需要可选传输后端或本地 C++ 
 ```bash
 git clone https://github.com/deeplink-org/DLSlime.git
 cd DLSlime
-pip install -v --no-build-isolation -e .
+pip install -v --no-build-isolation -e dlslime
+pip install -e dlslime-ctrl                 # 可选：Rust 控制面
 ```
 
 通过环境变量传递 CMake flags：
 
 ```bash
 BUILD_NVLINK=ON BUILD_TORCH_PLUGIN=ON \
-  pip install -v --no-build-isolation -e .
+  pip install -v --no-build-isolation -e dlslime
 ```
 
 仅构建 C++：
 
 ```bash
-cmake -S . -B build -GNinja -DBUILD_PYTHON=OFF -DBUILD_RDMA=ON
+cmake -S dlslime -B build -GNinja -DBUILD_PYTHON=OFF -DBUILD_RDMA=ON
 cmake --build build
 ```
 
@@ -235,7 +236,7 @@ cmake --build build
 
 Benchmark 命令和历史性能表格已经移动到独立目录：
 
-- [bench/README.md](bench/README.md) - 传输、endpoint、cache、RPC benchmark 入口
+- [dlslime/bench/README.md](dlslime/bench/README.md) - 传输、endpoint、cache、RPC benchmark 入口
 - [docs/benchmark-rpc.md](docs/benchmark-rpc.md) - SlimeRPC vs Ray benchmark 说明
 
 常用入口：
@@ -244,23 +245,26 @@ Benchmark 命令和历史性能表格已经移动到独立目录：
 # 两节点聚合 RDMA 传输 benchmark
 torchrun --master-addr <addr> --master-port 6006 \
   --nnodes 2 --nproc-per-node 8 --node-rank <rank> \
-  bench/python/agg_transfer_bench_spmd.py \
+  dlslime/bench/python/agg_transfer_bench_spmd.py \
   --qp-num 8 --transfer-engine dlslime \
   --batch-size 64 --num-iteration 100 --num-concurrency 8
 
 # SlimeRPC vs Ray 本地 benchmark
-bash bench/python/run_rpc_bench.sh
+bash dlslime/bench/python/run_rpc_bench.sh
 ```
 
 ## 仓库结构
 
 ```text
-dlslime/   核心 Python package、C++ bindings 和传输/运行时 primitives
-NanoCtrl/  服务治理控制面
-examples/  Endpoint、PeerAgent、cache 和 RPC 示例
-bench/     Benchmark 脚本和 benchmark README
-docs/      设计文档、路线图和平台说明
-tests/     Python 和 C++ 测试
+dlslime/         核心 Python package、C++ bindings 和运行时 primitives
+  ├── dlslime/   Python 源码
+  ├── examples/  Endpoint、PeerAgent、cache、RPC 示例
+  ├── bench/     Benchmark 脚本和 benchmark README
+  └── tests/     Python 和 C++ 测试
+dlslime-ctrl/    Rust 控制面（服务注册、可观测性）
+docker/          dlslime-ctrl 的 Docker Compose 部署
+docs/            设计文档、路线图和平台说明
+scripts/         仓库级自动化（release.sh 等）
 ```
 
 ## 文档

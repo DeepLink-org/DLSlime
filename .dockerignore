@@ -1,0 +1,53 @@
+# Keep the Docker build context small. ctrl.Dockerfile only needs `dlslime-ctrl/`.
+
+# Version control
+.git
+.gitignore
+.gitattributes
+.gitmodules
+
+# Rust build artifacts
+**/target/
+
+# Python build / cache artifacts
+**/build/
+**/__pycache__/
+**/*.egg-info/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/*.pyc
+**/*.pyo
+
+# C++/CMake build artifacts
+**/CMakeCache.txt
+**/CMakeFiles/
+**/cmake_install.cmake
+**/*.o
+**/*.so
+**/*.a
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Top-level dirs not needed by ctrl.Dockerfile
+docs/
+docker/
+dlslime/
+cmake/
+scripts/
+
+# Markdown / metadata at the repo root
+README.md
+README_zh.md
+LICENSE
+MANIFEST.in
+pyproject.toml
+CMakeLists.txt

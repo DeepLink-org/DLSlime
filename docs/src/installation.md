@@ -3,7 +3,7 @@
 ## From PyPI
 
 ```bash
-pip install dlslime==0.0.3
+pip install dlslime dlslime-ctrl
 ```
 
 The PyPI package is built with the default CMake flags. Build from source when
@@ -14,20 +14,21 @@ you need optional transports or local C++ changes.
 ```bash
 git clone https://github.com/DeepLink-org/DLSlime.git
 cd DLSlime
-pip install -v --no-build-isolation -e .
+pip install -v --no-build-isolation -e dlslime
+pip install -e dlslime-ctrl                 # optional: Rust control plane
 ```
 
 Pass CMake flags through the environment when enabling optional components:
 
 ```bash
 BUILD_NVLINK=ON BUILD_TORCH_PLUGIN=ON \
-  pip install -v --no-build-isolation -e .
+  pip install -v --no-build-isolation -e dlslime
 ```
 
 For a pure C++ build:
 
 ```bash
-cmake -S . -B build -GNinja -DBUILD_PYTHON=OFF -DBUILD_RDMA=ON
+cmake -S dlslime -B build -GNinja -DBUILD_PYTHON=OFF -DBUILD_RDMA=ON
 cmake --build build
 ```
 
