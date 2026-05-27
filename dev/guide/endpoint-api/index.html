@@ -593,6 +593,8 @@
       
         
       
+        
+      
     
     
     
@@ -828,6 +830,34 @@
     
   
     PeerAgent API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tcp-transport/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    TCP Transport
   
 
     
@@ -1467,6 +1497,10 @@ metadata exchange, memory lifetime, and cleanup.</p>
 <p>For most service deployments, prefer <a href="../peeragent-api/">PeerAgent API</a>. Endpoint
 API is best for transport bring-up, microbenchmarks, explicit two-process tests,
 and systems that already have their own control plane.</p>
+<p>DLSlime ships an <code>RDMAEndpoint</code> (covered below) and a <code>TcpEndpoint</code> for hosts
+without RDMA. Both expose <code>endpoint_info</code> / <code>connect</code>, <code>register_memory_region</code>,
+and the same async send/recv/read/write futures. See <a href="../tcp-transport/">TCP Transport</a>
+for the TCP-specific surface.</p>
 <h2 id="main-types">Main Types<a class="headerlink" href="#main-types" title="Permanent link">&para;</a></h2>
 <table>
 <thead>

@@ -16,7 +16,7 @@
         <link rel="prev" href="../endpoint-api/">
       
       
-        <link rel="next" href="../slimerpc/">
+        <link rel="next" href="../tcp-transport/">
       
       
         
@@ -593,6 +593,8 @@
       
         
       
+        
+      
     
     
     
@@ -775,6 +777,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Connecting Peers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#selecting-the-transport" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Selecting the transport
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -825,6 +844,34 @@
   
 </nav>
       
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tcp-transport/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    TCP Transport
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -1372,6 +1419,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Connecting Peers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#selecting-the-transport" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Selecting the transport
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1543,36 +1607,48 @@ Agents in different scopes intentionally cannot see each other.</p>
 </tr>
 <tr>
 <td><code>endpoint</code></td>
-<td>Underlying <code>RDMAEndpoint</code> once created.</td>
+<td>Underlying <code>RDMAEndpoint</code> or <code>TcpEndpoint</code> once created.</td>
+</tr>
+<tr>
+<td><code>peer_endpoint_info</code></td>
+<td>Peer's <code>endpoint_info</code> dict captured during handshake (TCP one-sided ops).</td>
 </tr>
 </tbody>
 </table>
+<h3 id="selecting-the-transport">Selecting the transport<a class="headerlink" href="#selecting-the-transport" title="Permanent link">&para;</a></h3>
+<p><code>connect_to(transport=...)</code> picks the underlying transport. RDMA is the
+default; pass <code>transport="tcp"</code> to bind a <code>TcpEndpoint</code> instead. See
+<a href="../tcp-transport/">TCP Transport</a> for the full TCP flow, the
+<code>local_host</code>/<code>local_port</code> kwargs, and one-sided I/O over TCP.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">conn</span> <span class="o">=</span> <span class="n">agent</span><span class="o">.</span><span class="n">connect_to</span><span class="p">(</span><span class="s2">&quot;worker-b&quot;</span><span class="p">,</span> <span class="n">transport</span><span class="o">=</span><span class="s2">&quot;tcp&quot;</span><span class="p">)</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">conn</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+</span></code></pre></div>
 <p>For bidirectional flows, both agents normally call <code>connect_to</code> and wait on
 their local handle:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">a_to_b</span> <span class="o">=</span> <span class="n">agent_a</span><span class="o">.</span><span class="n">connect_to</span><span class="p">(</span><span class="n">agent_b</span><span class="o">.</span><span class="n">alias</span><span class="p">,</span> <span class="n">ib_port</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">qp_num</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">b_to_a</span> <span class="o">=</span> <span class="n">agent_b</span><span class="o">.</span><span class="n">connect_to</span><span class="p">(</span><span class="n">agent_a</span><span class="o">.</span><span class="n">alias</span><span class="p">,</span> <span class="n">ib_port</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">qp_num</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="n">a_to_b</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
-</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="n">b_to_a</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">a_to_b</span> <span class="o">=</span> <span class="n">agent_a</span><span class="o">.</span><span class="n">connect_to</span><span class="p">(</span><span class="n">agent_b</span><span class="o">.</span><span class="n">alias</span><span class="p">,</span> <span class="n">ib_port</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">qp_num</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">b_to_a</span> <span class="o">=</span> <span class="n">agent_b</span><span class="o">.</span><span class="n">connect_to</span><span class="p">(</span><span class="n">agent_a</span><span class="o">.</span><span class="n">alias</span><span class="p">,</span> <span class="n">ib_port</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">qp_num</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="n">a_to_b</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="n">b_to_a</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
 </span></code></pre></div>
 <h2 id="memory-regions">Memory Regions<a class="headerlink" href="#memory-regions" title="Permanent link">&para;</a></h2>
 <p>Register local buffers by name:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">handler</span> <span class="o">=</span> <span class="n">agent</span><span class="o">.</span><span class="n">register_memory_region</span><span class="p">(</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>    <span class="s2">&quot;kv&quot;</span><span class="p">,</span>
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>    <span class="n">tensor</span><span class="o">.</span><span class="n">data_ptr</span><span class="p">(),</span>
-</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>    <span class="nb">int</span><span class="p">(</span><span class="n">tensor</span><span class="o">.</span><span class="n">storage_offset</span><span class="p">()),</span>
-</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>    <span class="n">tensor</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">*</span> <span class="n">tensor</span><span class="o">.</span><span class="n">itemsize</span><span class="p">,</span>
-</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">handler</span> <span class="o">=</span> <span class="n">agent</span><span class="o">.</span><span class="n">register_memory_region</span><span class="p">(</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>    <span class="s2">&quot;kv&quot;</span><span class="p">,</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>    <span class="n">tensor</span><span class="o">.</span><span class="n">data_ptr</span><span class="p">(),</span>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>    <span class="nb">int</span><span class="p">(</span><span class="n">tensor</span><span class="o">.</span><span class="n">storage_offset</span><span class="p">()),</span>
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>    <span class="n">tensor</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">*</span> <span class="n">tensor</span><span class="o">.</span><span class="n">itemsize</span><span class="p">,</span>
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="p">)</span>
 </span></code></pre></div>
 <p>PeerAgent publishes memory keys through the control plane, so peers can resolve
 handles by name:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">remote_handle</span> <span class="o">=</span> <span class="n">agent</span><span class="o">.</span><span class="n">get_handle</span><span class="p">(</span><span class="s2">&quot;kv&quot;</span><span class="p">,</span> <span class="n">peer_alias</span><span class="o">=</span><span class="s2">&quot;worker-b&quot;</span><span class="p">)</span>
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="n">local_info</span> <span class="o">=</span> <span class="n">agent</span><span class="o">.</span><span class="n">get_mr_info</span><span class="p">(</span><span class="s2">&quot;kv&quot;</span><span class="p">)</span>
-</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="n">peer_info</span> <span class="o">=</span> <span class="n">agent</span><span class="o">.</span><span class="n">get_mr_info</span><span class="p">(</span><span class="s2">&quot;kv&quot;</span><span class="p">,</span> <span class="n">peer_alias</span><span class="o">=</span><span class="s2">&quot;worker-b&quot;</span><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="n">remote_handle</span> <span class="o">=</span> <span class="n">agent</span><span class="o">.</span><span class="n">get_handle</span><span class="p">(</span><span class="s2">&quot;kv&quot;</span><span class="p">,</span> <span class="n">peer_alias</span><span class="o">=</span><span class="s2">&quot;worker-b&quot;</span><span class="p">)</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="n">local_info</span> <span class="o">=</span> <span class="n">agent</span><span class="o">.</span><span class="n">get_mr_info</span><span class="p">(</span><span class="s2">&quot;kv&quot;</span><span class="p">)</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="n">peer_info</span> <span class="o">=</span> <span class="n">agent</span><span class="o">.</span><span class="n">get_mr_info</span><span class="p">(</span><span class="s2">&quot;kv&quot;</span><span class="p">,</span> <span class="n">peer_alias</span><span class="o">=</span><span class="s2">&quot;worker-b&quot;</span><span class="p">)</span>
 </span></code></pre></div>
 <p>Cleanup:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="n">agent</span><span class="o">.</span><span class="n">unregister_memory_region</span><span class="p">(</span><span class="s2">&quot;kv&quot;</span><span class="p">)</span>
-</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="n">agent</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">agent</span><span class="o">.</span><span class="n">unregister_memory_region</span><span class="p">(</span><span class="s2">&quot;kv&quot;</span><span class="p">)</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="n">agent</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
 </span></code></pre></div>
 <p>Keep the underlying tensor or buffer alive while the memory region is registered
 and while any future using it is in flight.</p>
@@ -1583,16 +1659,16 @@ and while any future using it is in flight.</p>
 <li><strong>Handle assignment</strong>: <code>(local_handle, remote_handle, target_offset, source_offset, length)</code>.</li>
 </ul>
 <p>Named assignments are the ergonomic path:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">future</span> <span class="o">=</span> <span class="n">agent</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;worker-b&quot;</span><span class="p">,</span> <span class="p">[(</span><span class="s2">&quot;kv&quot;</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">8</span><span class="p">)])</span>
-</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="n">future</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="n">future</span> <span class="o">=</span> <span class="n">agent</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;worker-b&quot;</span><span class="p">,</span> <span class="p">[(</span><span class="s2">&quot;kv&quot;</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">8</span><span class="p">)])</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="n">future</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
 </span></code></pre></div>
 <p>Handle assignments are useful for hot paths that already cached local and
 remote handles:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="n">local_handle</span> <span class="o">=</span> <span class="n">agent</span><span class="o">.</span><span class="n">register_memory_region</span><span class="p">(</span><span class="s2">&quot;recv&quot;</span><span class="p">,</span> <span class="n">recv_ptr</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">recv_nbytes</span><span class="p">)</span>
-</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="n">remote_handle</span> <span class="o">=</span> <span class="n">agent</span><span class="o">.</span><span class="n">get_handle</span><span class="p">(</span><span class="s2">&quot;data&quot;</span><span class="p">,</span> <span class="s2">&quot;worker-b&quot;</span><span class="p">)</span>
-</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>
-</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="n">future</span> <span class="o">=</span> <span class="n">agent</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;worker-b&quot;</span><span class="p">,</span> <span class="p">[(</span><span class="n">local_handle</span><span class="p">,</span> <span class="n">remote_handle</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">4096</span><span class="p">)],</span> <span class="kc">None</span><span class="p">)</span>
-</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="n">future</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="n">local_handle</span> <span class="o">=</span> <span class="n">agent</span><span class="o">.</span><span class="n">register_memory_region</span><span class="p">(</span><span class="s2">&quot;recv&quot;</span><span class="p">,</span> <span class="n">recv_ptr</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">recv_nbytes</span><span class="p">)</span>
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="n">remote_handle</span> <span class="o">=</span> <span class="n">agent</span><span class="o">.</span><span class="n">get_handle</span><span class="p">(</span><span class="s2">&quot;data&quot;</span><span class="p">,</span> <span class="s2">&quot;worker-b&quot;</span><span class="p">)</span>
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>
+</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="n">future</span> <span class="o">=</span> <span class="n">agent</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;worker-b&quot;</span><span class="p">,</span> <span class="p">[(</span><span class="n">local_handle</span><span class="p">,</span> <span class="n">remote_handle</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">4096</span><span class="p">)],</span> <span class="kc">None</span><span class="p">)</span>
+</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="n">future</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
 </span></code></pre></div>
 <p>Available I/O methods:</p>
 <table>
@@ -1630,30 +1706,30 @@ remote handles:</p>
 </tbody>
 </table>
 <h2 id="minimal-read-example">Minimal Read Example<a class="headerlink" href="#minimal-read-example" title="Permanent link">&para;</a></h2>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
-</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">dlslime</span><span class="w"> </span><span class="kn">import</span> <span class="n">start_peer_agent</span>
-</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>
-</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="n">scope</span> <span class="o">=</span> <span class="s2">&quot;peeragent-api-demo&quot;</span>
-</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>
-</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="n">initiator</span> <span class="o">=</span> <span class="n">start_peer_agent</span><span class="p">(</span><span class="n">ctrl_url</span><span class="o">=</span><span class="s2">&quot;http://127.0.0.1:4479&quot;</span><span class="p">,</span> <span class="n">scope</span><span class="o">=</span><span class="n">scope</span><span class="p">)</span>
-</span><span id="__span-10-7"><a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="n">target</span> <span class="o">=</span> <span class="n">start_peer_agent</span><span class="p">(</span><span class="n">ctrl_url</span><span class="o">=</span><span class="s2">&quot;http://127.0.0.1:4479&quot;</span><span class="p">,</span> <span class="n">scope</span><span class="o">=</span><span class="n">scope</span><span class="p">)</span>
-</span><span id="__span-10-8"><a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a>
-</span><span id="__span-10-9"><a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a><span class="n">initiator_conn</span> <span class="o">=</span> <span class="n">initiator</span><span class="o">.</span><span class="n">connect_to</span><span class="p">(</span><span class="n">target</span><span class="o">.</span><span class="n">alias</span><span class="p">,</span> <span class="n">ib_port</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">qp_num</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-</span><span id="__span-10-10"><a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a><span class="n">target_conn</span> <span class="o">=</span> <span class="n">target</span><span class="o">.</span><span class="n">connect_to</span><span class="p">(</span><span class="n">initiator</span><span class="o">.</span><span class="n">alias</span><span class="p">,</span> <span class="n">ib_port</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">qp_num</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-</span><span id="__span-10-11"><a id="__codelineno-10-11" name="__codelineno-10-11" href="#__codelineno-10-11"></a><span class="n">initiator_conn</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
-</span><span id="__span-10-12"><a id="__codelineno-10-12" name="__codelineno-10-12" href="#__codelineno-10-12"></a><span class="n">target_conn</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
-</span><span id="__span-10-13"><a id="__codelineno-10-13" name="__codelineno-10-13" href="#__codelineno-10-13"></a>
-</span><span id="__span-10-14"><a id="__codelineno-10-14" name="__codelineno-10-14" href="#__codelineno-10-14"></a><span class="n">local</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">([</span><span class="mi">16</span><span class="p">],</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cpu&quot;</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">uint8</span><span class="p">)</span>
-</span><span id="__span-10-15"><a id="__codelineno-10-15" name="__codelineno-10-15" href="#__codelineno-10-15"></a><span class="n">remote</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">([</span><span class="mi">16</span><span class="p">],</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cpu&quot;</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">uint8</span><span class="p">)</span>
-</span><span id="__span-10-16"><a id="__codelineno-10-16" name="__codelineno-10-16" href="#__codelineno-10-16"></a>
-</span><span id="__span-10-17"><a id="__codelineno-10-17" name="__codelineno-10-17" href="#__codelineno-10-17"></a><span class="n">initiator</span><span class="o">.</span><span class="n">register_memory_region</span><span class="p">(</span><span class="s2">&quot;kv&quot;</span><span class="p">,</span> <span class="n">local</span><span class="o">.</span><span class="n">data_ptr</span><span class="p">(),</span> <span class="mi">0</span><span class="p">,</span> <span class="n">local</span><span class="o">.</span><span class="n">numel</span><span class="p">())</span>
-</span><span id="__span-10-18"><a id="__codelineno-10-18" name="__codelineno-10-18" href="#__codelineno-10-18"></a><span class="n">target</span><span class="o">.</span><span class="n">register_memory_region</span><span class="p">(</span><span class="s2">&quot;kv&quot;</span><span class="p">,</span> <span class="n">remote</span><span class="o">.</span><span class="n">data_ptr</span><span class="p">(),</span> <span class="mi">0</span><span class="p">,</span> <span class="n">remote</span><span class="o">.</span><span class="n">numel</span><span class="p">())</span>
-</span><span id="__span-10-19"><a id="__codelineno-10-19" name="__codelineno-10-19" href="#__codelineno-10-19"></a>
-</span><span id="__span-10-20"><a id="__codelineno-10-20" name="__codelineno-10-20" href="#__codelineno-10-20"></a><span class="n">future</span> <span class="o">=</span> <span class="n">initiator</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">target</span><span class="o">.</span><span class="n">alias</span><span class="p">,</span> <span class="p">[(</span><span class="s2">&quot;kv&quot;</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">8</span><span class="p">)])</span>
-</span><span id="__span-10-21"><a id="__codelineno-10-21" name="__codelineno-10-21" href="#__codelineno-10-21"></a><span class="n">future</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
-</span><span id="__span-10-22"><a id="__codelineno-10-22" name="__codelineno-10-22" href="#__codelineno-10-22"></a>
-</span><span id="__span-10-23"><a id="__codelineno-10-23" name="__codelineno-10-23" href="#__codelineno-10-23"></a><span class="n">initiator</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
-</span><span id="__span-10-24"><a id="__codelineno-10-24" name="__codelineno-10-24" href="#__codelineno-10-24"></a><span class="n">target</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">dlslime</span><span class="w"> </span><span class="kn">import</span> <span class="n">start_peer_agent</span>
+</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>
+</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="n">scope</span> <span class="o">=</span> <span class="s2">&quot;peeragent-api-demo&quot;</span>
+</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>
+</span><span id="__span-11-6"><a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="n">initiator</span> <span class="o">=</span> <span class="n">start_peer_agent</span><span class="p">(</span><span class="n">ctrl_url</span><span class="o">=</span><span class="s2">&quot;http://127.0.0.1:4479&quot;</span><span class="p">,</span> <span class="n">scope</span><span class="o">=</span><span class="n">scope</span><span class="p">)</span>
+</span><span id="__span-11-7"><a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a><span class="n">target</span> <span class="o">=</span> <span class="n">start_peer_agent</span><span class="p">(</span><span class="n">ctrl_url</span><span class="o">=</span><span class="s2">&quot;http://127.0.0.1:4479&quot;</span><span class="p">,</span> <span class="n">scope</span><span class="o">=</span><span class="n">scope</span><span class="p">)</span>
+</span><span id="__span-11-8"><a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a>
+</span><span id="__span-11-9"><a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a><span class="n">initiator_conn</span> <span class="o">=</span> <span class="n">initiator</span><span class="o">.</span><span class="n">connect_to</span><span class="p">(</span><span class="n">target</span><span class="o">.</span><span class="n">alias</span><span class="p">,</span> <span class="n">ib_port</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">qp_num</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+</span><span id="__span-11-10"><a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a><span class="n">target_conn</span> <span class="o">=</span> <span class="n">target</span><span class="o">.</span><span class="n">connect_to</span><span class="p">(</span><span class="n">initiator</span><span class="o">.</span><span class="n">alias</span><span class="p">,</span> <span class="n">ib_port</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">qp_num</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+</span><span id="__span-11-11"><a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a><span class="n">initiator_conn</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+</span><span id="__span-11-12"><a id="__codelineno-11-12" name="__codelineno-11-12" href="#__codelineno-11-12"></a><span class="n">target_conn</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+</span><span id="__span-11-13"><a id="__codelineno-11-13" name="__codelineno-11-13" href="#__codelineno-11-13"></a>
+</span><span id="__span-11-14"><a id="__codelineno-11-14" name="__codelineno-11-14" href="#__codelineno-11-14"></a><span class="n">local</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">([</span><span class="mi">16</span><span class="p">],</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cpu&quot;</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">uint8</span><span class="p">)</span>
+</span><span id="__span-11-15"><a id="__codelineno-11-15" name="__codelineno-11-15" href="#__codelineno-11-15"></a><span class="n">remote</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">([</span><span class="mi">16</span><span class="p">],</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cpu&quot;</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">uint8</span><span class="p">)</span>
+</span><span id="__span-11-16"><a id="__codelineno-11-16" name="__codelineno-11-16" href="#__codelineno-11-16"></a>
+</span><span id="__span-11-17"><a id="__codelineno-11-17" name="__codelineno-11-17" href="#__codelineno-11-17"></a><span class="n">initiator</span><span class="o">.</span><span class="n">register_memory_region</span><span class="p">(</span><span class="s2">&quot;kv&quot;</span><span class="p">,</span> <span class="n">local</span><span class="o">.</span><span class="n">data_ptr</span><span class="p">(),</span> <span class="mi">0</span><span class="p">,</span> <span class="n">local</span><span class="o">.</span><span class="n">numel</span><span class="p">())</span>
+</span><span id="__span-11-18"><a id="__codelineno-11-18" name="__codelineno-11-18" href="#__codelineno-11-18"></a><span class="n">target</span><span class="o">.</span><span class="n">register_memory_region</span><span class="p">(</span><span class="s2">&quot;kv&quot;</span><span class="p">,</span> <span class="n">remote</span><span class="o">.</span><span class="n">data_ptr</span><span class="p">(),</span> <span class="mi">0</span><span class="p">,</span> <span class="n">remote</span><span class="o">.</span><span class="n">numel</span><span class="p">())</span>
+</span><span id="__span-11-19"><a id="__codelineno-11-19" name="__codelineno-11-19" href="#__codelineno-11-19"></a>
+</span><span id="__span-11-20"><a id="__codelineno-11-20" name="__codelineno-11-20" href="#__codelineno-11-20"></a><span class="n">future</span> <span class="o">=</span> <span class="n">initiator</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">target</span><span class="o">.</span><span class="n">alias</span><span class="p">,</span> <span class="p">[(</span><span class="s2">&quot;kv&quot;</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">8</span><span class="p">)])</span>
+</span><span id="__span-11-21"><a id="__codelineno-11-21" name="__codelineno-11-21" href="#__codelineno-11-21"></a><span class="n">future</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+</span><span id="__span-11-22"><a id="__codelineno-11-22" name="__codelineno-11-22" href="#__codelineno-11-22"></a>
+</span><span id="__span-11-23"><a id="__codelineno-11-23" name="__codelineno-11-23" href="#__codelineno-11-23"></a><span class="n">initiator</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
+</span><span id="__span-11-24"><a id="__codelineno-11-24" name="__codelineno-11-24" href="#__codelineno-11-24"></a><span class="n">target</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
 </span></code></pre></div>
 <h2 id="examples">Examples<a class="headerlink" href="#examples" title="Permanent link">&para;</a></h2>
 <ul>

@@ -10,19 +10,19 @@
       
       
       
-        <link rel="canonical" href="https://deeplink-org.github.io/DLSlime/dev/design/endpoint-ownership-model/">
+        <link rel="canonical" href="https://deeplink-org.github.io/DLSlime/dev/guide/tcp-transport/">
       
       
-        <link rel="prev" href="../dlslime-cache/">
+        <link rel="prev" href="../peeragent-api/">
       
       
-        <link rel="next" href="../endpoint-device-signal-refactor/">
+        <link rel="next" href="../slimerpc/">
       
       
         
           <link rel="alternate" href="./" hreflang="en">
         
-          <link rel="alternate" href="../../zh/design/endpoint-ownership-model/" hreflang="zh">
+          <link rel="alternate" href="../../zh/guide/tcp-transport/" hreflang="zh">
         
       
       
@@ -31,7 +31,7 @@
     
     
       
-        <title>Endpoint Ownership - DLSlime Documentation</title>
+        <title>TCP Transport - DLSlime Documentation</title>
       
     
     
@@ -86,7 +86,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#rdmaendpoint-completion-ownership-model" class="md-skip">
+        <a href="#tcp-transport" class="md-skip">
           Skip to content
         </a>
       
@@ -123,7 +123,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Endpoint Ownership
+              TCP Transport
             
           </span>
         </div>
@@ -176,7 +176,7 @@
           </li>
         
           <li class="md-select__item">
-            <a href="../../zh/design/endpoint-ownership-model/" hreflang="zh" class="md-select__link">
+            <a href="../../zh/guide/tcp-transport/" hreflang="zh" class="md-select__link">
               中文
             </a>
           </li>
@@ -320,11 +320,13 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
-        <a href="../../guide/" class="md-tabs__link">
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
           
   
   
@@ -342,13 +344,11 @@
   
   
   
-    
-  
   
     
     
-      <li class="md-tabs__item md-tabs__item--active">
-        <a href="../architecture/" class="md-tabs__link">
+      <li class="md-tabs__item">
+        <a href="../../design/architecture/" class="md-tabs__link">
           
   
   
@@ -570,6 +570,8 @@
       
   
   
+    
+  
   
   
     
@@ -597,20 +599,23 @@
     
     
       
+        
+        
+      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../guide/" class="md-nav__link ">
+            <a href="../" class="md-nav__link ">
               
   
   
@@ -628,13 +633,13 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_4">
             <span class="md-nav__icon md-icon"></span>
             
@@ -654,7 +659,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guide/endpoint-api/" class="md-nav__link">
+      <a href="../endpoint-api/" class="md-nav__link">
         
   
   
@@ -682,7 +687,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guide/peeragent-api/" class="md-nav__link">
+      <a href="../peeragent-api/" class="md-nav__link">
         
   
   
@@ -690,276 +695,6 @@
     
   
     PeerAgent API
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../guide/tcp-transport/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    TCP Transport
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../guide/slimerpc/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    SlimeRPC
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../guide/deployment/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Deployment
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../guide/dlslime-cache/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    DLSlimeCache Service
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../guide/benchmark-rpc/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    SlimeRPC Benchmark
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-          </ul>
-        </nav>
-      
-    </li>
-  
-
-    
-      
-      
-  
-  
-    
-  
-  
-  
-    
-    
-      
-        
-      
-        
-      
-        
-      
-        
-      
-    
-    
-    
-      
-        
-        
-      
-      
-        
-      
-    
-    
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
-      
-        
-        
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
-        
-          
-          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
-            
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Design
-  
-
-    
-  </span>
-  
-  
-
-            <span class="md-nav__icon md-icon"></span>
-          </label>
-        
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_5">
-            <span class="md-nav__icon md-icon"></span>
-            
-  
-    Design
-  
-
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../architecture/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Architecture
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../dlslime-cache/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    DLSlimeCache
   
 
     
@@ -996,7 +731,7 @@
   <span class="md-ellipsis">
     
   
-    Endpoint Ownership
+    TCP Transport
   
 
     
@@ -1014,7 +749,7 @@
   <span class="md-ellipsis">
     
   
-    Endpoint Ownership
+    TCP Transport
   
 
     
@@ -1040,10 +775,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#the-four-objects" class="md-nav__link">
+  <a href="#raw-tcpendpoint" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The Four Objects
+        Raw TcpEndpoint
       
     </span>
   </a>
@@ -1051,33 +786,22 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#who-owns-what" class="md-nav__link">
+  <a href="#tcp-through-peeragent" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Who Owns What
+        TCP through PeerAgent
       
     </span>
   </a>
   
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#boundary-invariants" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Boundary Invariants
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Boundary Invariants">
+    <nav class="md-nav" aria-label="TCP through PeerAgent">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#i1-signal-exclusivity" class="md-nav__link">
+  <a href="#one-sided-read-write" class="md-nav__link">
     <span class="md-ellipsis">
       
-        I1 — Signal exclusivity
+        One-sided read / write
       
     </span>
   </a>
@@ -1085,43 +809,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#i2-slot-reuse-safety" class="md-nav__link">
+  <a href="#what-does-not-work-on-tcp" class="md-nav__link">
     <span class="md-ellipsis">
       
-        I2 — Slot-reuse safety
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#i3-callback-lifetime" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        I3 — Callback lifetime
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#i4-op-lifetime" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        I4 — Op lifetime
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#i5-rnr-avoidance" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        I5 — RNR avoidance
+        What does not work on TCP
       
     </span>
   </a>
@@ -1134,10 +825,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#what-the-slot-is-not" class="md-nav__link">
+  <a href="#examples" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What the Slot Is NOT
+        Examples
       
     </span>
   </a>
@@ -1145,60 +836,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#message-path-specifics-send-recv" class="md-nav__link">
+  <a href="#tests" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Message-Path Specifics (Send / Recv)
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Message-Path Specifics (Send / Recv)">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#api-contract-pair-ordering" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        API contract — pair ordering
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#imm-recv-path-specifics" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Imm-Recv Path Specifics
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#what-cancelall-does" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        What cancelAll() Does
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#how-to-extend-this-safely" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        How To Extend This Safely
+        Tests
       
     </span>
   </a>
@@ -1221,7 +862,272 @@
   
   
     <li class="md-nav__item">
-      <a href="../endpoint-device-signal-refactor/" class="md-nav__link">
+      <a href="../slimerpc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    SlimeRPC
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Deployment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../dlslime-cache/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    DLSlimeCache Service
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../benchmark-rpc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    SlimeRPC Benchmark
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Design
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../design/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../design/dlslime-cache/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    DLSlimeCache
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../design/endpoint-ownership-model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Endpoint Ownership
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../design/endpoint-device-signal-refactor/" class="md-nav__link">
         
   
   
@@ -1461,10 +1367,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#the-four-objects" class="md-nav__link">
+  <a href="#raw-tcpendpoint" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The Four Objects
+        Raw TcpEndpoint
       
     </span>
   </a>
@@ -1472,33 +1378,22 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#who-owns-what" class="md-nav__link">
+  <a href="#tcp-through-peeragent" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Who Owns What
+        TCP through PeerAgent
       
     </span>
   </a>
   
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#boundary-invariants" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Boundary Invariants
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Boundary Invariants">
+    <nav class="md-nav" aria-label="TCP through PeerAgent">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#i1-signal-exclusivity" class="md-nav__link">
+  <a href="#one-sided-read-write" class="md-nav__link">
     <span class="md-ellipsis">
       
-        I1 — Signal exclusivity
+        One-sided read / write
       
     </span>
   </a>
@@ -1506,43 +1401,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#i2-slot-reuse-safety" class="md-nav__link">
+  <a href="#what-does-not-work-on-tcp" class="md-nav__link">
     <span class="md-ellipsis">
       
-        I2 — Slot-reuse safety
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#i3-callback-lifetime" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        I3 — Callback lifetime
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#i4-op-lifetime" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        I4 — Op lifetime
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#i5-rnr-avoidance" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        I5 — RNR avoidance
+        What does not work on TCP
       
     </span>
   </a>
@@ -1555,10 +1417,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#what-the-slot-is-not" class="md-nav__link">
+  <a href="#examples" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What the Slot Is NOT
+        Examples
       
     </span>
   </a>
@@ -1566,60 +1428,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#message-path-specifics-send-recv" class="md-nav__link">
+  <a href="#tests" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Message-Path Specifics (Send / Recv)
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Message-Path Specifics (Send / Recv)">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#api-contract-pair-ordering" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        API contract — pair ordering
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#imm-recv-path-specifics" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Imm-Recv Path Specifics
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#what-cancelall-does" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        What cancelAll() Does
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#how-to-extend-this-safely" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        How To Extend This Safely
+        Tests
       
     </span>
   </a>
@@ -1646,256 +1458,166 @@
   
 
 
-<h1 id="rdmaendpoint-completion-ownership-model">RDMAEndpoint Completion-Ownership Model<a class="headerlink" href="#rdmaendpoint-completion-ownership-model" title="Permanent link">&para;</a></h1>
-<p>This document fixes the language for the RDMAEndpoint completion refactor.
-Before the refactor the codebase mixed three concerns in one struct — the
-"slot" was simultaneously the execution-storage, the completion owner,
-and the wire work-request. That made it impossible to describe who owned
-what, so subtle ABA hazards kept slipping in. The refactor separates
-those concerns into three layers with explicit ownership rules.</p>
-<h2 id="the-four-objects">The Four Objects<a class="headerlink" href="#the-four-objects" title="Permanent link">&para;</a></h2>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>┌──────────────────────────────────────────────────────────────────────┐
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>│  Layer 1: Future (SendFuture / RecvFuture / ReadWriteFuture /        │
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>│           ImmRecvFuture)                                             │
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>│           — user handle; wait() and read result                      │
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>└──────────────────────────────────────────────────────────────────────┘
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>                          │ shared_ptr&lt;EndpointOpState&gt;
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>                          ▼
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>┌──────────────────────────────────────────────────────────────────────┐
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>│  Layer 2: EndpointOpState                                            │
-</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>│           — per-op identity + completion signal + result fields      │
-</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>│           — NOT pooled; created per op, released per op              │
-</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>└──────────────────────────────────────────────────────────────────────┘
-</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>                          │ referenced by slot.op_state
-</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>                          │ and by transport callbacks (strong, on CQ
-</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>                          │ thread stack while invoking)
-</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>                          ▼
-</span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>┌──────────────────────────────────────────────────────────────────────┐
-</span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>│  Layer 3: Slot (ReadWriteContext / SendContext / RecvContext)        │
-</span><span id="__span-0-19"><a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>│           — POOLED dispatch coordinator                              │
-</span><span id="__span-0-20"><a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>│           — holds wr_id-backing RDMAAssign storage                   │
-</span><span id="__span-0-21"><a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a>│           — lease/release via free-slot ring; never modulo-reused    │
-</span><span id="__span-0-22"><a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a>└──────────────────────────────────────────────────────────────────────┘
-</span><span id="__span-0-23"><a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a>                          │ wr_id = &amp;slot.assigns_[qpi]
-</span><span id="__span-0-24"><a id="__codelineno-0-24" name="__codelineno-0-24" href="#__codelineno-0-24"></a>                          ▼
-</span><span id="__span-0-25"><a id="__codelineno-0-25" name="__codelineno-0-25" href="#__codelineno-0-25"></a>┌──────────────────────────────────────────────────────────────────────┐
-</span><span id="__span-0-26"><a id="__codelineno-0-26" name="__codelineno-0-26" href="#__codelineno-0-26"></a>│  Layer 4: RDMAAssign + RDMAChannel / RDMAContext                     │
-</span><span id="__span-0-27"><a id="__codelineno-0-27" name="__codelineno-0-27" href="#__codelineno-0-27"></a>│           — wire WR; CQ polling + callback dispatch                  │
-</span><span id="__span-0-28"><a id="__codelineno-0-28" name="__codelineno-0-28" href="#__codelineno-0-28"></a>└──────────────────────────────────────────────────────────────────────┘
+<h1 id="tcp-transport">TCP Transport<a class="headerlink" href="#tcp-transport" title="Permanent link">&para;</a></h1>
+<p>DLSlime ships a TCP transfer engine alongside RDMA, NVLink, and Ascend Direct.
+TCP is the right transport when:</p>
+<ul>
+<li>The hosts have no RDMA NICs (laptops, dev boxes, mixed clusters).</li>
+<li>You want a quick smoke test before a real RDMA deployment.</li>
+<li>A connection has to traverse a network without RDMA capability.</li>
+</ul>
+<p>It exposes the same primitives as RDMA — <code>endpoint_info</code> / <code>connect</code>, two-sided
+<code>send</code> / <code>recv</code>, one-sided <code>read</code> / <code>write</code>, and named memory regions — and
+plugs into PeerAgent through the same control plane. Immediate-data ops
+(<code>write_with_imm</code>, <code>imm_recv</code>) are RDMA-only; on TCP they raise
+<code>NotImplementedError</code> (translated from a C++ <code>not_implemented</code> exception).</p>
+<p>TCP is enabled by default at build time (<code>BUILD_TCP=ON</code>).</p>
+<h2 id="raw-tcpendpoint">Raw <code>TcpEndpoint</code><a class="headerlink" href="#raw-tcpendpoint" title="Permanent link">&para;</a></h2>
+<p>Use <code>TcpEndpoint</code> when the application already owns connection setup, metadata
+exchange, and memory lifetime — the same scope as raw <code>RDMAEndpoint</code>. No
+NanoCtrl or Redis needed.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">ctypes</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">dlslime</span><span class="w"> </span><span class="kn">import</span> <span class="n">TcpEndpoint</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">ep_a</span> <span class="o">=</span> <span class="n">TcpEndpoint</span><span class="p">(</span><span class="n">ip</span><span class="o">=</span><span class="s2">&quot;0.0.0.0&quot;</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>   <span class="c1"># 0 = OS-assigned</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="n">ep_b</span> <span class="o">=</span> <span class="n">TcpEndpoint</span><span class="p">(</span><span class="n">ip</span><span class="o">=</span><span class="s2">&quot;0.0.0.0&quot;</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="n">info_a</span> <span class="o">=</span> <span class="n">ep_a</span><span class="o">.</span><span class="n">endpoint_info</span><span class="p">()</span>              <span class="c1"># {&quot;host&quot;, &quot;port&quot;, &quot;mr_info&quot;}</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="n">info_b</span> <span class="o">=</span> <span class="n">ep_b</span><span class="o">.</span><span class="n">endpoint_info</span><span class="p">()</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="c1"># Both sides bind a port and connect; the handshake is symmetric.</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="n">ep_a</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">info_b</span><span class="p">)</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="n">ep_b</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">info_a</span><span class="p">)</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>
+</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="n">buf</span> <span class="o">=</span> <span class="n">ctypes</span><span class="o">.</span><span class="n">create_string_buffer</span><span class="p">(</span><span class="mi">64</span><span class="p">)</span>
+</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="n">fut</span> <span class="o">=</span> <span class="n">ep_a</span><span class="o">.</span><span class="n">send</span><span class="p">((</span><span class="n">ctypes</span><span class="o">.</span><span class="n">addressof</span><span class="p">(</span><span class="n">buf</span><span class="p">),</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">5</span><span class="p">))</span>
+</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a><span class="k">assert</span> <span class="n">fut</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span> <span class="o">==</span> <span class="mi">0</span>
 </span></code></pre></div>
-<p><code>ImmRecvContext</code> is a separate Layer-3 object with different semantics
-(see below) but follows the same ownership rules.</p>
-<h2 id="who-owns-what">Who Owns What<a class="headerlink" href="#who-owns-what" title="Permanent link">&para;</a></h2>
+<p><code>send</code>, <code>recv</code>, <code>read</code>, and <code>write</code> return future objects with a <code>wait()</code>
+method. <code>wait_for(seconds)</code> returns <code>None</code> on timeout and the status code
+otherwise.</p>
+<p>For one-sided ops, register both sides' MRs <strong>before</strong> calling <code>connect()</code> so
+<code>endpoint_info()</code> carries them across the handshake:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">h_local</span> <span class="o">=</span> <span class="n">ep_a</span><span class="o">.</span><span class="n">register_memory_region</span><span class="p">(</span><span class="s2">&quot;a&quot;</span><span class="p">,</span> <span class="n">addr_a</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">256</span><span class="p">)</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">h_local_b</span> <span class="o">=</span> <span class="n">ep_b</span><span class="o">.</span><span class="n">register_memory_region</span><span class="p">(</span><span class="s2">&quot;b&quot;</span><span class="p">,</span> <span class="n">addr_b</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">256</span><span class="p">)</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">info_b</span> <span class="o">=</span> <span class="n">ep_b</span><span class="o">.</span><span class="n">endpoint_info</span><span class="p">()</span>                      <span class="c1"># carries mr_info[&quot;b&quot;]</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="n">h_remote</span> <span class="o">=</span> <span class="n">ep_a</span><span class="o">.</span><span class="n">register_remote_memory_region</span><span class="p">(</span><span class="s2">&quot;rb&quot;</span><span class="p">,</span> <span class="n">info_b</span><span class="p">[</span><span class="s2">&quot;mr_info&quot;</span><span class="p">][</span><span class="s2">&quot;b&quot;</span><span class="p">])</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="n">ep_a</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">info_b</span><span class="p">)</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="n">ep_b</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">ep_a</span><span class="o">.</span><span class="n">endpoint_info</span><span class="p">())</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="n">ep_a</span><span class="o">.</span><span class="n">write</span><span class="p">([(</span><span class="n">h_local</span><span class="p">,</span> <span class="n">h_remote</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">12</span><span class="p">)])</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+</span></code></pre></div>
+<p>Examples:</p>
+<ul>
+<li><code>dlslime/examples/python/p2p_tcp_rc_send_recv.py</code> — raw two-sided send/recv.</li>
+<li><code>dlslime/tests/python/test_tcp.py</code> — exhaustive raw-endpoint reference.</li>
+</ul>
+<h2 id="tcp-through-peeragent">TCP through PeerAgent<a class="headerlink" href="#tcp-through-peeragent" title="Permanent link">&para;</a></h2>
+<p>PeerAgent supports TCP via a <code>transport="tcp"</code> kwarg on <code>connect_to</code>. RDMA
+remains the default; existing RDMA callers are unchanged.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">dlslime</span><span class="w"> </span><span class="kn">import</span> <span class="n">PeerAgent</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="n">agent_a</span> <span class="o">=</span> <span class="n">PeerAgent</span><span class="p">(</span><span class="n">ctrl_url</span><span class="o">=</span><span class="s2">&quot;http://127.0.0.1:4479&quot;</span><span class="p">,</span> <span class="n">alias</span><span class="o">=</span><span class="s2">&quot;tcp_a&quot;</span><span class="p">)</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="n">agent_b</span> <span class="o">=</span> <span class="n">PeerAgent</span><span class="p">(</span><span class="n">ctrl_url</span><span class="o">=</span><span class="s2">&quot;http://127.0.0.1:4479&quot;</span><span class="p">,</span> <span class="n">alias</span><span class="o">=</span><span class="s2">&quot;tcp_b&quot;</span><span class="p">)</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="n">conn_a</span> <span class="o">=</span> <span class="n">agent_a</span><span class="o">.</span><span class="n">connect_to</span><span class="p">(</span><span class="s2">&quot;tcp_b&quot;</span><span class="p">,</span> <span class="n">transport</span><span class="o">=</span><span class="s2">&quot;tcp&quot;</span><span class="p">)</span>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="n">conn_b</span> <span class="o">=</span> <span class="n">agent_b</span><span class="o">.</span><span class="n">connect_to</span><span class="p">(</span><span class="s2">&quot;tcp_a&quot;</span><span class="p">,</span> <span class="n">transport</span><span class="o">=</span><span class="s2">&quot;tcp&quot;</span><span class="p">)</span>
+</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="n">conn_a</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="n">conn_b</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>
+</span><span id="__span-2-11"><a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="c1"># Two-sided I/O works through the same agent facade as RDMA:</span>
+</span><span id="__span-2-12"><a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="n">agent_a</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="s2">&quot;tcp_b&quot;</span><span class="p">,</span> <span class="p">(</span><span class="n">addr_a</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">5</span><span class="p">))</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+</span><span id="__span-2-13"><a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="n">agent_b</span><span class="o">.</span><span class="n">recv</span><span class="p">(</span><span class="s2">&quot;tcp_a&quot;</span><span class="p">,</span> <span class="p">(</span><span class="n">addr_b</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">5</span><span class="p">))</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+</span></code></pre></div>
+<p><code>connect_to(transport="tcp")</code> accepts two extra kwargs:</p>
 <table>
 <thead>
 <tr>
-<th>Owner</th>
-<th>Owns</th>
-<th>Reference kind</th>
+<th>Kwarg</th>
+<th>Default</th>
+<th>Meaning</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>User code</td>
-<td>Future</td>
-<td><code>shared_ptr&lt;RDMAFuture&gt;</code></td>
+<td><code>local_host</code></td>
+<td><code>0.0.0.0</code></td>
+<td>Local bind IP for the TCP endpoint.</td>
 </tr>
 <tr>
-<td>Future</td>
-<td>EndpointOpState</td>
-<td><code>shared_ptr&lt;EndpointOpState&gt;</code></td>
-</tr>
-<tr>
-<td>Transport callback</td>
-<td>EndpointOpState (during fire)</td>
-<td><code>shared_ptr</code> captured in lambda, moved to CQ stack, released on return</td>
-</tr>
-<tr>
-<td>Slot</td>
-<td>Current op's EndpointOpState</td>
-<td><code>shared_ptr</code> in <code>slot.op_state</code>, cleared on release</td>
-</tr>
-<tr>
-<td>Slot</td>
-<td>Its own <code>RDMAAssign</code> storage</td>
-<td>by value</td>
-</tr>
-<tr>
-<td>Endpoint</td>
-<td>Slot pool</td>
-<td>owning array</td>
-</tr>
-<tr>
-<td>Endpoint</td>
-<td>Free-slot ring</td>
-<td>owning ring</td>
-</tr>
-<tr>
-<td>Endpoint</td>
-<td>In-flight op registry</td>
-<td><code>weak_ptr&lt;EndpointOpState&gt;</code></td>
+<td><code>local_port</code></td>
+<td><code>0</code></td>
+<td>Local bind port (0 = OS-assigned).</td>
 </tr>
 </tbody>
 </table>
-<p>The registry is weak so it does not pin retired ops; it exists only so
-<code>cancelAll()</code> can fail-out every outstanding op without walking slots.</p>
-<h2 id="boundary-invariants">Boundary Invariants<a class="headerlink" href="#boundary-invariants" title="Permanent link">&para;</a></h2>
-<p>These are the rules the refactor enforces. Violating any of them
-reintroduces the ABA hazard.</p>
-<h3 id="i1-signal-exclusivity">I1 — Signal exclusivity<a class="headerlink" href="#i1-signal-exclusivity" title="Permanent link">&para;</a></h3>
-<p>An <code>EndpointOpState::signal</code> is created per op and never shared. Two
-futures can never observe the same signal, and a signal is never
-reset / rebound across ops.</p>
-<h3 id="i2-slot-reuse-safety">I2 — Slot-reuse safety<a class="headerlink" href="#i2-slot-reuse-safety" title="Permanent link">&para;</a></h3>
-<p>A slot enters its free ring at init. It leaves the free ring on
-<code>acquireXxxSlot()</code> and returns only after <code>slot_qp_mask</code> reaches
-<code>slot_qp_expected</code> — i.e. every per-qp callback for its current
-tenant has fired. While a slot is out of the free ring, no other op
-can claim it; while a WR referencing <code>&amp;slot.assigns_[qpi]</code> is
-outstanding, the slot is out of the free ring. Therefore <strong>no CQE
-whose <code>wr_id</code> points into <code>slot.assigns_[qpi]</code> can ever dispatch
-into a callback installed by a different op.</strong></p>
-<h3 id="i3-callback-lifetime">I3 — Callback lifetime<a class="headerlink" href="#i3-callback-lifetime" title="Permanent link">&para;</a></h3>
-<p>Transport callbacks capture <code>shared_ptr&lt;EndpointOpState&gt;</code>. This closes a
-cycle (<code>op_state → assigns → callback_ → op_state</code>), but the cycle is
-bounded: it breaks the next time the slot is re-leased for a new op
-(because <code>RDMAAssign::reset()</code> overwrites <code>callback_</code> and releases the
-old lambda's captures) or when the endpoint is destroyed. In the
-meantime the completed op is pinned in memory by its own slot's
-closure, which is acceptable because:</p>
+<p><code>ib_port</code>, <code>qp_num</code>, <code>local_device</code>, and <code>peer_device</code> are accepted for
+signature parity with the RDMA path but are ignored.</p>
+<h3 id="one-sided-read-write">One-sided read / write<a class="headerlink" href="#one-sided-read-write" title="Permanent link">&para;</a></h3>
+<p>Register memory regions <strong>before</strong> <code>connect_to</code>, so the rendezvous picks them
+up when it captures <code>endpoint_info()</code>:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">agent_a</span><span class="o">.</span><span class="n">register_memory_region</span><span class="p">(</span><span class="s2">&quot;buf_a&quot;</span><span class="p">,</span> <span class="n">addr_a</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">64</span><span class="p">)</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">agent_b</span><span class="o">.</span><span class="n">register_memory_region</span><span class="p">(</span><span class="s2">&quot;buf_b&quot;</span><span class="p">,</span> <span class="n">addr_b</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">64</span><span class="p">)</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="n">conn_a</span> <span class="o">=</span> <span class="n">agent_a</span><span class="o">.</span><span class="n">connect_to</span><span class="p">(</span><span class="s2">&quot;tcp_b&quot;</span><span class="p">,</span> <span class="n">transport</span><span class="o">=</span><span class="s2">&quot;tcp&quot;</span><span class="p">)</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="n">agent_b</span><span class="o">.</span><span class="n">connect_to</span><span class="p">(</span><span class="s2">&quot;tcp_a&quot;</span><span class="p">,</span> <span class="n">transport</span><span class="o">=</span><span class="s2">&quot;tcp&quot;</span><span class="p">)</span>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="n">conn_a</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>
+</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="n">ep_a</span> <span class="o">=</span> <span class="n">conn_a</span><span class="o">.</span><span class="n">endpoint</span>                       <span class="c1"># TcpEndpoint</span>
+</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="n">peer_info</span> <span class="o">=</span> <span class="n">conn_a</span><span class="o">.</span><span class="n">peer_endpoint_info</span>        <span class="c1"># set by mailbox post-handshake</span>
+</span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="n">h_local</span> <span class="o">=</span> <span class="n">ep_a</span><span class="o">.</span><span class="n">register_memory_region</span><span class="p">(</span><span class="s2">&quot;buf_a_loc&quot;</span><span class="p">,</span> <span class="n">addr_a</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">64</span><span class="p">)</span>
+</span><span id="__span-3-11"><a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="n">h_remote</span> <span class="o">=</span> <span class="n">ep_a</span><span class="o">.</span><span class="n">register_remote_memory_region</span><span class="p">(</span>
+</span><span id="__span-3-12"><a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>    <span class="s2">&quot;buf_b_rem&quot;</span><span class="p">,</span> <span class="n">peer_info</span><span class="p">[</span><span class="s2">&quot;mr_info&quot;</span><span class="p">][</span><span class="s2">&quot;buf_b&quot;</span><span class="p">]</span>
+</span><span id="__span-3-13"><a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a><span class="p">)</span>
+</span><span id="__span-3-14"><a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a><span class="n">ep_a</span><span class="o">.</span><span class="n">write</span><span class="p">([(</span><span class="n">h_local</span><span class="p">,</span> <span class="n">h_remote</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">32</span><span class="p">)])</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+</span></code></pre></div>
+<p><code>PeerConnection.peer_endpoint_info</code> carries the peer's <code>endpoint_info</code> dict
+once the handshake completes — including its <code>mr_info</code> — so callers can
+resolve remote MR handles for one-sided ops without going through Redis.</p>
+<h3 id="what-does-not-work-on-tcp">What does <em>not</em> work on TCP<a class="headerlink" href="#what-does-not-work-on-tcp" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Op</th>
+<th>Behavior on TCP</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>agent.write_with_imm(...)</code></td>
+<td>Raises <code>NotImplementedError</code>.</td>
+</tr>
+<tr>
+<td><code>agent.imm_recv(...)</code></td>
+<td>Raises <code>NotImplementedError</code>.</td>
+</tr>
+<tr>
+<td>Named-MR auto-resolution (<code>agent.read("peer", [("mr_name", ...)])</code>)</td>
+<td>Use the <code>(local_handle, remote_handle, ...)</code> form via <code>conn.endpoint</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>The named-MR auto-resolution path uses Redis MR records that are RDMA-specific
+(<code>addr</code> / <code>rkey</code> fields). For TCP, register on <code>conn.endpoint</code> and pass
+explicit local and remote handles — see the example above.</p>
+<h2 id="examples">Examples<a class="headerlink" href="#examples" title="Permanent link">&para;</a></h2>
+<p>PeerAgent + TCP:</p>
 <ul>
-<li>the total retention is bounded by the pool size (at most <code>DEPTH</code>
-  completed op_states in flight);</li>
-<li>for any real workload the slot is reclaimed and re-leased within
-  microseconds of completion, so retention is negligible;</li>
-<li>futures observe completion via the signal, which fires before the
-  callback returns — user code is never blocked by retention.</li>
+<li><code>dlslime/examples/python/p2p_tcp_send_recv_peer_agent.py</code> — combined demo.</li>
+<li><code>dlslime/examples/python/p2p_tcp_rc_write_peer_agent.py</code> — one-sided write.</li>
+<li><code>dlslime/examples/python/p2p_tcp_rc_read_peer_agent.py</code> — one-sided read.</li>
 </ul>
-<p>We do NOT try to move the callback out on fire (an earlier attempt
-broke the codebase): many <code>RDMAAssign</code>s hold multiple pending WRs
-simultaneously (connect-time pre-post plus a repost in <code>WAIT_META</code>
-that shares the same <code>wr_id</code>), so the callback must remain callable
-across every CQE for that <code>wr_id</code> until the next <code>reset()</code> installs
-a replacement.</p>
-<h3 id="i4-op-lifetime">I4 — Op lifetime<a class="headerlink" href="#i4-op-lifetime" title="Permanent link">&para;</a></h3>
-<p>An <code>EndpointOpState</code> lives exactly as long as at least one of these
-holds a strong reference:</p>
+<p>Raw <code>TcpEndpoint</code>:</p>
 <ul>
-<li>its future (owned by user code),</li>
-<li>a slot currently leasing it (<code>slot.op_state</code>),</li>
-<li>a callback in flight (moved onto the CQ thread stack).</li>
+<li><code>dlslime/examples/python/p2p_tcp_rc_send_recv.py</code></li>
+<li><code>dlslime/tests/python/test_tcp.py</code> — also exercises read/write/timeout.</li>
 </ul>
-<p>Once all three are gone, <code>shared_ptr</code> reclaims the op_state. The
-endpoint's weak registry has no impact on lifetime.</p>
-<h3 id="i5-rnr-avoidance">I5 — RNR avoidance<a class="headerlink" href="#i5-rnr-avoidance" title="Permanent link">&para;</a></h3>
-<p>The inbound RECV windows on the meta channel, the message data
-channel, and the io-data channel are pre-posted at <code>connect()</code> and
-kept primed across op boundaries. The refactor never removes a
-posted RECV without first reposting a replacement. Slot release
-happens strictly AFTER the callback has run — and the callback, for
-message paths, is the place that reposts — so the RQ is never empty
-just because an op retired.</p>
-<h2 id="what-the-slot-is-not">What the Slot Is NOT<a class="headerlink" href="#what-the-slot-is-not" title="Permanent link">&para;</a></h2>
-<p>This is what changed. Historically the slot did everything; after
-the refactor each of these is explicitly elsewhere:</p>
+<h2 id="tests">Tests<a class="headerlink" href="#tests" title="Permanent link">&para;</a></h2>
 <ul>
-<li><strong>Not the completion owner.</strong> The slot does not store the
-  user-visible signal, completion status, or <code>imm_data</code>. Those
-  live on <code>EndpointOpState</code>. <code>SendFuture</code>/<code>RecvFuture</code>/
-  <code>ReadWriteFuture</code>/<code>ImmRecvFuture</code> do not hold slot pointers.</li>
-<li><strong>Not the op identity.</strong> The slot is a dispatch vehicle reused
-  across ops. <code>op_id</code>-style identity is unnecessary once the free
-  ring invariant (I2) is in place; no generation counter is kept
-  on the slot.</li>
-<li><strong>Not the WR ownership root.</strong> <code>RDMAAssign</code> lives inside the
-  slot by value, but the slot cannot be re-leased while any WR is
-  outstanding (I2). So the WRs are effectively owned by "the
-  current lease" for their useful lifetime.</li>
+<li><code>dlslime/tests/python/test_peer_agent_tcp.py</code> — PeerAgent send/recv,
+  one-sided read, one-sided write, and the <code>NotImplementedError</code> contract for
+  immediate-data ops. Skipped when NanoCtrl is not reachable at
+  <code>DLSLIME_TEST_CTRL_URL</code> (default <code>http://127.0.0.1:4479</code>) or the binary was
+  built without <code>BUILD_TCP</code>.</li>
 </ul>
-<h2 id="message-path-specifics-send-recv">Message-Path Specifics (Send / Recv)<a class="headerlink" href="#message-path-specifics-send-recv" title="Permanent link">&para;</a></h2>
-<p>The two-sided path uses the same slot lease model but has extra
-slot-local transport state:</p>
-<ul>
-<li><code>SendContext::meta_arrived_flag_</code>  — set by the <code>meta_recv_assign_</code>
-  callback when the peer writes a meta reply; consumed (reset to 0) by
-  <code>sendProcess</code> when it advances past <code>WAIT_META</code>. NOT reset on
-  <code>acquireSendSlot()</code> — the peer may have already posted meta for this
-  slot before the user called <code>send()</code>; clearing the flag on acquire
-  would drop a valid pre-arrival and deadlock.</li>
-<li><code>SendContext::remote_meta_info_</code>   — overwritten by the peer via
-  <code>WRITE_WITH_IMM</code>. Slot-local buffer.</li>
-<li><code>RecvContext::local_meta_info_</code>    — filled by user's <code>recv()</code>
-  call, then written to the peer.</li>
-</ul>
-<p>The meta handshake callback installed at <code>connect()</code> captures the
-slot (not the op_state) and only flips the slot-local flag. The
-user-visible <code>op_state.signal</code> is set only by the <code>data_send_assigns_</code>
-/ <code>data_recv_assigns_</code> callbacks installed when the op actually runs
-(<code>sendProcess</code> / <code>recvProcess</code>), which capture the current
-<code>op_state</code> by <code>shared_ptr</code> — consistent with I3.</p>
-<h3 id="api-contract-pair-ordering">API contract — pair ordering<a class="headerlink" href="#api-contract-pair-ordering" title="Permanent link">&para;</a></h3>
-<p>Two-sided <code>send()</code> / <code>recv()</code> is correct under concurrency provided
-both endpoints pair their calls in the same relative order. This is
-the standard point-to-point contract (the same invariant held by
-MPI, UCX, NCCL two-sided, and every other two-sided RDMA stack).</p>
-<p>Why it is sufficient:</p>
-<ol>
-<li><strong>IBRC send-side FIFO.</strong> WRs posted on an RC QP complete in post
-   order.</li>
-<li><strong>IBRC receive-side FIFO.</strong> The peer's k-th <code>WRITE_WITH_IMM</code>
-   always consumes our RECV WR #k.</li>
-<li><strong>FIFO slot allocation + release-in-completion-order</strong> (from the
-   free-slot ring + guarantee 1).</li>
-</ol>
-<p>Together these give: sender slot-k is matched with receiver slot-k
-for the lifetime of the connection. Meta destined for slot-k lands
-in slot-k's <code>remote_meta_info_</code>, and by (2) it is slot-k's RECV that
-the HW consumes to signal that arrival — so the flag is set on the
-correct slot and <code>sendProcess</code> makes progress on the right pending
-send.</p>
-<p>Violating the pair-ordering contract (sender issues <code>send(A), send(B)</code>
-while receiver issues <code>recv(B), recv(A)</code>) will cross-wire data. This
-is a user-level contract, not a DLSlime-specific limitation; the
-library does not try to detect the violation.</p>
-<h2 id="imm-recv-path-specifics">Imm-Recv Path Specifics<a class="headerlink" href="#imm-recv-path-specifics" title="Permanent link">&para;</a></h2>
-<p><code>immRecv()</code> is a pure matching path — it does not acquire a slot.
-The transport-owned <code>ImmRecvContext</code> array stays permanently posted
-on the hardware RQ (this is what keeps WRITE_WITH_IMM senders from
-hitting RNR). Each completion is copied into an <code>ImmRecvEvent</code> value
-object and matched to either a pending user op (if <code>immRecv()</code> was
-called first) or queued for the next caller (if the WRITE_WITH_IMM
-arrived first). The CQ-side slot refill uses a lock-free MPSC stack;
-the endpoint progress loop drains the stack and reposts the slots.
-This is entirely orthogonal to the send/recv/read/write free-slot
-rings and intentionally so — the semantics are different.</p>
-<h2 id="what-cancelall-does">What cancelAll() Does<a class="headerlink" href="#what-cancelall-does" title="Permanent link">&para;</a></h2>
-<p><code>cancelAll()</code> walks the weak in-flight registry and force-completes
-every live <code>EndpointOpState</code> (sets status FAILED, wakes signal). It
-also drains the imm-recv matching queues and the refill stack. It
-deliberately does NOT touch slot pools — the pool invariant is that
-slots re-enter the free ring only when their WRs have fired, and
-cancelAll does not violate that. Anything still sitting in
-<code>pending_{rw,send,recv}_queue_</code> un-posted will either post normally
-if the endpoint resumes or be flushed as FLUSH_ERR when the channel
-is destroyed, at which point the normal callback path releases the
-slot.</p>
-<h2 id="how-to-extend-this-safely">How To Extend This Safely<a class="headerlink" href="#how-to-extend-this-safely" title="Permanent link">&para;</a></h2>
-<p>Adding a new endpoint operation?</p>
-<ol>
-<li>Allocate a fresh <code>EndpointOpState</code> (via <code>makeOpState</code>) with a
-   unique signal. Register with <code>registerInFlight()</code>.</li>
-<li>If the op needs a dispatch slot, lease one via the appropriate
-   <code>acquireXxxSlot()</code>. Set <code>slot.op_state</code> to your new op_state.</li>
-<li>When building callbacks: capture <code>shared_ptr&lt;EndpointOpState&gt;</code>
-   for per-op state updates. Capture the slot pointer (if needed)
-   only to drive <code>slot_qp_mask</code> and release the slot.</li>
-<li>In the final callback for the slot, <code>fetch_or</code> the qp bit into
-   <code>slot.slot_qp_mask</code>. If it equals <code>slot_qp_expected</code>, call the
-   matching <code>releaseXxxSlot()</code>.</li>
-<li>Return an <code>RDMAFuture</code> subclass that holds the
-   <code>shared_ptr&lt;EndpointOpState&gt;</code>. The future must never dereference
-   the slot.</li>
-</ol>
 
 
 
