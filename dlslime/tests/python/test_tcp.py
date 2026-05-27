@@ -72,7 +72,7 @@ def _sync_run(name, fn_a, fn_b, timeout=120):
 
 
 def test_async_send_recv(
-    port_a: int, port_b: int, ip_a: str = "0.0.0.0", ip_b: str = "0.0.0.0"
+    port_a: int = 0, port_b: int = 0, ip_a: str = "0.0.0.0", ip_b: str = "0.0.0.0"
 ):
     buf_a = ctypes.create_string_buffer(128)
     buf_b = ctypes.create_string_buffer(128)
@@ -114,7 +114,7 @@ def test_async_send_recv(
 
 
 def test_async_send2recv(
-    port_a: int, port_b: int, ip_a: str = "0.0.0.0", ip_b: str = "0.0.0.0"
+    port_a: int = 0, port_b: int = 0, ip_a: str = "0.0.0.0", ip_b: str = "0.0.0.0"
 ):
     buf_a = ctypes.create_string_buffer(32)
     buf_b = ctypes.create_string_buffer(32)
@@ -146,7 +146,7 @@ def test_async_send2recv(
 
 
 def test_async_write(
-    port_a: int, port_b: int, ip_a: str = "0.0.0.0", ip_b: str = "0.0.0.0"
+    port_a: int = 0, port_b: int = 0, ip_a: str = "0.0.0.0", ip_b: str = "0.0.0.0"
 ):
     buf_a = ctypes.create_string_buffer(256)
     buf_b = ctypes.create_string_buffer(256)
@@ -184,7 +184,7 @@ def test_async_write(
 
 
 def test_async_read(
-    port_a: int, port_b: int, ip_a: str = "0.0.0.0", ip_b: str = "0.0.0.0"
+    port_a: int = 0, port_b: int = 0, ip_a: str = "0.0.0.0", ip_b: str = "0.0.0.0"
 ):
     buf_a = ctypes.create_string_buffer(256)
     buf_b = ctypes.create_string_buffer(256)
