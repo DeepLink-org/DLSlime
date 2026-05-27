@@ -1012,16 +1012,16 @@ class PeerAgent:
         new_ep = _TcpEndpoint(ip=local_key.host, port=local_key.port)
 
         # Replay any previously-registered logical regions onto the new
-        # endpoint so the handshake's endpoint_info() carries them. Done
-        # before publishing the endpoint so concurrent MR registrations
-        # see the endpoint via the same lock ordering as the RDMA path.
+        # endpoint so the handshake's endpoint_info() carries them.
         with self._regions_lock:
-            regions = list(self._logical_regions.values())
-        for region in regions:
+            initial_regions = list(self._logical_regions.values())
+        replayed: Set[str] = set()
+        for region in initial_regions:
             try:
                 new_ep.register_memory_region(
                     region.name, region.ptr, region.offset, region.length
                 )
+                replayed.add(region.name)
             except Exception as e:
                 logger.warning(
                     "PeerAgent %s: TCP MR replay for %s failed during "
@@ -1042,7 +1042,31 @@ class PeerAgent:
                 return existing
             self._endpoints[conn_id] = new_ep
             conn.attach_endpoint(new_ep, None)
-            return new_ep
+
+        # Post-publish sweep: a concurrent ``register_memory_region`` may
+        # have added a new logical region after our initial snapshot but
+        # before we published ``new_ep`` — in which case its endpoint
+        # snapshot missed us. Re-read ``_logical_regions`` now that we are
+        # discoverable; ``register_memory_region`` calls landing after the
+        # publish will see ``new_ep`` and register on it directly, so this
+        # only catches the "added in the gap" set.
+        with self._regions_lock:
+            post_regions = list(self._logical_regions.values())
+        for region in post_regions:
+            if region.name in replayed:
+                continue
+            try:
+                new_ep.register_memory_region(
+                    region.name, region.ptr, region.offset, region.length
+                )
+            except Exception as e:
+                logger.warning(
+                    "PeerAgent %s: TCP MR post-replay for %s failed: %s",
+                    self.alias,
+                    region.name,
+                    e,
+                )
+        return new_ep
 
     def get_connections(self) -> Dict[str, Dict[str, PeerConnection]]:
         """Return local connections grouped by peer and connection id."""
