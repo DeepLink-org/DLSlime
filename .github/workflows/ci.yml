@@ -132,7 +132,7 @@ jobs:
 
           docker exec "${container_name}" bash -lc '
             set -euxo pipefail
-            apt install libasio-dev
+            apt install -y libasio-dev
 
             cd /workspace
             export PIP_CONFIG_FILE=/dev/null
