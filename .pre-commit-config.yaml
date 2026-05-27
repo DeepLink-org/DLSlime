@@ -3,9 +3,9 @@ repos:
     rev: v2.9.0
     hooks:
       - id: ufmt
-        # black 25.x requires Python >= 3.9; pin a recent stable to avoid
-        # pre-commit defaulting to whatever system python happens to be.
-        language_version: python3.12
+        # Use whatever Python pre-commit was launched with (3.9+ required by
+        # black 25.x). Avoids forcing a specific 3.x venv that may not exist
+        # on every machine.
         additional_dependencies:
           - black==25.9.0
           - usort==1.0.8.post1

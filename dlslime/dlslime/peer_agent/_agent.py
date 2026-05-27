@@ -14,7 +14,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 try:
     import httpx
@@ -26,10 +26,17 @@ except ImportError as e:
     ) from e
 
 from dlslime import discover_topology, RDMAContext, RDMAEndpoint, RDMAMemoryPool
+
+try:  # TCP support is a build-time option (BUILD_TCP). Tolerate its absence.
+    from dlslime import TcpEndpoint as _TcpEndpoint
+except ImportError:  # pragma: no cover - exercised only on builds without TCP
+    _TcpEndpoint = None  # type: ignore[assignment]
+
 from dlslime.ctrl import NanoCtrlClient
 from dlslime.logging import get_logger
 from ._mailbox import StreamMailbox
 from ._obs import _tlog
+from ._tcp_endpoint import TcpEndpointAdapter
 
 logger = get_logger("peer_agent")
 
@@ -46,8 +53,57 @@ class RdmaResourceKey:
     ib_port: int
     link_type: str
 
+    @property
+    def transport(self) -> str:
+        return "rdma"
+
     def redis_suffix(self) -> str:
         return f"{self.device}:{self.ib_port}:{self.link_type}"
+
+    def conn_id_segment(self) -> str:
+        return f"{self.device}:port{self.ib_port}"
+
+
+@dataclass(frozen=True)
+class TcpResourceKey:
+    """Resource key for the TCP transport.
+
+    Carries the local bind ``host``/``port``. The peer's host/port is not
+    needed at the resource-key level — the rendezvous handshake passes the
+    peer's ``endpoint_info`` JSON straight to ``TcpEndpoint.connect``.
+
+    The ``device``/``ib_port``/``link_type`` properties keep this key
+    interchangeable with ``RdmaResourceKey`` in code paths that read those
+    fields (Redis MR keys, connection metadata, ``PeerConnection.local_nic``).
+    """
+
+    host: str = "0.0.0.0"
+    port: int = 0
+
+    @property
+    def transport(self) -> str:
+        return "tcp"
+
+    @property
+    def device(self) -> str:
+        return f"tcp:{self.host}:{self.port}"
+
+    @property
+    def ib_port(self) -> int:
+        return int(self.port)
+
+    @property
+    def link_type(self) -> str:
+        return "TCP"
+
+    def redis_suffix(self) -> str:
+        return f"tcp:{self.host}:{self.port}"
+
+    def conn_id_segment(self) -> str:
+        return f"tcp:{self.host}:{self.port}"
+
+
+ResourceKey = Union[RdmaResourceKey, TcpResourceKey]
 
 
 @dataclass
@@ -61,7 +117,7 @@ class LogicalMemoryRegion:
 @dataclass
 class MaterializedMemoryRegion:
     name: str
-    resource_key: RdmaResourceKey
+    resource_key: ResourceKey
     handler: int
     info: Dict[str, Any]
 
@@ -73,8 +129,8 @@ class DirectedConnection:
         self,
         agent: "PeerAgent",
         peer_alias: str,
-        local_key: RdmaResourceKey,
-        peer_key: RdmaResourceKey,
+        local_key: ResourceKey,
+        peer_key: ResourceKey,
         qp_num: int,
         profile: str = "default",
     ) -> None:
@@ -84,20 +140,28 @@ class DirectedConnection:
         self.peer_key = peer_key
         self.qp_num = qp_num
         self.profile = profile
-        self.endpoint: Optional[RDMAEndpoint] = None
+        self.endpoint: Optional[Any] = None
         self.memory_pool: Optional[RDMAMemoryPool] = None
         self.state = "connecting"
+        # Populated by the mailbox after a successful handshake. Lets the
+        # caller resolve peer MR handles for one-sided ops (TCP path) without
+        # going through Redis MR records (which are RDMA-specific).
+        self.peer_endpoint_info: Optional[Dict[str, Any]] = None
+
+    @property
+    def transport(self) -> str:
+        return self.local_key.transport
 
     @property
     def conn_id(self) -> str:
         return (
-            f"{self._agent.alias}:{self.local_key.device}:port{self.local_key.ib_port}"
-            f"->{self.peer_alias}:{self.peer_key.device}:port{self.peer_key.ib_port}"
+            f"{self._agent.alias}:{self.local_key.conn_id_segment()}"
+            f"->{self.peer_alias}:{self.peer_key.conn_id_segment()}"
             f"#qp{self.qp_num}"
         )
 
     def attach_endpoint(
-        self, endpoint: RDMAEndpoint, memory_pool: RDMAMemoryPool
+        self, endpoint: Any, memory_pool: Optional[RDMAMemoryPool]
     ) -> None:
         self.endpoint = endpoint
         self.memory_pool = memory_pool
@@ -161,7 +225,18 @@ class PeerConnection:
         return self._connection().state
 
     @property
-    def endpoint(self) -> Optional[RDMAEndpoint]:
+    def peer_endpoint_info(self) -> Optional[Dict[str, Any]]:
+        """Return the peer's endpoint info as exchanged during the handshake.
+
+        Populated only after the connection is established. For the TCP
+        transport this is the dict returned by the peer's
+        ``TcpEndpoint.endpoint_info()`` and includes ``mr_info`` — useful
+        for resolving remote MR handles for one-sided ``read``/``write``.
+        """
+        return self._connection().peer_endpoint_info
+
+    @property
+    def endpoint(self) -> Optional[Any]:
         """Return the selected endpoint once created, otherwise None."""
         conn = self._connection()
         if conn.endpoint is not None:
@@ -215,7 +290,7 @@ class PeerAgent:
         self._resource_cache: Dict[str, Dict[str, Any]] = {}
         self._resource_cache_lock = threading.Lock()
 
-        self._endpoints: Dict[str, RDMAEndpoint] = {}
+        self._endpoints: Dict[str, Any] = {}
         self._endpoints_lock = (
             threading.Lock()
         )  # Protects _endpoints for concurrent reconcile
@@ -241,13 +316,13 @@ class PeerAgent:
         self._connections: Dict[str, DirectedConnection] = {}
         self._connections_lock = threading.Lock()
 
-        self._contexts: Dict[RdmaResourceKey, RDMAContext] = {}
-        self._pools: Dict[RdmaResourceKey, RDMAMemoryPool] = {}
+        self._contexts: Dict[ResourceKey, RDMAContext] = {}
+        self._pools: Dict[ResourceKey, RDMAMemoryPool] = {}
         self._resource_lock = threading.Lock()
 
         self._logical_regions: Dict[str, LogicalMemoryRegion] = {}
         self._materialized_regions: Dict[
-            Tuple[str, RdmaResourceKey], MaterializedMemoryRegion
+            Tuple[str, ResourceKey], MaterializedMemoryRegion
         ] = {}
         self._regions_lock = threading.Lock()
 
@@ -382,8 +457,12 @@ class PeerAgent:
         raise RuntimeError(f"No usable RDMA resource found ({detail})")
 
     def _get_context_and_pool(
-        self, key: RdmaResourceKey
-    ) -> Tuple[RDMAContext, RDMAMemoryPool]:
+        self, key: ResourceKey
+    ) -> Tuple[Optional[RDMAContext], Optional[RDMAMemoryPool]]:
+        # TCP endpoints own their memory map internally; no shared
+        # context/pool object exists for them.
+        if isinstance(key, TcpResourceKey):
+            return None, None
         with self._resource_lock:
             if key not in self._contexts:
                 ctx = RDMAContext()
@@ -764,8 +843,8 @@ class PeerAgent:
         self,
         peer_alias: str,
         *,
-        local_key: Optional[RdmaResourceKey] = None,
-        peer_key: Optional[RdmaResourceKey] = None,
+        local_key: Optional[ResourceKey] = None,
+        peer_key: Optional[ResourceKey] = None,
         qp_num: Optional[int] = None,
         profile: str = "default",
     ) -> DirectedConnection:
@@ -792,11 +871,14 @@ class PeerAgent:
                     link_type=None,
                 )
             if peer_key is None:
-                peer_key = RdmaResourceKey(
-                    local_key.device,
-                    local_key.ib_port,
-                    local_key.link_type,
-                )
+                if isinstance(local_key, TcpResourceKey):
+                    peer_key = TcpResourceKey()
+                else:
+                    peer_key = RdmaResourceKey(
+                        local_key.device,
+                        local_key.ib_port,
+                        local_key.link_type,
+                    )
             for conn in peer_connections:
                 if conn.local_key == local_key and conn.peer_key == peer_key:
                     if qp_num is not None and conn.qp_num != qp_num:
@@ -829,12 +911,24 @@ class PeerAgent:
             "qp_num": conn.qp_num,
             "link_type": conn.local_key.link_type,
             "profile": conn.profile,
+            "transport": conn.local_key.transport,
         }
 
     def _ensure_connection_from_meta(
         self, peer_alias: str, meta: Dict[str, Any]
     ) -> DirectedConnection:
         """Create local connection state from a peer's directed request."""
+        if str(meta.get("transport") or "rdma").lower() == "tcp":
+            local_key: ResourceKey = TcpResourceKey()
+            peer_key: ResourceKey = TcpResourceKey()
+            return self._get_or_create_connection(
+                peer_alias,
+                local_key=local_key,
+                peer_key=peer_key,
+                qp_num=int(meta.get("qp_num") or 1),
+                profile=str(meta.get("profile") or "default"),
+            )
+
         local_key = self._first_usable_resource_key(
             self._local_resource,
             device=meta.get("dst_device"),
@@ -860,7 +954,7 @@ class PeerAgent:
             profile=str(meta.get("profile") or "default"),
         )
 
-    def _ensure_local_endpoint_created(self, conn_id: str) -> RDMAEndpoint:
+    def _ensure_local_endpoint_created(self, conn_id: str):
         """
         Idempotent: create endpoint for peer if not exists.
         Returns the endpoint (existing or newly created). Thread-safe.
@@ -884,6 +978,10 @@ class PeerAgent:
 
         with self._connections_lock:
             conn = self._connections[conn_id]
+
+        if isinstance(conn.local_key, TcpResourceKey):
+            return self._ensure_local_tcp_endpoint(conn_id, conn)
+
         _, pool = self._get_context_and_pool(conn.local_key)
         self._materialize_all_regions_for_key(conn.local_key)
 
@@ -903,6 +1001,52 @@ class PeerAgent:
                 return existing
             self._endpoints[conn_id] = new_ep
             conn.attach_endpoint(new_ep, pool)
+            return new_ep
+
+    def _ensure_local_tcp_endpoint(
+        self, conn_id: str, conn: DirectedConnection
+    ) -> TcpEndpointAdapter:
+        """Construct (or reuse) a TCP endpoint adapter for a connection."""
+        if _TcpEndpoint is None:
+            raise RuntimeError(
+                "TCP transport requested but dlslime was built without BUILD_TCP."
+            )
+        local_key: TcpResourceKey = conn.local_key  # type: ignore[assignment]
+        new_ep = TcpEndpointAdapter(
+            _TcpEndpoint(ip=local_key.host, port=local_key.port)
+        )
+
+        # Replay any previously-registered logical regions onto the new
+        # endpoint so the handshake's endpoint_info() carries them. Done
+        # before publishing the endpoint so concurrent MR registrations
+        # see the endpoint via the same lock ordering as the RDMA path.
+        with self._regions_lock:
+            regions = list(self._logical_regions.values())
+        for region in regions:
+            try:
+                new_ep.register_memory_region(
+                    region.name, region.ptr, region.offset, region.length
+                )
+            except Exception as e:
+                logger.warning(
+                    "PeerAgent %s: TCP MR replay for %s failed during "
+                    "endpoint creation: %s",
+                    self.alias,
+                    region.name,
+                    e,
+                )
+
+        with self._endpoints_lock:
+            existing = self._endpoints.get(conn_id)
+            if existing is not None:
+                # Race: another thread won. Drop the spare adapter.
+                try:
+                    new_ep.shutdown()
+                except Exception:
+                    pass
+                return existing
+            self._endpoints[conn_id] = new_ep
+            conn.attach_endpoint(new_ep, None)
             return new_ep
 
     def get_connections(self) -> Dict[str, Dict[str, PeerConnection]]:
@@ -977,8 +1121,18 @@ class PeerAgent:
         ib_port: Optional[int] = 1,
         qp_num: Optional[int] = 1,
         min_bw: Optional[str] = None,
+        transport: str = "rdma",
+        local_host: str = "0.0.0.0",
+        local_port: int = 0,
     ) -> PeerConnection:
-        """Start connecting to a peer and return a connection handle."""
+        """Start connecting to a peer and return a connection handle.
+
+        ``transport='rdma'`` (default) selects the RDMA path, picking a NIC
+        from the discovered local topology. ``transport='tcp'`` selects the
+        TCP path: ``local_host``/``local_port`` configure the local bind
+        (port 0 = OS-assigned), and ``ib_port``/``qp_num``/``local_device``/
+        ``peer_device`` are ignored.
+        """
         if not isinstance(peer_alias, str) or not peer_alias:
             raise TypeError("connect_to() requires a non-empty peer alias string")
         if peer_alias == self.alias:
@@ -987,28 +1141,43 @@ class PeerAgent:
                 "Start peer agents with distinct aliases."
             )
 
+        transport_norm = (transport or "rdma").lower()
+        if transport_norm not in ("rdma", "tcp"):
+            raise ValueError(
+                f"connect_to: unsupported transport {transport!r} "
+                "(expected 'rdma' or 'tcp')"
+            )
+
         _tlog(f"{self.alias}: connect_to({peer_alias}) ENTER")
         t0 = time.perf_counter()
 
-        local_key = self._first_usable_resource_key(
-            self._local_resource,
-            device=local_device,
-            ib_port=ib_port,
-            link_type=None,
-        )
-        peer_key = self._resolve_peer_resource_key(
-            peer_alias,
-            peer_device=peer_device,
-            ib_port=ib_port if ib_port is not None else local_key.ib_port,
-            link_type=local_key.link_type,
-            fallback_device=local_key.device,
-        )
-        if local_key.link_type != peer_key.link_type:
-            raise RuntimeError(
-                f"Cannot connect {self.alias}:{local_key.device} to "
-                f"{peer_alias}:{peer_key.device}: link_type mismatch "
-                f"{local_key.link_type} != {peer_key.link_type}"
+        if transport_norm == "tcp":
+            local_key: ResourceKey = TcpResourceKey(
+                host=local_host, port=int(local_port)
             )
+            # Peer host/port don't matter for the resource key — the rendezvous
+            # passes the peer's TcpEndpoint.endpoint_info() JSON to connect().
+            peer_key: ResourceKey = TcpResourceKey()
+        else:
+            local_key = self._first_usable_resource_key(
+                self._local_resource,
+                device=local_device,
+                ib_port=ib_port,
+                link_type=None,
+            )
+            peer_key = self._resolve_peer_resource_key(
+                peer_alias,
+                peer_device=peer_device,
+                ib_port=ib_port if ib_port is not None else local_key.ib_port,
+                link_type=local_key.link_type,
+                fallback_device=local_key.device,
+            )
+            if local_key.link_type != peer_key.link_type:
+                raise RuntimeError(
+                    f"Cannot connect {self.alias}:{local_key.device} to "
+                    f"{peer_alias}:{peer_key.device}: link_type mismatch "
+                    f"{local_key.link_type} != {peer_key.link_type}"
+                )
 
         conn = self._get_or_create_connection(
             peer_alias,
@@ -1094,28 +1263,62 @@ class PeerAgent:
         offset: int,
         length: int,
     ) -> int:
-        """Register a logical memory region and publish materialized keys."""
+        """Register a logical memory region and publish materialized keys.
+
+        For RDMA, this materializes onto the default RDMA resource and
+        returns its handler (preserving the historical return contract).
+        For TCP-only agents (no RDMA NICs), this records the logical
+        region and registers it on every existing TCP endpoint, returning
+        ``0`` — TCP handles are per-endpoint and must be obtained via
+        ``conn.endpoint.register_memory_region`` for one-sided ops.
+        """
         region = LogicalMemoryRegion(mr_name, ptr, offset, length)
         with self._regions_lock:
             self._logical_regions[mr_name] = region
 
-        # Preserve the old return contract by materializing immediately on a
-        # deterministic default resource. Connection-level read/write will
-        # materialize again for a different resource key if needed.
+        # Eagerly register on any existing TCP endpoints so handshake-time
+        # endpoint_info() carries the MR. Idempotent on the C++ side.
+        with self._endpoints_lock:
+            tcp_endpoints = [
+                ep
+                for ep in self._endpoints.values()
+                if isinstance(ep, TcpEndpointAdapter)
+            ]
+        for ep in tcp_endpoints:
+            try:
+                ep.register_memory_region(mr_name, ptr, offset, length)
+            except Exception as e:
+                logger.warning(
+                    "PeerAgent %s: TCP MR replay for %s failed: %s",
+                    self.alias,
+                    mr_name,
+                    e,
+                )
+
+        # If the agent has no RDMA resources to materialize against (TCP-only
+        # build or TCP-only deployment), skip materialization. Callers using
+        # one-sided ops should fetch handles from the connection endpoint.
         key = self._default_local_resource_key()
+        if isinstance(key, TcpResourceKey):
+            return 0
+
         materialized = self._materialize_region(mr_name, key)
         self._publish_memory_keys()
         return materialized.handler
 
-    def _default_local_resource_key(self) -> RdmaResourceKey:
+    def _default_local_resource_key(self) -> ResourceKey:
         with self._connections_lock:
             if self._connections:
                 return next(iter(self._connections.values())).local_key
-        return self._first_usable_resource_key(
-            self._local_resource,
-            ib_port=1,
-            link_type=None,
-        )
+        try:
+            return self._first_usable_resource_key(
+                self._local_resource,
+                ib_port=1,
+                link_type=None,
+            )
+        except RuntimeError:
+            # No RDMA resources discovered — TCP-only environment.
+            return TcpResourceKey()
 
     def _publish_memory_keys(self) -> None:
         if self._redis_client is None or not self.alias:

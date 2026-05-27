@@ -374,6 +374,12 @@ class StreamMailbox:
         # D. Complete RDMA handshake
         t_d = time.perf_counter()
         endpoint.connect(peer_qp_info)
+        # Stash for one-sided ops on transports (TCP) where remote MR info
+        # rides on the endpoint_info JSON instead of a separate Redis record.
+        try:
+            conn.peer_endpoint_info = peer_qp_info
+        except Exception:
+            pass
         _tlog(
             f"{self._agent.alias}: [D] endpoint.connect({peer}) "
             f"+{(time.perf_counter() - t_d) * 1000:.3f}ms"
