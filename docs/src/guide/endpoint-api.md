@@ -8,6 +8,11 @@ For most service deployments, prefer [PeerAgent API](peeragent-api.md). Endpoint
 API is best for transport bring-up, microbenchmarks, explicit two-process tests,
 and systems that already have their own control plane.
 
+DLSlime ships an `RDMAEndpoint` (covered below) and a `TcpEndpoint` for hosts
+without RDMA. Both expose `endpoint_info` / `connect`, `register_memory_region`,
+and the same async send/recv/read/write futures. See [TCP Transport](tcp-transport.md)
+for the TCP-specific surface.
+
 ## Main Types
 
 | Type                                                                               | Purpose                                                                             |

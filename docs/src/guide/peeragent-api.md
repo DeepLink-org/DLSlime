@@ -66,15 +66,28 @@ conn.wait(timeout=60)
 
 `connect_to` returns a `PeerConnection` handle.
 
-| `PeerConnection` member    | Meaning                                                          |
-| -------------------------- | ---------------------------------------------------------------- |
-| `wait(timeout=60)`         | Block until the directed connection is ready.                    |
-| `is_connected()`           | Return whether the local connection is established.              |
-| `conn_id`                  | Stable directed connection id.                                   |
-| `peer_alias`               | Remote PeerAgent alias.                                          |
-| `local_nic` / `remote_nic` | Selected local and remote NICs.                                  |
-| `state`                    | Connection state such as `connecting`, `connected`, or `failed`. |
-| `endpoint`                 | Underlying `RDMAEndpoint` once created.                          |
+| `PeerConnection` member    | Meaning                                                                    |
+| -------------------------- | -------------------------------------------------------------------------- |
+| `wait(timeout=60)`         | Block until the directed connection is ready.                              |
+| `is_connected()`           | Return whether the local connection is established.                        |
+| `conn_id`                  | Stable directed connection id.                                             |
+| `peer_alias`               | Remote PeerAgent alias.                                                    |
+| `local_nic` / `remote_nic` | Selected local and remote NICs.                                            |
+| `state`                    | Connection state such as `connecting`, `connected`, or `failed`.           |
+| `endpoint`                 | Underlying `RDMAEndpoint` (or `TcpEndpointAdapter`) once created.          |
+| `peer_endpoint_info`       | Peer's `endpoint_info` dict captured during handshake (TCP one-sided ops). |
+
+### Selecting the transport
+
+`connect_to(transport=...)` picks the underlying transport. RDMA is the
+default; pass `transport="tcp"` to bind a `TcpEndpoint` instead. See
+[TCP Transport](tcp-transport.md) for the full TCP flow, the
+`local_host`/`local_port` kwargs, and one-sided I/O over TCP.
+
+```python
+conn = agent.connect_to("worker-b", transport="tcp")
+conn.wait()
+```
 
 For bidirectional flows, both agents normally call `connect_to` and wait on
 their local handle:

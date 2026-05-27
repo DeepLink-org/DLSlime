@@ -16,7 +16,7 @@ DLSlime is a PeerAgent-centered communication and microservice toolkit for
 distributed AI systems. PeerAgent is the runtime hub: application services such
 as SlimeRPC and DLSlimeCache build on it, NanoCtrl supplies service governance
 and coordination metadata around it, and endpoint APIs below it drive
-heterogeneous transports such as RDMA, NVLink, and Ascend Direct.
+heterogeneous transports such as RDMA, TCP, NVLink, and Ascend Direct.
 
 DLSlime is designed to be adopted one layer at a time. Applications can start
 with direct endpoints, add PeerAgent coordination, use NanoCtrl for governance,
@@ -95,6 +95,36 @@ python dlslime/examples/python/p2p_ascend_read.py
 
 Ascend Direct setup details live in
 [docs/huawei_ascend/README.md](docs/huawei_ascend/README.md).
+
+### TCP Fallback Transport
+
+Use TCP when the hosts have no RDMA NICs or when a peer connection has to
+traverse a network without RDMA capability. The TCP transport exposes the same
+primitives — `endpoint_info` / `connect`, two-sided `send` / `recv`, one-sided
+`read` / `write`, and named memory regions — and plugs into PeerAgent through
+the same control plane via `connect_to(transport="tcp")`. Immediate-data ops
+(`write_with_imm`, `imm_recv`) are RDMA-only and raise `NotImplementedError`
+on TCP.
+
+`BUILD_TCP` is `ON` by default.
+
+Raw `TcpEndpoint`, no NanoCtrl required:
+
+```bash
+python dlslime/examples/python/p2p_tcp_rc_send_recv.py
+```
+
+PeerAgent over TCP:
+
+```bash
+nanoctrl start
+python dlslime/examples/python/p2p_tcp_send_recv_peer_agent.py
+python dlslime/examples/python/p2p_tcp_rc_write_peer_agent.py
+python dlslime/examples/python/p2p_tcp_rc_read_peer_agent.py
+```
+
+See [docs/src/guide/tcp-transport.md](docs/src/guide/tcp-transport.md) for the
+full surface, one-sided I/O setup, and the test reference.
 
 ### PeerAgent-to-PeerAgent Access
 
@@ -241,6 +271,7 @@ cmake --build build
 | Flag                  |                                  Default | Description                                            |
 | --------------------- | ---------------------------------------: | ------------------------------------------------------ |
 | `BUILD_RDMA`          |                                     `ON` | Build the RDMA transfer engine                         |
+| `BUILD_TCP`           |                                     `ON` | Build the TCP transfer engine (fallback transport)     |
 | `BUILD_PYTHON`        | `OFF` in CMake, `ON` in `pyproject.toml` | Build Python bindings                                  |
 | `BUILD_NVLINK`        |                                    `OFF` | Build the NVLink transfer engine                       |
 | `BUILD_ASCEND_DIRECT` |                                    `OFF` | Build Ascend Direct transport                          |
@@ -289,6 +320,7 @@ scripts/         Repo-wide automation (release.sh, ...)
 
 - [Documentation index](docs/README.md)
 - [Roadmap](docs/roadmap.md)
+- [TCP transport guide](docs/src/guide/tcp-transport.md)
 - [DLSlimeCache design](docs/design/dlslime-cache.md)
 - [Endpoint ownership model](docs/endpoint-ownership-model.md)
 - [Endpoint DeviceSignal refactor](docs/endpoint-device-signal-refactor.md)

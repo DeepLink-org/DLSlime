@@ -84,6 +84,7 @@ plugins:
             Overview: 总览
             Endpoint API: Endpoint API
             PeerAgent API: PeerAgent API
+            TCP Transport: TCP 传输
             SlimeRPC: SlimeRPC
             Deployment: 部署
             DLSlimeCache Service: DLSlimeCache 服务
@@ -119,6 +120,7 @@ nav:
       - Overview: guide/index.md
       - Endpoint API: guide/endpoint-api.md
       - PeerAgent API: guide/peeragent-api.md
+      - TCP Transport: guide/tcp-transport.md
       - SlimeRPC: guide/slimerpc.md
       - Deployment: guide/deployment.md
       - DLSlimeCache Service: guide/dlslime-cache.md
