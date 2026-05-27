@@ -73,7 +73,7 @@ jobs:
             -DBUILD_TORCH_PLUGIN=OFF
             -DBUILD_ASCEND_DIRECT=OFF
             -DBUILD_TEST=OFF
-            -DUSE_CUDA=ON
+            -DUSE_CUDA=OFF
         # The native wheel lives under dlslime/ (dlslime-ctrl/ is a separate Rust crate).
         run: python -m build --wheel --outdir dist dlslime
 
@@ -132,6 +132,8 @@ jobs:
 
           docker exec "${container_name}" bash -lc '
             set -euxo pipefail
+            apt install libasio-dev
+
             cd /workspace
             export PIP_CONFIG_FILE=/dev/null
             export PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/

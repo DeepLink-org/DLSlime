@@ -3,7 +3,6 @@
 #include <asio.hpp>
 #include <memory>
 #include <thread>
-#include <utility>
 
 #include "tcp_connection_pool.h"
 

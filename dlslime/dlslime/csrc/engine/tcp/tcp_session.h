@@ -4,7 +4,6 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
-#include <utility>
 
 #include "tcp_header.h"
 #include "tcp_memory_pool.h"

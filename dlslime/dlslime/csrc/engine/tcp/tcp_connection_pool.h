@@ -8,7 +8,6 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
-#include <utility>
 
 namespace dlslime {
 namespace tcp {

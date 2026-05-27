@@ -23,6 +23,9 @@ add_library(_slime_tcp SHARED
 
 target_compile_definitions(_slime_tcp PRIVATE ASIO_STANDALONE)
 
+# Workaround: asio awaitable.hpp uses std::exchange without including <utility>
+target_compile_options(_slime_tcp PRIVATE -include utility)
+
 if (USE_CUDA)
     find_package(CUDAToolkit REQUIRED)
     target_compile_definitions(_slime_tcp PRIVATE USE_CUDA)
