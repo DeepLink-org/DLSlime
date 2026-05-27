@@ -43,10 +43,8 @@ def main() -> None:
             ctypes.memmove(addr_a, PAYLOAD_AB, len(PAYLOAD_AB))
             # Small stagger so B has its async_recv posted before our send.
             time.sleep(0.5)
-            assert ep_a.async_send((addr_a, 0, len(PAYLOAD_AB))).wait() == 0
-            assert (
-                ep_a.async_recv((addr_a, len(PAYLOAD_AB), len(PAYLOAD_BA))).wait() == 0
-            )
+            assert ep_a.send((addr_a, 0, len(PAYLOAD_AB))).wait() == 0
+            assert ep_a.recv((addr_a, len(PAYLOAD_AB), len(PAYLOAD_BA))).wait() == 0
             received = bytes(buf_a[len(PAYLOAD_AB) : len(PAYLOAD_AB) + len(PAYLOAD_BA)])
             assert received == PAYLOAD_BA, received
         except Exception as e:  # noqa: BLE001
@@ -56,12 +54,12 @@ def main() -> None:
         try:
             barrier.wait(5)
             ep_b.connect(info_a)
-            assert ep_b.async_recv((addr_b, 0, len(PAYLOAD_AB))).wait() == 0
+            assert ep_b.recv((addr_b, 0, len(PAYLOAD_AB))).wait() == 0
             received = bytes(buf_b[: len(PAYLOAD_AB)])
             assert received == PAYLOAD_AB, received
             ctypes.memmove(addr_b, PAYLOAD_BA, len(PAYLOAD_BA))
             time.sleep(0.5)
-            assert ep_b.async_send((addr_b, 0, len(PAYLOAD_BA))).wait() == 0
+            assert ep_b.send((addr_b, 0, len(PAYLOAD_BA))).wait() == 0
         except Exception as e:  # noqa: BLE001
             err.append(("b", e))
 

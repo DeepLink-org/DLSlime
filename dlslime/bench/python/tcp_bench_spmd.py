@@ -197,7 +197,7 @@ end_event = torch.cuda.Event(enable_timing=True)
 def transfer_batch_concurrency_dlslime(
     role, opcode, local_handle, remote_handle, tensor, batch_size, num_concurrency
 ):
-    fn = tcp_endpoint.async_read if opcode == "read" else tcp_endpoint.async_write
+    fn = tcp_endpoint.read if opcode == "read" else tcp_endpoint.write
     if role == "initiator":
         slots = []
         for concurrent_id in range(num_concurrency):

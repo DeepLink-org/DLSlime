@@ -6,6 +6,7 @@
 #include <deque>
 #include <memory>
 #include <mutex>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -20,6 +21,14 @@
 #include "tcp_session.h"
 
 namespace dlslime {
+
+// Thrown by transport operations that exist in the abstract endpoint
+// surface (for parity with RDMAEndpoint) but have no analogue on this
+// transport. Translated to Python ``NotImplementedError`` by the bindings.
+struct not_implemented: public std::logic_error {
+    using std::logic_error::logic_error;
+};
+
 namespace tcp {
 
 using json = nlohmann::json;
@@ -48,16 +57,30 @@ public:
     json    mr_info() const;
 
     // ── Async I/O (all return Future immediately; I/O runs on io_context thread) ──
+    // Method names match RDMAEndpoint so PeerAgent can hold either type
+    // without an adapter. ``stream`` exists in the bindings for signature
+    // parity with RDMA and is ignored on TCP.
 
-    std::shared_ptr<TcpSendFuture> async_send(const chunk_tuple_t& chunk, int64_t timeout_ms = kDefaultTimeoutMs);
+    std::shared_ptr<TcpSendFuture> send(const chunk_tuple_t& chunk, int64_t timeout_ms = kDefaultTimeoutMs);
 
-    std::shared_ptr<TcpRecvFuture> async_recv(const chunk_tuple_t& chunk, bool exact_size = false);
+    std::shared_ptr<TcpRecvFuture> recv(const chunk_tuple_t& chunk, bool exact_size = false);
 
-    std::shared_ptr<TcpReadWriteFuture> async_read(const std::vector<assign_tuple_t>& assign,
-                                                   int64_t                            timeout_ms = kDefaultTimeoutMs);
+    std::shared_ptr<TcpReadWriteFuture> read(const std::vector<assign_tuple_t>& assign,
+                                             int64_t                            timeout_ms = kDefaultTimeoutMs);
 
-    std::shared_ptr<TcpReadWriteFuture> async_write(const std::vector<assign_tuple_t>& assign,
-                                                    int64_t                            timeout_ms = kDefaultTimeoutMs);
+    std::shared_ptr<TcpReadWriteFuture> write(const std::vector<assign_tuple_t>& assign,
+                                              int64_t                            timeout_ms = kDefaultTimeoutMs);
+
+    // ── RDMA-only ops; provided for interface parity, never succeed on TCP. ──
+    [[noreturn]] void write_with_imm(const std::vector<assign_tuple_t>& /*assign*/, uint32_t /*imm_data*/ = 0)
+    {
+        throw not_implemented("TCP transport does not support write_with_imm; this is RDMA-only.");
+    }
+
+    [[noreturn]] void imm_recv()
+    {
+        throw not_implemented("TCP transport does not support imm_recv; this is RDMA-only.");
+    }
 
     // ── Accessors ───────────────────────────────────────
     void setId(int64_t id)

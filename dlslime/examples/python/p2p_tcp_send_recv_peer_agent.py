@@ -59,9 +59,9 @@ def main(ctrl_url: str) -> None:
         t.join(timeout=10)
         print(f"A->B send/recv = {PAYLOAD_AB!r}  ok")
 
-        # ── One-sided write: A writes into B's MR via the TCP endpoint
-        # adapter. TCP MR handles are per-endpoint, so we go through
-        # conn_a.endpoint (a TcpEndpointAdapter) directly.
+        # ── One-sided write: A writes into B's MR via the TCP endpoint.
+        # TCP MR handles are per-endpoint, so we go through conn_a.endpoint
+        # (a TcpEndpoint) directly.
         ep_a = conn_a.endpoint
         peer_info = conn_a.peer_endpoint_info  # set by mailbox post-handshake
         assert peer_info is not None, "peer_endpoint_info missing after handshake"

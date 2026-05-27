@@ -170,10 +170,10 @@ int32_t TcpEndpoint::register_remote_memory_region(const std::string& name, cons
     return remote_pool_->register_remote_memory_region(mr_info, name);
 }
 
-// ── async_send ──────────────────────────────────────────
+// ── send ──────────────────────────────────────────
 // chunk_tuple_t = (src_ptr, offset, length) — raw pointers, no MR lookup.
 
-std::shared_ptr<TcpSendFuture> TcpEndpoint::async_send(const chunk_tuple_t& chunk, int64_t /*timeout_ms*/)
+std::shared_ptr<TcpSendFuture> TcpEndpoint::send(const chunk_tuple_t& chunk, int64_t /*timeout_ms*/)
 {
     uintptr_t src = std::get<0>(chunk) + std::get<1>(chunk);
     size_t    len = std::get<2>(chunk);
@@ -198,7 +198,7 @@ std::shared_ptr<TcpSendFuture> TcpEndpoint::async_send(const chunk_tuple_t& chun
         auto* buf    = new char[len];
         auto  cu_err = cudaMemcpy(buf, send_ptr, len, cudaMemcpyDeviceToHost);
         if (cu_err != cudaSuccess) {
-            SLIME_LOG_ERROR("async_send cudaMemcpy D2H: ", cudaGetErrorString(cu_err));
+            SLIME_LOG_ERROR("send cudaMemcpy D2H: ", cudaGetErrorString(cu_err));
             delete[] buf;
             op->completion_status.store(TCP_FAILED, std::memory_order_release);
             op->signal->force_complete();
@@ -213,7 +213,7 @@ std::shared_ptr<TcpSendFuture> TcpEndpoint::async_send(const chunk_tuple_t& chun
     auto session = std::make_shared<ClientSession>(
         std::move(conn->socket), [op, conn, &pool, send_ptr, is_cuda](asio::error_code ec) {
             if (ec)
-                SLIME_LOG_WARN("async_send: ", ec.message());
+                SLIME_LOG_WARN("send: ", ec.message());
             op->completion_status.store(ec ? TCP_FAILED : TCP_SUCCESS, std::memory_order_release);
             if (op->signal)
                 op->signal->set_comm_done(0);
@@ -228,10 +228,10 @@ std::shared_ptr<TcpSendFuture> TcpEndpoint::async_send(const chunk_tuple_t& chun
     return std::make_shared<TcpSendFuture>(op);
 }
 
-// ── async_recv ──────────────────────────────────────────
+// ── recv ──────────────────────────────────────────
 // chunk_tuple_t = (dst_ptr, offset, length) — raw pointers, no MR lookup.
 
-std::shared_ptr<TcpRecvFuture> TcpEndpoint::async_recv(const chunk_tuple_t& chunk, bool exact_size)
+std::shared_ptr<TcpRecvFuture> TcpEndpoint::recv(const chunk_tuple_t& chunk, bool exact_size)
 {
     auto op = TcpOpState::create();
     op->signal->reset_all();
@@ -258,15 +258,14 @@ std::shared_ptr<TcpRecvFuture> TcpEndpoint::async_recv(const chunk_tuple_t& chun
     return std::make_shared<TcpRecvFuture>(op);
 }
 
-// ── async_read ──────────────────────────────────────────
+// ── read ──────────────────────────────────────────
 // Each assign creates an independent ClientSession; all share one OpState.
 // Future.wait() blocks until every session has signalled its bit.
 
-std::shared_ptr<TcpReadWriteFuture> TcpEndpoint::async_read(const std::vector<assign_tuple_t>& assign,
-                                                            int64_t /*timeout_ms*/)
+std::shared_ptr<TcpReadWriteFuture> TcpEndpoint::read(const std::vector<assign_tuple_t>& assign, int64_t /*timeout_ms*/)
 {
     if (assign.empty())
-        throw std::runtime_error("TcpEndpoint::async_read: empty assignment");
+        throw std::runtime_error("TcpEndpoint::read: empty assignment");
 
     size_t N  = assign.size();
     auto   op = TcpOpState::create();
@@ -288,7 +287,7 @@ std::shared_ptr<TcpReadWriteFuture> TcpEndpoint::async_read(const std::vector<as
         auto local  = local_pool_->get_mr_fast(local_h);
         auto remote = remote_pool_->get_remote_mr_fast(remote_h);
         if (local.length == 0 || remote.length == 0)
-            throw std::runtime_error("TcpEndpoint::async_read: invalid MR handle");
+            throw std::runtime_error("TcpEndpoint::read: invalid MR handle");
 
         uintptr_t     local_dst = local.addr + local_off;
         SessionHeader hdr{length, remote.addr + remote_off, OP_READ};
@@ -313,14 +312,14 @@ std::shared_ptr<TcpReadWriteFuture> TcpEndpoint::async_read(const std::vector<as
             std::move(conn->socket),
             [op, conn, i, &pool, read_dst, is_cuda, real_dst = local_dst, len = length](asio::error_code ec) {
                 if (ec) {
-                    SLIME_LOG_WARN("async_read session ", i, ": ", ec.message());
+                    SLIME_LOG_WARN("read session ", i, ": ", ec.message());
                     op->completion_status.store(TCP_FAILED, std::memory_order_release);
                 }
 #ifdef USE_CUDA
                 if (!ec && is_cuda) {
                     auto cu_err = cudaMemcpy(reinterpret_cast<void*>(real_dst), read_dst, len, cudaMemcpyHostToDevice);
                     if (cu_err != cudaSuccess) {
-                        SLIME_LOG_ERROR("async_read cudaMemcpy H2D: ", cudaGetErrorString(cu_err));
+                        SLIME_LOG_ERROR("read cudaMemcpy H2D: ", cudaGetErrorString(cu_err));
                         op->completion_status.store(TCP_FAILED, std::memory_order_release);
                     }
                 }
@@ -337,14 +336,14 @@ std::shared_ptr<TcpReadWriteFuture> TcpEndpoint::async_read(const std::vector<as
     return std::make_shared<TcpReadWriteFuture>(op);
 }
 
-// ── async_write ─────────────────────────────────────────
+// ── write ─────────────────────────────────────────
 // Each assign creates an independent ClientSession; all share one OpState.
 
-std::shared_ptr<TcpReadWriteFuture> TcpEndpoint::async_write(const std::vector<assign_tuple_t>& assign,
-                                                             int64_t /*timeout_ms*/)
+std::shared_ptr<TcpReadWriteFuture> TcpEndpoint::write(const std::vector<assign_tuple_t>& assign,
+                                                       int64_t /*timeout_ms*/)
 {
     if (assign.empty())
-        throw std::runtime_error("TcpEndpoint::async_write: empty assignment");
+        throw std::runtime_error("TcpEndpoint::write: empty assignment");
 
     size_t N  = assign.size();
     auto   op = TcpOpState::create();
@@ -366,7 +365,7 @@ std::shared_ptr<TcpReadWriteFuture> TcpEndpoint::async_write(const std::vector<a
         auto local  = local_pool_->get_mr_fast(local_h);
         auto remote = remote_pool_->get_remote_mr_fast(remote_h);
         if (local.length == 0 || remote.length == 0)
-            throw std::runtime_error("TcpEndpoint::async_write: invalid MR handle");
+            throw std::runtime_error("TcpEndpoint::write: invalid MR handle");
 
         uintptr_t     src = local.addr + local_off;
         SessionHeader hdr{length, remote.addr + remote_off, OP_WRITE};
@@ -385,7 +384,7 @@ std::shared_ptr<TcpReadWriteFuture> TcpEndpoint::async_write(const std::vector<a
             auto* buf    = new char[length];
             auto  cu_err = cudaMemcpy(buf, send_ptr, length, cudaMemcpyDeviceToHost);
             if (cu_err != cudaSuccess) {
-                SLIME_LOG_ERROR("async_write cudaMemcpy D2H: ", cudaGetErrorString(cu_err));
+                SLIME_LOG_ERROR("write cudaMemcpy D2H: ", cudaGetErrorString(cu_err));
                 delete[] buf;
                 op->completion_status.store(TCP_FAILED, std::memory_order_release);
                 op->signal->force_complete();
@@ -400,7 +399,7 @@ std::shared_ptr<TcpReadWriteFuture> TcpEndpoint::async_write(const std::vector<a
         auto session = std::make_shared<ClientSession>(
             std::move(conn->socket), [op, conn, i, &pool, send_ptr, is_cuda](asio::error_code ec) {
                 if (ec) {
-                    SLIME_LOG_WARN("async_write session ", i, ": ", ec.message());
+                    SLIME_LOG_WARN("write session ", i, ": ", ec.message());
                     op->completion_status.store(TCP_FAILED, std::memory_order_release);
                 }
                 if (op->signal)

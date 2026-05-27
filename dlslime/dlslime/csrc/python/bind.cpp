@@ -617,28 +617,72 @@ PYBIND11_MODULE(_slime_c, m)
              py::arg("name"),
              py::arg("mr_info"),
              py::call_guard<py::gil_scoped_release>())
-        .def("async_send",
-             py::overload_cast<const dlslime::chunk_tuple_t&, int64_t>(&dlslime::tcp::TcpEndpoint::async_send),
-             py::arg("chunk"),
-             py::arg("timeout_ms") = dlslime::tcp::TcpEndpoint::kDefaultTimeoutMs,
-             py::call_guard<py::gil_scoped_release>())
-        .def("async_recv",
-             &dlslime::tcp::TcpEndpoint::async_recv,
-             py::arg("chunk"),
-             py::arg("exact_size") = false,
-             py::call_guard<py::gil_scoped_release>())
-        .def("async_read",
-             py::overload_cast<const std::vector<dlslime::assign_tuple_t>&, int64_t>(
-                 &dlslime::tcp::TcpEndpoint::async_read),
-             py::arg("assign"),
-             py::arg("timeout_ms") = dlslime::tcp::TcpEndpoint::kDefaultTimeoutMs,
-             py::call_guard<py::gil_scoped_release>())
-        .def("async_write",
-             py::overload_cast<const std::vector<dlslime::assign_tuple_t>&, int64_t>(
-                 &dlslime::tcp::TcpEndpoint::async_write),
-             py::arg("assign"),
-             py::arg("timeout_ms") = dlslime::tcp::TcpEndpoint::kDefaultTimeoutMs,
-             py::call_guard<py::gil_scoped_release>());
+        .def(
+            "send",
+            [](dlslime::tcp::TcpEndpoint&    self,
+               const dlslime::chunk_tuple_t& chunk,
+               py::object /*stream*/,
+               int64_t timeout_ms) { return self.send(chunk, timeout_ms); },
+            py::arg("chunk"),
+            py::arg("stream")     = py::none(),
+            py::arg("timeout_ms") = dlslime::tcp::TcpEndpoint::kDefaultTimeoutMs,
+            py::call_guard<py::gil_scoped_release>())
+        .def(
+            "recv",
+            [](dlslime::tcp::TcpEndpoint&    self,
+               const dlslime::chunk_tuple_t& chunk,
+               py::object /*stream*/,
+               bool exact_size) { return self.recv(chunk, exact_size); },
+            py::arg("chunk"),
+            py::arg("stream")     = py::none(),
+            py::arg("exact_size") = false,
+            py::call_guard<py::gil_scoped_release>())
+        .def(
+            "read",
+            [](dlslime::tcp::TcpEndpoint&                  self,
+               const std::vector<dlslime::assign_tuple_t>& assign,
+               py::object /*stream*/,
+               int64_t timeout_ms) { return self.read(assign, timeout_ms); },
+            py::arg("assign"),
+            py::arg("stream")     = py::none(),
+            py::arg("timeout_ms") = dlslime::tcp::TcpEndpoint::kDefaultTimeoutMs,
+            py::call_guard<py::gil_scoped_release>())
+        .def(
+            "write",
+            [](dlslime::tcp::TcpEndpoint&                  self,
+               const std::vector<dlslime::assign_tuple_t>& assign,
+               py::object /*stream*/,
+               int64_t timeout_ms) { return self.write(assign, timeout_ms); },
+            py::arg("assign"),
+            py::arg("stream")     = py::none(),
+            py::arg("timeout_ms") = dlslime::tcp::TcpEndpoint::kDefaultTimeoutMs,
+            py::call_guard<py::gil_scoped_release>())
+        .def(
+            "write_with_imm",
+            [](dlslime::tcp::TcpEndpoint&                  self,
+               const std::vector<dlslime::assign_tuple_t>& assign,
+               uint32_t                                    imm_data,
+               py::object /*stream*/) { self.write_with_imm(assign, imm_data); },
+            py::arg("assign"),
+            py::arg("imm_data") = 0u,
+            py::arg("stream")   = py::none())
+        .def(
+            "imm_recv",
+            [](dlslime::tcp::TcpEndpoint& self, py::object /*stream*/) { self.imm_recv(); },
+            py::arg("stream") = py::none());
+
+    // Translate dlslime::not_implemented thrown by transports without a
+    // given op (e.g. TcpEndpoint::write_with_imm) to Python's
+    // NotImplementedError so callers see the right exception type.
+    py::register_exception_translator([](std::exception_ptr p) {
+        try {
+            if (p)
+                std::rethrow_exception(p);
+        }
+        catch (const dlslime::not_implemented& e) {
+            PyErr_SetString(PyExc_NotImplementedError, e.what());
+        }
+    });
 #endif  // BUILD_TCP
 
     // =========================================================================

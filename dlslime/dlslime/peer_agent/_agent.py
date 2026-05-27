@@ -36,7 +36,6 @@ from dlslime.ctrl import NanoCtrlClient
 from dlslime.logging import get_logger
 from ._mailbox import StreamMailbox
 from ._obs import _tlog
-from ._tcp_endpoint import TcpEndpointAdapter
 
 logger = get_logger("peer_agent")
 
@@ -1003,18 +1002,14 @@ class PeerAgent:
             conn.attach_endpoint(new_ep, pool)
             return new_ep
 
-    def _ensure_local_tcp_endpoint(
-        self, conn_id: str, conn: DirectedConnection
-    ) -> TcpEndpointAdapter:
-        """Construct (or reuse) a TCP endpoint adapter for a connection."""
+    def _ensure_local_tcp_endpoint(self, conn_id: str, conn: DirectedConnection):
+        """Construct (or reuse) a TCP endpoint for a connection."""
         if _TcpEndpoint is None:
             raise RuntimeError(
                 "TCP transport requested but dlslime was built without BUILD_TCP."
             )
         local_key: TcpResourceKey = conn.local_key  # type: ignore[assignment]
-        new_ep = TcpEndpointAdapter(
-            _TcpEndpoint(ip=local_key.host, port=local_key.port)
-        )
+        new_ep = _TcpEndpoint(ip=local_key.host, port=local_key.port)
 
         # Replay any previously-registered logical regions onto the new
         # endpoint so the handshake's endpoint_info() carries them. Done
@@ -1039,7 +1034,7 @@ class PeerAgent:
         with self._endpoints_lock:
             existing = self._endpoints.get(conn_id)
             if existing is not None:
-                # Race: another thread won. Drop the spare adapter.
+                # Race: another thread won. Drop the spare endpoint.
                 try:
                     new_ep.shutdown()
                 except Exception:
@@ -1282,7 +1277,7 @@ class PeerAgent:
             tcp_endpoints = [
                 ep
                 for ep in self._endpoints.values()
-                if isinstance(ep, TcpEndpointAdapter)
+                if _TcpEndpoint is not None and isinstance(ep, _TcpEndpoint)
             ]
         for ep in tcp_endpoints:
             try:

@@ -86,10 +86,10 @@ def test_async_send_recv(
         ep_a.connect(info_b)
         ctypes.memmove(ctypes.addressof(buf_a), b"hello", 5)
         time.sleep(5)
-        st = ep_a.async_send((ctypes.addressof(buf_a), 0, 5)).wait()
+        st = ep_a.send((ctypes.addressof(buf_a), 0, 5)).wait()
         if st != 0:
             raise RuntimeError(f"send: {st}")
-        st = ep_a.async_recv((ctypes.addressof(buf_a), 5, 5)).wait()
+        st = ep_a.recv((ctypes.addressof(buf_a), 5, 5)).wait()
         if st != 0:
             raise RuntimeError(f"recv: {st}")
         if bytes(buf_a[5:10]) != b"world":
@@ -98,14 +98,14 @@ def test_async_send_recv(
 
     def run_b():
         ep_b.connect(info_a)
-        st = ep_b.async_recv((ctypes.addressof(buf_b), 0, 5)).wait()
+        st = ep_b.recv((ctypes.addressof(buf_b), 0, 5)).wait()
         if st != 0:
             raise RuntimeError(f"recv: {st}")
         if bytes(buf_b[:5]) != b"hello":
             raise RuntimeError(f"data: {bytes(buf_b[:5])}")
         ctypes.memmove(ctypes.addressof(buf_b), b"world", 5)
         time.sleep(5)
-        st = ep_b.async_send((ctypes.addressof(buf_b), 0, 5)).wait()
+        st = ep_b.send((ctypes.addressof(buf_b), 0, 5)).wait()
         if st != 0:
             raise RuntimeError(f"send: {st}")
         ep_b.shutdown()
@@ -128,14 +128,14 @@ def test_async_send2recv(
         ep_a.connect(info_b)
         ctypes.memmove(ctypes.addressof(buf_a), b"one", 3)
         time.sleep(5)
-        st = ep_a.async_send((ctypes.addressof(buf_a), 0, 3)).wait()
+        st = ep_a.send((ctypes.addressof(buf_a), 0, 3)).wait()
         if st != 0:
             raise RuntimeError(f"send: {st}")
         ep_a.shutdown()
 
     def run_b():
         ep_b.connect(info_a)
-        st = ep_b.async_recv((ctypes.addressof(buf_b), 0, 3)).wait()
+        st = ep_b.recv((ctypes.addressof(buf_b), 0, 3)).wait()
         if st != 0:
             raise RuntimeError(f"recv: {st}")
         if bytes(buf_b[:3]) != b"one":
@@ -165,7 +165,7 @@ def test_async_write(
     def run_a():
         ep_a.connect(info_b)
         ctypes.memmove(addr_a, test_data, len(test_data))
-        st = ep_a.async_write([(h_a, h_br, 0, 0, len(test_data))]).wait()
+        st = ep_a.write([(h_a, h_br, 0, 0, len(test_data))]).wait()
         if st != 0:
             raise RuntimeError(f"write: {st}")
         ep_a.shutdown()
@@ -203,7 +203,7 @@ def test_async_read(
 
     def run_a():
         ep_a.connect(info_b)
-        st = ep_a.async_read([(h_a, h_br, 0, 0, len(test_data))]).wait()
+        st = ep_a.read([(h_a, h_br, 0, 0, len(test_data))]).wait()
         if st != 0:
             raise RuntimeError(f"read: {st}")
         if bytes(buf_a[: len(test_data)]) != test_data:
@@ -236,7 +236,7 @@ def test_recv_timeout(
 
     def run_a():
         ep_a.connect(ep_b.endpoint_info())
-        fut = ep_a.async_recv((ctypes.addressof(buf_a), 0, 5))
+        fut = ep_a.recv((ctypes.addressof(buf_a), 0, 5))
         result = fut.wait_for(0.3)
         if result is not None:
             raise RuntimeError(f"expected None, got {result}")
@@ -256,7 +256,7 @@ def test_send_timeout_ms(
 
     def run_b():
         ep_b.connect(ep_a.endpoint_info())
-        st = ep_b.async_recv((ctypes.addressof(buf_b), 0, 5)).wait()
+        st = ep_b.recv((ctypes.addressof(buf_b), 0, 5)).wait()
         if st != 0:
             raise RuntimeError(f"recv: {st}")
         ep_b.shutdown()
@@ -264,7 +264,7 @@ def test_send_timeout_ms(
     def run_a():
         ep_a.connect(ep_b.endpoint_info())
         ctypes.memmove(ctypes.addressof(buf_a), b"world", 5)
-        st = ep_a.async_send((ctypes.addressof(buf_a), 0, 5), timeout_ms=10000).wait()
+        st = ep_a.send((ctypes.addressof(buf_a), 0, 5), timeout_ms=10000).wait()
         if st != 0:
             raise RuntimeError(f"send: {st}")
         ep_a.shutdown()
@@ -283,7 +283,7 @@ def test_default_timeout(
 
     def run_b():
         ep_b.connect(ep_a.endpoint_info())
-        st = ep_b.async_recv((ctypes.addressof(buf_b), 0, 5)).wait()
+        st = ep_b.recv((ctypes.addressof(buf_b), 0, 5)).wait()
         if st != 0:
             raise RuntimeError(f"recv: {st}")
         ep_b.shutdown()
@@ -291,7 +291,7 @@ def test_default_timeout(
     def run_a():
         ep_a.connect(ep_b.endpoint_info())
         ctypes.memmove(ctypes.addressof(buf_a), b"test!", 5)
-        st = ep_a.async_send((ctypes.addressof(buf_a), 0, 5)).wait()
+        st = ep_a.send((ctypes.addressof(buf_a), 0, 5)).wait()
         if st != 0:
             raise RuntimeError(f"send: {st}")
         ep_a.shutdown()
@@ -310,7 +310,7 @@ def test_exact_size_mismatch(
 
     def run_b():
         ep_b.connect(ep_a.endpoint_info())
-        st = ep_b.async_recv((ctypes.addressof(buf_b), 0, 4), exact_size=True).wait()
+        st = ep_b.recv((ctypes.addressof(buf_b), 0, 4), exact_size=True).wait()
         if st != -1:
             raise RuntimeError(f"expected TCP_FAILED(-1), got {st}")
         ep_b.shutdown()
@@ -318,7 +318,7 @@ def test_exact_size_mismatch(
     def run_a():
         ep_a.connect(ep_b.endpoint_info())
         ctypes.memmove(ctypes.addressof(buf_a), b"overflow", 8)
-        st = ep_a.async_send((ctypes.addressof(buf_a), 0, 8)).wait()
+        st = ep_a.send((ctypes.addressof(buf_a), 0, 8)).wait()
         if st != 0:
             raise RuntimeError(f"send: {st}")
         ep_a.shutdown()
@@ -337,12 +337,12 @@ def test_overflow_truncate(
 
     def run_b():
         ep_b.connect(ep_a.endpoint_info())
-        st = ep_b.async_recv((ctypes.addressof(buf_b), 0, 4)).wait()
+        st = ep_b.recv((ctypes.addressof(buf_b), 0, 4)).wait()
         if st != 0:
             raise RuntimeError(f"recv1: {st}")
         if bytes(buf_b[:4]) != b"LONG":
             raise RuntimeError(f"truncated: {bytes(buf_b[:4])}")
-        st = ep_b.async_recv((ctypes.addressof(buf_b), 4, 5)).wait()
+        st = ep_b.recv((ctypes.addressof(buf_b), 4, 5)).wait()
         if st != 0:
             raise RuntimeError(f"recv2: {st}")
         if bytes(buf_b[4:9]) != b"HELLO":
@@ -352,11 +352,11 @@ def test_overflow_truncate(
     def run_a():
         ep_a.connect(ep_b.endpoint_info())
         ctypes.memmove(ctypes.addressof(buf_a), b"LONGDATA", 8)
-        st = ep_a.async_send((ctypes.addressof(buf_a), 0, 8)).wait()
+        st = ep_a.send((ctypes.addressof(buf_a), 0, 8)).wait()
         if st != 0:
             raise RuntimeError(f"send1: {st}")
         ctypes.memmove(ctypes.addressof(buf_a), b"HELLO", 5)
-        st = ep_a.async_send((ctypes.addressof(buf_a), 0, 5)).wait()
+        st = ep_a.send((ctypes.addressof(buf_a), 0, 5)).wait()
         if st != 0:
             raise RuntimeError(f"send2: {st}")
         ep_a.shutdown()
@@ -430,10 +430,10 @@ def test_torch_send_recv(
     def run_a():
         ep_a.connect(info_b)
         time.sleep(5)
-        st = ep_a.async_send((t_a.data_ptr(), 0, n_bytes)).wait()
+        st = ep_a.send((t_a.data_ptr(), 0, n_bytes)).wait()
         if st != 0:
             raise RuntimeError(f"send: {st}")
-        st = ep_a.async_recv((t_a.data_ptr(), 10 * 4, sl_bytes)).wait()
+        st = ep_a.recv((t_a.data_ptr(), 10 * 4, sl_bytes)).wait()
         if st != 0:
             raise RuntimeError(f"recv: {st}")
         if not torch.equal(t_a[10:15], t_b[20:25]):
@@ -442,13 +442,13 @@ def test_torch_send_recv(
 
     def run_b():
         ep_b.connect(info_a)
-        st = ep_b.async_recv((t_b.data_ptr(), 0, n_bytes)).wait()
+        st = ep_b.recv((t_b.data_ptr(), 0, n_bytes)).wait()
         if st != 0:
             raise RuntimeError(f"recv: {st}")
         if not torch.equal(expected, t_b):
             raise RuntimeError("full tensor mismatch")
         time.sleep(5)
-        st = ep_b.async_send((t_b.data_ptr(), 20 * 4, sl_bytes)).wait()
+        st = ep_b.send((t_b.data_ptr(), 20 * 4, sl_bytes)).wait()
         if st != 0:
             raise RuntimeError(f"send: {st}")
         ep_b.shutdown()
@@ -482,7 +482,7 @@ def test_torch_write(
 
     def run_a():
         ep_a.connect(info_b)
-        st = ep_a.async_write([(h_a, h_br, 0, 0, n_bytes)]).wait()
+        st = ep_a.write([(h_a, h_br, 0, 0, n_bytes)]).wait()
         if st != 0:
             raise RuntimeError(f"write: {st}")
         ep_a.shutdown()
@@ -527,7 +527,7 @@ def test_torch_read(
 
     def run_a():
         ep_a.connect(info_b)
-        st = ep_a.async_read([(h_a, h_br, 0, 0, n_bytes)]).wait()
+        st = ep_a.read([(h_a, h_br, 0, 0, n_bytes)]).wait()
         if st != 0:
             raise RuntimeError(f"read: {st}")
         if not torch.equal(t_a, expected):
@@ -583,7 +583,7 @@ def test_torch_write_batch(
             (h_a_batch[i], h_br_batch[i], i * dsize, i * dsize, dsize)
             for i in range(n_batch)
         ]
-        st = ep_a.async_write(assigns).wait()
+        st = ep_a.write(assigns).wait()
         if st != 0:
             raise RuntimeError(f"write batch: {st}")
         ep_a.shutdown()
@@ -641,7 +641,7 @@ def test_torch_read_batch(
             (h_a_batch[i], h_br_batch[i], i * dsize, i * dsize, dsize)
             for i in range(n_batch)
         ]
-        st = ep_a.async_read(assigns).wait()
+        st = ep_a.read(assigns).wait()
         if st != 0:
             raise RuntimeError(f"read batch: {st}")
         ep_a.shutdown()

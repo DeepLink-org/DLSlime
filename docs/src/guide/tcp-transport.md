@@ -8,10 +8,10 @@ TCP is the right transport when:
 - A connection has to traverse a network without RDMA capability.
 
 It exposes the same primitives as RDMA — `endpoint_info` / `connect`, two-sided
-`async_send` / `async_recv`, one-sided `async_read` / `async_write`, and named
-memory regions — and plugs into PeerAgent through the same control plane.
-Immediate-data ops (`write_with_imm`, `imm_recv`) are RDMA-only and raise
-`NotImplementedError` on TCP.
+`send` / `recv`, one-sided `read` / `write`, and named memory regions — and
+plugs into PeerAgent through the same control plane. Immediate-data ops
+(`write_with_imm`, `imm_recv`) are RDMA-only; on TCP they raise
+`NotImplementedError` (translated from a C++ `not_implemented` exception).
 
 TCP is enabled by default at build time (`BUILD_TCP=ON`).
 
@@ -35,13 +35,13 @@ ep_a.connect(info_b)
 ep_b.connect(info_a)
 
 buf = ctypes.create_string_buffer(64)
-fut = ep_a.async_send((ctypes.addressof(buf), 0, 5))
+fut = ep_a.send((ctypes.addressof(buf), 0, 5))
 assert fut.wait() == 0
 ```
 
-`async_send`, `async_recv`, `async_read`, and `async_write` return future
-objects with a `wait()` method. `wait_for(seconds)` returns `None` on timeout
-and the status code otherwise.
+`send`, `recv`, `read`, and `write` return future objects with a `wait()`
+method. `wait_for(seconds)` returns `None` on timeout and the status code
+otherwise.
 
 For one-sided ops, register both sides' MRs **before** calling `connect()` so
 `endpoint_info()` carries them across the handshake:
@@ -53,7 +53,7 @@ info_b = ep_b.endpoint_info()                      # carries mr_info["b"]
 h_remote = ep_a.register_remote_memory_region("rb", info_b["mr_info"]["b"])
 ep_a.connect(info_b)
 ep_b.connect(ep_a.endpoint_info())
-ep_a.async_write([(h_local, h_remote, 0, 0, 12)]).wait()
+ep_a.write([(h_local, h_remote, 0, 0, 12)]).wait()
 ```
 
 Examples:
@@ -105,7 +105,7 @@ conn_a = agent_a.connect_to("tcp_b", transport="tcp")
 agent_b.connect_to("tcp_a", transport="tcp")
 conn_a.wait()
 
-ep_a = conn_a.endpoint                       # TcpEndpointAdapter
+ep_a = conn_a.endpoint                       # TcpEndpoint
 peer_info = conn_a.peer_endpoint_info        # set by mailbox post-handshake
 h_local = ep_a.register_memory_region("buf_a_loc", addr_a, 0, 64)
 h_remote = ep_a.register_remote_memory_region(

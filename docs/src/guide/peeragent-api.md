@@ -74,7 +74,7 @@ conn.wait(timeout=60)
 | `peer_alias`               | Remote PeerAgent alias.                                                    |
 | `local_nic` / `remote_nic` | Selected local and remote NICs.                                            |
 | `state`                    | Connection state such as `connecting`, `connected`, or `failed`.           |
-| `endpoint`                 | Underlying `RDMAEndpoint` (or `TcpEndpointAdapter`) once created.          |
+| `endpoint`                 | Underlying `RDMAEndpoint` or `TcpEndpoint` once created.                   |
 | `peer_endpoint_info`       | Peer's `endpoint_info` dict captured during handshake (TCP one-sided ops). |
 
 ### Selecting the transport
