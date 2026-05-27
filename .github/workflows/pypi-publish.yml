@@ -100,6 +100,7 @@ jobs:
             --exclude lib_slime_obs.so
             --exclude lib_slime_rdma.so
             --exclude lib_slime_nvlink.so
+            --exclude lib_slime_tcp.so
             --exclude libascend_direct.so
             -w {dest_dir} {wheel}
         with:
