@@ -50,11 +50,13 @@ jobs:
           # Build only the matching Python ABI on x86_64 manylinux.
           CIBW_BUILD: "${{ matrix.python }}-manylinux_x86_64"
           CIBW_BEFORE_ALL_LINUX: |
-            yum install -y libibverbs-devel numactl-devel || \
-            (apt-get update && apt-get install -y libibverbs-dev libnuma-dev)
+            (yum install -y epel-release || true) && \
+            yum install -y libibverbs-devel numactl-devel asio-devel || \
+            yum install -y libibverbs-devel numactl-devel boost-devel || \
+            (apt-get update && apt-get install -y libibverbs-dev libnuma-dev libasio-dev)
           CIBW_ENVIRONMENT: >-
             CMAKE_ARGS=-DBUILD_RDMA=ON -DBUILD_PYTHON=ON
-            -DBUILD_NVLINK=OFF -DBUILD_TORCH_PLUGIN=OFF
+            -DBUILD_TCP=ON -DBUILD_NVLINK=OFF -DBUILD_TORCH_PLUGIN=OFF
             -DBUILD_ASCEND_DIRECT=OFF -DBUILD_TEST=OFF
           # Don't try to bundle libibverbs / libnuma into the wheel:
           # they're system-level libraries (provided by the rdma-core / numactl
