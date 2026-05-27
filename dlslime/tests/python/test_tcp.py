@@ -1,5 +1,7 @@
 import ctypes
+import inspect
 import os
+import socket
 import threading
 import time
 
@@ -18,7 +20,12 @@ try:
 except Exception:
     pass
 
-_CUDA_FORCE_OFF = os.environ.get("DLSLIME_TCP_TEST_CUDA", "") in ("0", "false", "no")
+_CUDA_FORCE_OFF = os.environ.get("DLSLIME_TCP_TEST_CUDA", "").lower() in (
+    "0",
+    "false",
+    "no",
+    "off",
+)
 
 
 def _torch_skip():
@@ -65,10 +72,7 @@ def _sync_run(name, fn_a, fn_b, timeout=120):
 
 
 def test_async_send_recv(
-    ip_a: str = "0.0.0.0",
-    port_a: int = 10001,
-    ip_b: str = "0.0.0.0",
-    port_b: int = 10002,
+    port_a: int, port_b: int, ip_a: str = "0.0.0.0", ip_b: str = "0.0.0.0"
 ):
     buf_a = ctypes.create_string_buffer(128)
     buf_b = ctypes.create_string_buffer(128)
@@ -106,14 +110,11 @@ def test_async_send_recv(
             raise RuntimeError(f"send: {st}")
         ep_b.shutdown()
 
-    _sync_run("test_async_send_recv", run_a, run_b)
+    _sync_run("test_async_send_recv", run_a, run_b, timeout=240)
 
 
 def test_async_send2recv(
-    ip_a: str = "0.0.0.0",
-    port_a: int = 10401,
-    ip_b: str = "0.0.0.0",
-    port_b: int = 10402,
+    port_a: int, port_b: int, ip_a: str = "0.0.0.0", ip_b: str = "0.0.0.0"
 ):
     buf_a = ctypes.create_string_buffer(32)
     buf_b = ctypes.create_string_buffer(32)
@@ -145,10 +146,7 @@ def test_async_send2recv(
 
 
 def test_async_write(
-    ip_a: str = "0.0.0.0",
-    port_a: int = 10003,
-    ip_b: str = "0.0.0.0",
-    port_b: int = 10004,
+    port_a: int, port_b: int, ip_a: str = "0.0.0.0", ip_b: str = "0.0.0.0"
 ):
     buf_a = ctypes.create_string_buffer(256)
     buf_b = ctypes.create_string_buffer(256)
@@ -186,10 +184,7 @@ def test_async_write(
 
 
 def test_async_read(
-    ip_a: str = "0.0.0.0",
-    port_a: int = 10005,
-    ip_b: str = "0.0.0.0",
-    port_b: int = 10006,
+    port_a: int, port_b: int, ip_a: str = "0.0.0.0", ip_b: str = "0.0.0.0"
 ):
     buf_a = ctypes.create_string_buffer(256)
     buf_b = ctypes.create_string_buffer(256)
@@ -227,10 +222,7 @@ def test_async_read(
 
 
 def test_recv_timeout(
-    ip_a: str = "0.0.0.0",
-    port_a: int = 10007,
-    ip_b: str = "0.0.0.0",
-    port_b: int = 10008,
+    port_a: int = 0, port_b: int = 0, ip_a: str = "0.0.0.0", ip_b: str = "0.0.0.0"
 ):
     buf_a = ctypes.create_string_buffer(32)
 
@@ -254,10 +246,7 @@ def test_recv_timeout(
 
 
 def test_send_timeout_ms(
-    ip_a: str = "0.0.0.0",
-    port_a: int = 10009,
-    ip_b: str = "0.0.0.0",
-    port_b: int = 10010,
+    port_a: int = 0, port_b: int = 0, ip_a: str = "0.0.0.0", ip_b: str = "0.0.0.0"
 ):
     buf_a = ctypes.create_string_buffer(64)
     buf_b = ctypes.create_string_buffer(64)
@@ -284,10 +273,7 @@ def test_send_timeout_ms(
 
 
 def test_default_timeout(
-    ip_a: str = "0.0.0.0",
-    port_a: int = 10011,
-    ip_b: str = "0.0.0.0",
-    port_b: int = 10012,
+    port_a: int = 0, port_b: int = 0, ip_a: str = "0.0.0.0", ip_b: str = "0.0.0.0"
 ):
     buf_a = ctypes.create_string_buffer(32)
     buf_b = ctypes.create_string_buffer(32)
@@ -314,10 +300,7 @@ def test_default_timeout(
 
 
 def test_exact_size_mismatch(
-    ip_a: str = "0.0.0.0",
-    port_a: int = 10016,
-    ip_b: str = "0.0.0.0",
-    port_b: int = 10017,
+    port_a: int = 0, port_b: int = 0, ip_a: str = "0.0.0.0", ip_b: str = "0.0.0.0"
 ):
     buf_a = ctypes.create_string_buffer(32)
     buf_b = ctypes.create_string_buffer(32)
@@ -344,10 +327,7 @@ def test_exact_size_mismatch(
 
 
 def test_overflow_truncate(
-    ip_a: str = "0.0.0.0",
-    port_a: int = 10013,
-    ip_b: str = "0.0.0.0",
-    port_b: int = 10014,
+    port_a: int = 0, port_b: int = 0, ip_a: str = "0.0.0.0", ip_b: str = "0.0.0.0"
 ):
     buf_a = ctypes.create_string_buffer(64)
     buf_b = ctypes.create_string_buffer(64)
@@ -427,12 +407,12 @@ def _make_tensor(shape, device, dtype, **kw):
 
 
 def test_torch_send_recv(
+    port_a: int = 0,
+    port_b: int = 0,
     device="cpu",
     dtype=torch.float32,
     ip_a: str = "0.0.0.0",
-    port_a: int = 10101,
     ip_b: str = "0.0.0.0",
-    port_b: int = 10102,
 ):
     """Round-trip: A send full → B recv → B send slice → A recv."""
     SZ, SL = 32, 5  # elements
@@ -477,12 +457,12 @@ def test_torch_send_recv(
 
 
 def test_torch_write(
+    port_a: int = 0,
+    port_b: int = 0,
     device="cpu",
     dtype=torch.float32,
     ip_a: str = "0.0.0.0",
-    port_a: int = 10103,
     ip_b: str = "0.0.0.0",
-    port_b: int = 10104,
 ):
     """One-sided write: A async_write → B verifies data received."""
     SZ = 64
@@ -521,12 +501,12 @@ def test_torch_write(
 
 
 def test_torch_read(
+    port_a: int = 0,
+    port_b: int = 0,
     device="cpu",
     dtype=torch.float32,
     ip_a: str = "0.0.0.0",
-    port_a: int = 10105,
     ip_b: str = "0.0.0.0",
-    port_b: int = 10106,
 ):
     """One-sided read: B buffer pre-filled, A async_read and verifies."""
     dsize = 4
@@ -563,13 +543,13 @@ def test_torch_read(
 
 
 def test_torch_write_batch(
+    port_a: int = 0,
+    port_b: int = 0,
     device="cpu",
     dtype=torch.float32,
     n_batch=4,
     ip_a: str = "0.0.0.0",
-    port_a: int = 10107,
     ip_b: str = "0.0.0.0",
-    port_b: int = 10108,
 ):
     """One async_write with multiple assignments."""
     dsize = 4
@@ -621,13 +601,13 @@ def test_torch_write_batch(
 
 
 def test_torch_read_batch(
+    port_a: int = 0,
+    port_b: int = 0,
     device="cpu",
     dtype=torch.float32,
     n_batch=4,
     ip_a: str = "0.0.0.0",
-    port_a: int = 10109,
     ip_b: str = "0.0.0.0",
-    port_b: int = 10110,
 ):
     """One async_read with multiple assignments."""
     dsize = 4
@@ -680,23 +660,63 @@ def test_torch_read_batch(
 
 # ── main ─────────────────────────────────────────────────
 
+
+def _alloc_port_kwargs(fn, **overrides):
+    n = _count_port_params(fn)
+    if n == 0:
+        return {}
+
+    result = {}
+    pending = []  # (port_key, ip) pairs needing dynamic allocation
+
+    for c in ["a", "b"][:n]:
+        port_key = f"port_{c}"
+        ip_key = f"ip_{c}"
+        ip = overrides.get(ip_key, _get_ip_default(fn, ip_key))
+
+        if port_key in overrides:
+            if not _port_free(ip, overrides[port_key]):
+                raise RuntimeError(
+                    f"Port {overrides[port_key]} on {ip} is occupied "
+                    f"({fn.__name__}, {port_key}={overrides[port_key]})"
+                )
+            result[port_key] = overrides[port_key]
+        else:
+            pending.append((port_key, ip))
+
+    if pending:
+        ports = _find_free_ports(len(pending), [ip for _, ip in pending])
+        for (port_key, _), port in zip(pending, ports):
+            result[port_key] = port
+
+    return result
+
+
 if __name__ == "__main__":
-    test_async_send_recv()
-    test_async_send2recv()
-    test_async_write()
-    test_async_read()
+    _ctypes_tests = [
+        test_async_send_recv,
+        test_async_send2recv,
+        test_async_write,
+        test_async_read,
+    ]
+    for fn in _ctypes_tests:
+        fn(port_a=0, port_b=0)
 
     if not _torch_skip():
         device_list = ["cpu", "cuda"]
         if _cuda_skip():
-            print("No Cuda, Skip", flush=True)
+            print("No Cuda, Cpu Only", flush=True)
             device_list = [
                 "cpu",
             ]
 
+        _torch_tests = [
+            test_torch_send_recv,
+            test_torch_write,
+            test_torch_read,
+            test_torch_write_batch,
+            test_torch_read_batch,
+        ]
         for dev in device_list:
-            test_torch_send_recv(device=dev)
-            test_torch_write(device=dev)
-            test_torch_read(device=dev)
-            test_torch_write_batch(device=dev)
-            test_torch_read_batch(device=dev)
+            for fn in _torch_tests:
+                fn(device=dev, port_a=0, port_b=0)

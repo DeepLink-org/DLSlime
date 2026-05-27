@@ -120,11 +120,11 @@ if args.opcode != "write":
     raise ValueError("Immediate data can only be used with write operations.")
 
 if args.transfer_engine == "dlslime":
-    tcp_endpoint = TcpEndpoint(f"{local_ip}", 12000 + local_rank)
+    tcp_endpoint = TcpEndpoint(f"{local_ip}", 22500 + local_rank)
 elif args.transfer_engine == "mooncake":
     engine = MooncakeTransferEngine()
     result = engine.initialize(
-        f"{local_ip}:{12000+local_rank}", "P2PHANDSHAKE", "tcp", None
+        f"{local_ip}:{22500+local_rank}", "P2PHANDSHAKE", "tcp", None
     )
     mooncake_endpoint_info = {
         "local_ip": local_ip,
