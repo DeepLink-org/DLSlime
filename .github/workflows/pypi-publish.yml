@@ -50,10 +50,23 @@ jobs:
           # Build only the matching Python ABI on x86_64 manylinux.
           CIBW_BUILD: "${{ matrix.python }}-manylinux_x86_64"
           CIBW_BEFORE_ALL_LINUX: |
-            (yum install -y epel-release || true) && \
-            yum install -y libibverbs-devel numactl-devel asio-devel || \
-            yum install -y libibverbs-devel numactl-devel boost-devel || \
-            (apt-get update && apt-get install -y libibverbs-dev libnuma-dev libasio-dev)
+            set -eu
+            if command -v yum >/dev/null 2>&1; then
+              yum install -y libibverbs-devel numactl-devel
+              # Vendor standalone asio headers from upstream. asio-devel is
+              # only in EPEL (not always reachable from the manylinux image),
+              # and the CMake boost-devel fallback is broken (boost/asio.hpp
+              # is in the boost::asio namespace, not asio::, so ASIO_STANDALONE
+              # doesn't bridge them). Drop the headers into /usr/include so
+              # the existing `EXISTS /usr/include/asio.hpp` CMake check fires.
+              ASIO_TAG=asio-1-30-2
+              curl -fsSL https://github.com/chriskohlhoff/asio/archive/refs/tags/${ASIO_TAG}.tar.gz \
+                | tar -xz -C /tmp
+              cp /tmp/asio-${ASIO_TAG}/asio/include/asio.hpp /usr/include/
+              cp -r /tmp/asio-${ASIO_TAG}/asio/include/asio /usr/include/
+            else
+              apt-get update && apt-get install -y libibverbs-dev libnuma-dev libasio-dev
+            fi
           CIBW_ENVIRONMENT: >-
             CMAKE_ARGS=-DBUILD_RDMA=ON -DBUILD_PYTHON=ON
             -DBUILD_TCP=ON -DBUILD_NVLINK=OFF -DBUILD_TORCH_PLUGIN=OFF
