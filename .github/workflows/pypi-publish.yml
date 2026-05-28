@@ -126,7 +126,7 @@ jobs:
             --release
             --out dist
             --manifest-path dlslime-ctrl/Cargo.toml
-            --compatibility manylinux2014
+            --compatibility manylinux_2_17
       - uses: actions/upload-artifact@v4
         with:
           name: dist-dlslime-ctrl
