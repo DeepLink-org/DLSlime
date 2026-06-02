@@ -25,7 +25,13 @@ except ImportError as e:
         "Install them with: pip install httpx redis"
     ) from e
 
-from dlslime import discover_topology, RDMAContext, RDMAEndpoint, RDMAMemoryPool
+from dlslime import (
+    available_nic,
+    discover_topology,
+    RDMAContext,
+    RDMAEndpoint,
+    RDMAMemoryPool,
+)
 
 try:  # TCP support is a build-time option (BUILD_TCP). Tolerate its absence.
     from dlslime import TcpEndpoint as _TcpEndpoint
@@ -267,6 +273,10 @@ class PeerAgent:
             device: RDMA device name (e.g., "mlx5_0"), if None, auto-select
             scope: Scope string for multi-tenant isolation (used as Redis key prefix).
         """
+        # Set first so __del__ doesn't crash with AttributeError if __init__
+        # raises partway through (e.g. discover_topology on a TCP-only host
+        # built against an older binary that throws).
+        self._shutdown_called = False
         self.ctrl_url = ctrl_url
         self._redis_address: Optional[str] = None
         self.alias: str = alias or ""
@@ -347,7 +357,6 @@ class PeerAgent:
         self._redis_client: Optional[redis.Redis] = None
 
         self._stop_event = threading.Event()
-        self._shutdown_called = False
 
         # Event listener for cleanup only (legacy inbox)
         self._event_thread: Optional[threading.Thread] = None
@@ -416,11 +425,24 @@ class PeerAgent:
         preferred_ib_port: int,
         preferred_link_type: Optional[str],
     ) -> Dict[str, Any]:
-        return discover_topology(
-            preferred_device,
-            preferred_ib_port,
-            preferred_link_type,
-        )
+        try:
+            return discover_topology(
+                preferred_device,
+                preferred_ib_port,
+                preferred_link_type,
+            )
+        except RuntimeError as e:
+            # Older dlslime binaries throw "No RDMA devices available" when
+            # the host has no usable NICs (sysfs empty, SLIME_VISIBLE_DEVICES
+            # filtered everything out, container missing /dev/infiniband).
+            # Newer binaries return an empty topology; until everyone's on
+            # the new build, treat the throw as "no RDMA, TCP-only mode".
+            logger.warning(
+                "discover_topology raised %s; treating as TCP-only environment "
+                "(empty topology). Upgrade dlslime to silence this warning.",
+                e,
+            )
+            return {"nics": []}
 
     def _first_usable_resource_key(
         self,
@@ -432,10 +454,31 @@ class PeerAgent:
     ) -> RdmaResourceKey:
         wanted_link = self._normalize_link_type(link_type) if link_type else None
         nics = resource.get("nics") or []
+        # When inspecting our OWN topology, restrict to NICs that the local
+        # userspace libibverbs can actually open. The topology may advertise
+        # NICs that ibv_get_device_list() doesn't see (container missing
+        # /dev/infiniband, missing rdma-core providers, perms, etc.); skipping
+        # them lets _default_local_resource_key's existing
+        # `except RuntimeError: return TcpResourceKey()` fall back transparently.
+        # For a peer's resource we cannot judge openability, so skip the check.
+        check_openable = resource is self._local_resource
+        openable = set(available_nic()) if check_openable else set()
+        skipped: List[str] = []
         for nic in nics:
-            if device is not None and nic.get("name") != device:
+            nic_name = str(nic.get("name", ""))
+            if device is not None and nic_name != device:
                 continue
             if nic.get("health", "AVAILABLE") == "UNAVAILABLE":
+                continue
+            if check_openable and nic_name and nic_name not in openable:
+                skipped.append(nic_name)
+                logger.warning(
+                    "RDMA device %r advertised in topology but not openable by "
+                    "libibverbs (userspace sees: %s); skipping. Will fall back "
+                    "to TCP if no other NIC is usable.",
+                    nic_name,
+                    sorted(openable),
+                )
                 continue
             for port in nic.get("ports") or []:
                 port_num = int(port.get("port", 1))
@@ -451,9 +494,13 @@ class PeerAgent:
                     raise RuntimeError(
                         f"Cannot select RDMA port for {nic.get('name')}: unknown link_type"
                     )
-                return RdmaResourceKey(str(nic["name"]), port_num, port_link)
+                return RdmaResourceKey(nic_name, port_num, port_link)
 
         detail = f"device={device!r}, ib_port={ib_port!r}, link_type={link_type!r}"
+        if check_openable and skipped:
+            detail += (
+                f", skipped_unopenable={skipped}, libibverbs_sees={sorted(openable)}"
+            )
         raise RuntimeError(f"No usable RDMA resource found ({detail})")
 
     def _get_context_and_pool(
@@ -551,18 +598,24 @@ class PeerAgent:
             kwargs["resource"] = self._local_resource
 
         if {"device", "ib_port", "link_type", "name_prefix"} & set(params):
-            key = self._first_usable_resource_key(
-                self._local_resource,
-                device=self._preferred_device,
-                ib_port=1,
-                link_type=None,
-            )
-            if "device" in params:
-                kwargs["device"] = key.device
-            if "ib_port" in params:
-                kwargs["ib_port"] = key.ib_port
-            if "link_type" in params:
-                kwargs["link_type"] = key.link_type
+            try:
+                key = self._first_usable_resource_key(
+                    self._local_resource,
+                    device=self._preferred_device,
+                    ib_port=1,
+                    link_type=None,
+                )
+            except RuntimeError:
+                # TCP-only deployment: no usable RDMA NIC. Omit the RDMA-specific
+                # registration kwargs entirely; NanoCtrl treats them as optional.
+                key = None
+            if key is not None:
+                if "device" in params:
+                    kwargs["device"] = key.device
+                if "ib_port" in params:
+                    kwargs["ib_port"] = key.ib_port
+                if "link_type" in params:
+                    kwargs["link_type"] = key.link_type
             if "name_prefix" in params:
                 kwargs["name_prefix"] = "agent"
 

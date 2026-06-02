@@ -362,12 +362,15 @@ def test_peer_agent_scope_isolates_discovery_namespace():
     assert default_scope_target_with_same_alias.get_resource("dlslime1") is None
 
 
-def test_discover_topology_requires_at_least_one_nic(tmp_path):
-    with pytest.raises(RuntimeError, match="No RDMA devices available"):
-        discover_topology(
-            preferred_device=None,
-            ib_port=1,
-            preferred_link_type=None,
-            sysfs_root=str(tmp_path),
-            devices=[],
-        )
+def test_discover_topology_returns_empty_when_no_nics(tmp_path):
+    """No NICs is a valid result, not an error: TCP-only deployments rely on
+    discover_topology returning an empty topology so PeerAgent can construct."""
+    resource = discover_topology(
+        preferred_device=None,
+        ib_port=1,
+        preferred_link_type=None,
+        sysfs_root=str(tmp_path),
+        devices=[],
+    )
+    assert resource["nics"] == []
+    assert resource.get("schema_version") == 1

@@ -247,10 +247,11 @@ json discoverTopology(const std::optional<std::string>&              preferred_d
         devices = std::move(ordered);
     }
 
-    if (devices.empty()) {
-        throw std::runtime_error("No RDMA devices available");
-    }
-
+    // Empty `devices` is not an error: it means the host has no RDMA devices
+    // visible to us (e.g. TCP-only deployment, or `SLIME_VISIBLE_DEVICES`
+    // filtered everything out). Return an empty topology and let the caller
+    // decide whether to fall back to TCP. Mirrors the early-return at the
+    // top of listRdmaDevices() when the sysfs root is absent.
     json nics = json::array();
     for (const auto& device : devices) {
         json port = readSysfsPort(device, ib_port, sysfs_root);
