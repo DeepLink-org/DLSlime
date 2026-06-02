@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "dlslime-ctrl"
-version = "0.1.16"
+version = "0.1.17"
 description = "DLSlime control-plane server (Redis-backed service registry and peer-agent coordinator)"
 requires-python = ">=3.10"
 # The Python client lives in the `dlslime` package as `dlslime.ctrl.NanoCtrlClient`.
