@@ -425,24 +425,11 @@ class PeerAgent:
         preferred_ib_port: int,
         preferred_link_type: Optional[str],
     ) -> Dict[str, Any]:
-        try:
-            return discover_topology(
-                preferred_device,
-                preferred_ib_port,
-                preferred_link_type,
-            )
-        except RuntimeError as e:
-            # Older dlslime binaries throw "No RDMA devices available" when
-            # the host has no usable NICs (sysfs empty, SLIME_VISIBLE_DEVICES
-            # filtered everything out, container missing /dev/infiniband).
-            # Newer binaries return an empty topology; until everyone's on
-            # the new build, treat the throw as "no RDMA, TCP-only mode".
-            logger.warning(
-                "discover_topology raised %s; treating as TCP-only environment "
-                "(empty topology). Upgrade dlslime to silence this warning.",
-                e,
-            )
-            return {"nics": []}
+        return discover_topology(
+            preferred_device,
+            preferred_ib_port,
+            preferred_link_type,
+        )
 
     def _first_usable_resource_key(
         self,
