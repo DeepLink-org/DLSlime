@@ -116,8 +116,7 @@ def run_target(
         # the rendezvous fires. Required for one-sided ops on TCP.
         agent.register_memory_region("buf_b", addr_b, 0, 64)
 
-        resolved_host = agent._resolve_tcp_local_host(local_host)
-        print(f"[target] TCP local host: {resolved_host}:{local_port}")
+        print(f"[target] TCP local host: {local_host or 'default'}:{local_port}")
         conn = agent.connect_to(
             INITIATOR_ALIAS,
             transport="tcp",
