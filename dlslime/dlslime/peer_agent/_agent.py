@@ -1006,7 +1006,7 @@ class PeerAgent:
                 peer_connections = [
                     conn
                     for conn in self._connections.values()
-                    if conn.peer_alias == peer_alias
+                    if conn.peer_alias == peer_alias and conn.transport == "tcp"
                 ]
                 if len(peer_connections) == 1:
                     return peer_connections[0]
