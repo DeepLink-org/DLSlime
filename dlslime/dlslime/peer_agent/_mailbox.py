@@ -373,6 +373,15 @@ class StreamMailbox:
         # D. Complete RDMA handshake
         t_d = time.perf_counter()
         endpoint.connect(peer_qp_info)
+        if hasattr(endpoint, "is_connected") and not endpoint.is_connected():
+            logger.warning(
+                "StreamMailbox %s: endpoint.connect(%s) failed for endpoint_info=%s",
+                self._agent.alias,
+                peer,
+                peer_qp_info,
+            )
+            self._agent._mark_connection_failed(conn_id)
+            return
         # Stash for one-sided ops on transports (TCP) where remote MR info
         # rides on the endpoint_info JSON instead of a separate Redis record.
         conn.peer_endpoint_info = peer_qp_info

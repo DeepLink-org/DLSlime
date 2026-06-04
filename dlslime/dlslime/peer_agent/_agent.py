@@ -8,13 +8,16 @@ I/O primitives. Handshake protocol lives in ``_mailbox.py``.
 from __future__ import annotations
 
 import inspect
+import ipaddress
 import json
 import os
+import socket
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from urllib.parse import urlparse
 
 try:
     import httpx
@@ -406,6 +409,45 @@ class PeerAgent:
             if address:
                 return str(address)
         return ""
+
+    def _ctrl_host(self) -> str:
+        ctrl_url = self.ctrl_url
+        if not ctrl_url.startswith(("http://", "https://")):
+            ctrl_url = f"http://{ctrl_url}"
+        return urlparse(ctrl_url).hostname or ""
+
+    @staticmethod
+    def _is_loopback_host(host: str) -> bool:
+        if host in {"localhost", "::1"}:
+            return True
+        try:
+            return ipaddress.ip_address(host).is_loopback
+        except ValueError:
+            return False
+
+    @staticmethod
+    def _local_ip_for_remote(remote_host: str) -> str:
+        if not remote_host:
+            return ""
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+                sock.connect((remote_host, 80))
+                return sock.getsockname()[0]
+        except OSError:
+            return ""
+
+    def _resolve_tcp_local_host(self, local_host: Optional[str]) -> str:
+        if not local_host:
+            discovered = self._local_address()
+            if discovered and not self._is_loopback_host(discovered):
+                return discovered
+            ctrl_host = self._ctrl_host()
+            if ctrl_host and not self._is_loopback_host(ctrl_host):
+                routed = self._local_ip_for_remote(ctrl_host)
+                if routed:
+                    return routed
+            return discovered or "0.0.0.0"
+        return str(local_host)
 
     def _normalize_link_type(self, link_type: Optional[str]) -> str:
         if not link_type:
@@ -960,7 +1002,17 @@ class PeerAgent:
     ) -> DirectedConnection:
         """Create local connection state from a peer's directed request."""
         if str(meta.get("transport") or "rdma").lower() == "tcp":
-            local_key: ResourceKey = TcpResourceKey()
+            with self._connections_lock:
+                peer_connections = [
+                    conn
+                    for conn in self._connections.values()
+                    if conn.peer_alias == peer_alias
+                ]
+                if len(peer_connections) == 1:
+                    return peer_connections[0]
+            local_key: ResourceKey = TcpResourceKey(
+                host=self._resolve_tcp_local_host(None), port=0
+            )
             peer_key: ResourceKey = TcpResourceKey()
             return self._get_or_create_connection(
                 peer_alias,
@@ -1156,6 +1208,14 @@ class PeerAgent:
             self._connected_peers.add(conn_id)
             self._connected_peers_cond.notify_all()
 
+    def _mark_connection_failed(self, conn_id: str) -> None:
+        with self._connections_lock:
+            conn = self._connections.get(conn_id)
+            if conn is not None:
+                conn.mark_failed()
+        with self._connected_peers_lock:
+            self._connected_peers_cond.notify_all()
+
     def _has_notified_peer(self, conn_id: str) -> bool:
         """True iff we've already sent qp_ready for this connection."""
         with self._notified_peers_lock:
@@ -1183,7 +1243,7 @@ class PeerAgent:
         qp_num: Optional[int] = 1,
         min_bw: Optional[str] = None,
         transport: str = "rdma",
-        local_host: str = "0.0.0.0",
+        local_host: Optional[str] = None,
         local_port: int = 0,
     ) -> PeerConnection:
         """Start connecting to a peer and return a connection handle.
@@ -1191,8 +1251,10 @@ class PeerAgent:
         ``transport='rdma'`` (default) selects the RDMA path, picking a NIC
         from the discovered local topology. ``transport='tcp'`` selects the
         TCP path: ``local_host``/``local_port`` configure the local bind
-        (port 0 = OS-assigned), and ``ib_port``/``qp_num``/``local_device``/
-        ``peer_device`` are ignored.
+        (port 0 = OS-assigned). If ``local_host`` is left as the default
+        ``None``, PeerAgent publishes its discovered local host address instead
+        so remote peers do not receive ``0.0.0.0`` in endpoint_info.
+        ``ib_port``/``qp_num``/``local_device``/``peer_device`` are ignored.
         """
         if not isinstance(peer_alias, str) or not peer_alias:
             raise TypeError("connect_to() requires a non-empty peer alias string")
@@ -1213,6 +1275,7 @@ class PeerAgent:
         t0 = time.perf_counter()
 
         if transport_norm == "tcp":
+            local_host = self._resolve_tcp_local_host(local_host)
             local_key: ResourceKey = TcpResourceKey(
                 host=local_host, port=int(local_port)
             )
@@ -1306,6 +1369,11 @@ class PeerAgent:
                         f"+{(time.perf_counter() - t0) * 1000:.3f}ms"
                     )
                     return
+                with self._connections_lock:
+                    conn = self._connections.get(conn_id)
+                    state = conn.state if conn is not None else "unknown"
+                if state == "failed":
+                    raise RuntimeError(f"Connection {conn_id!r} failed")
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     raise TimeoutError(

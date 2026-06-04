@@ -8,6 +8,7 @@ from dlslime.peer_agent._agent import (
     MaterializedMemoryRegion,
     PeerAgent,
     RdmaResourceKey,
+    TcpResourceKey,
 )
 
 
@@ -103,6 +104,60 @@ def _agent(endpoint):
 
     agent.get_handle = get_handle
     return agent
+
+
+def test_peer_agent_tcp_default_host_uses_registered_resource_address():
+    agent = PeerAgent.__new__(PeerAgent)
+    agent._shutdown_called = True
+    agent.ctrl_url = "http://10.201.16.5:4479"
+    agent._local_resource = {"host": {"address": "10.201.16.7"}}
+
+    assert agent._resolve_tcp_local_host("") == "10.201.16.7"
+    assert agent._resolve_tcp_local_host(None) == "10.201.16.7"
+    assert agent._resolve_tcp_local_host("0.0.0.0") == "0.0.0.0"
+    assert agent._resolve_tcp_local_host("192.168.1.9") == "192.168.1.9"
+
+
+def test_peer_agent_tcp_default_host_falls_back_to_wildcard_without_resource():
+    agent = PeerAgent.__new__(PeerAgent)
+    agent._shutdown_called = True
+    agent.ctrl_url = "http://127.0.0.1:4479"
+    agent._local_resource = {}
+
+    assert agent._resolve_tcp_local_host(None) == "0.0.0.0"
+
+
+def test_peer_agent_tcp_default_host_replaces_loopback_with_routed_ip():
+    agent = PeerAgent.__new__(PeerAgent)
+    agent._shutdown_called = True
+    agent.ctrl_url = "10.201.16.5:4479"
+    agent._local_resource = {"host": {"address": "127.0.1.1"}}
+    agent._local_ip_for_remote = lambda host: "10.201.16.8"
+
+    assert agent._resolve_tcp_local_host(None) == "10.201.16.8"
+
+
+def test_peer_agent_tcp_conn_meta_reuses_existing_connection():
+    agent = PeerAgent.__new__(PeerAgent)
+    agent.alias = "local"
+    agent._shutdown_called = True
+    agent._local_resource = {"host": {"address": "10.201.16.7"}}
+    agent._connections_lock = threading.Lock()
+    conn = DirectedConnection(
+        agent=agent,
+        peer_alias="peer",
+        local_key=TcpResourceKey("10.201.16.7", 0),
+        peer_key=TcpResourceKey(),
+        qp_num=1,
+    )
+    agent._connections = {conn.conn_id: conn}
+
+    got = agent._ensure_connection_from_meta(
+        "peer", {"transport": "tcp", "qp_num": 1}
+    )
+
+    assert got is conn
+    assert len(agent._connections) == 1
 
 
 def test_peer_agent_unregister_memory_region_removes_local_and_published_state():
