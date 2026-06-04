@@ -89,17 +89,13 @@ def run_initiator(
 
         st = ep.read([(h_local, h_remote, 0, 0, len(PAYLOAD))]).wait()
         assert st == 0, f"read failed: {st}"
-        assert (
-            bytes(buf_a[: len(PAYLOAD)]) == PAYLOAD
-        ), "initiator did not read bytes"
+        assert bytes(buf_a[: len(PAYLOAD)]) == PAYLOAD, "initiator did not read bytes"
         print(
             "[initiator] target->initiator one-sided read = "
             f"{bytes(buf_a[: len(PAYLOAD)])!r}  ok"
         )
 
-        st = agent.send(
-            TARGET_ALIAS, (ctypes.addressof(done_buf), 0, len(DONE))
-        ).wait()
+        st = agent.send(TARGET_ALIAS, (ctypes.addressof(done_buf), 0, len(DONE))).wait()
         assert st == 0, f"done send failed: {st}"
         print("[initiator] Sent completion notice.")
     finally:

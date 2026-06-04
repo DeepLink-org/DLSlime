@@ -152,9 +152,7 @@ def test_peer_agent_tcp_conn_meta_reuses_existing_connection():
     )
     agent._connections = {conn.conn_id: conn}
 
-    got = agent._ensure_connection_from_meta(
-        "peer", {"transport": "tcp", "qp_num": 1}
-    )
+    got = agent._ensure_connection_from_meta("peer", {"transport": "tcp", "qp_num": 1})
 
     assert got is conn
     assert len(agent._connections) == 1
