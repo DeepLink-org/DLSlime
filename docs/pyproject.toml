@@ -1,6 +1,6 @@
 [project]
 name = "dlslime-docs"
-version = "0.1.18"
+version = "0.1.19"
 description = "Documentation site tooling for DLSlime"
 requires-python = ">=3.10"
 dependencies = [
