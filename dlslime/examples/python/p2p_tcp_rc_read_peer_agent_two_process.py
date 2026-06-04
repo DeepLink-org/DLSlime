@@ -52,8 +52,7 @@ def run_initiator(
         if TARGET_ALIAS not in agent.list_agents():
             raise RuntimeError(f"target agent {TARGET_ALIAS!r} is not running")
 
-        resolved_host = agent._resolve_tcp_local_host(local_host)
-        print(f"[initiator] TCP local host: {resolved_host}:{local_port}")
+        print(f"[initiator] TCP local host: {local_host or 'default'}:{local_port}")
         conn = agent.connect_to(
             TARGET_ALIAS,
             transport="tcp",
