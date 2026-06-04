@@ -426,11 +426,17 @@ class PeerAgent:
             return False
 
     @staticmethod
+    @staticmethod
     def _local_ip_for_remote(remote_host: str) -> str:
         if not remote_host:
             return ""
         try:
-            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            # Resolve the family dynamically to support both IPv4 and IPv6
+            gai = socket.getaddrinfo(remote_host, 80, type=socket.SOCK_DGRAM)
+            if not gai:
+                return ""
+            family = gai[0][0]
+            with socket.socket(family, socket.SOCK_DGRAM) as sock:
                 sock.connect((remote_host, 80))
                 return sock.getsockname()[0]
         except OSError:
