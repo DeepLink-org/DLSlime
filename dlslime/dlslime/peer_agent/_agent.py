@@ -426,7 +426,6 @@ class PeerAgent:
             return False
 
     @staticmethod
-    @staticmethod
     def _local_ip_for_remote(remote_host: str) -> str:
         if not remote_host:
             return ""
