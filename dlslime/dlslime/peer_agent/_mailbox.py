@@ -372,7 +372,19 @@ class StreamMailbox:
 
         # D. Complete RDMA handshake
         t_d = time.perf_counter()
-        endpoint.connect(peer_qp_info)
+        try:
+            endpoint.connect(peer_qp_info)
+        except Exception as e:
+            logger.warning(
+                "StreamMailbox %s: endpoint.connect(%s) raised for "
+                "endpoint_info=%s: %s",
+                self._agent.alias,
+                peer,
+                peer_qp_info,
+                e,
+            )
+            self._agent._mark_connection_failed(conn_id)
+            return
         if hasattr(endpoint, "is_connected") and not endpoint.is_connected():
             logger.warning(
                 "StreamMailbox %s: endpoint.connect(%s) failed for endpoint_info=%s",
