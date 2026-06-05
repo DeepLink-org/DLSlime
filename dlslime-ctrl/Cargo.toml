@@ -1,6 +1,6 @@
 [package]
 name = "dlslime-ctrl"
-version = "0.1.20"
+version = "0.1.21"
 edition = "2021"
 description = "DLSlime control plane server"
 license = "MIT"

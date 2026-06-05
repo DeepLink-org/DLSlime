@@ -41,8 +41,8 @@ services:
       # listening on 127.0.0.1 on the host (e.g. http_proxy=127.0.0.1:7890).
       network: host
     # Defaults to a locally-built tag. Override to a published GHCR image
-    # (e.g. `ghcr.io/deeplink-org/dlslime-ctrl:0.1.20`) to skip the local build:
-    #   echo "DLSLIME_CTRL_IMAGE=ghcr.io/deeplink-org/dlslime-ctrl:0.1.20"  >> docker/.env
+    # (e.g. `ghcr.io/deeplink-org/dlslime-ctrl:0.1.21`) to skip the local build:
+    #   echo "DLSLIME_CTRL_IMAGE=ghcr.io/deeplink-org/dlslime-ctrl:0.1.21"  >> docker/.env
     #   echo "DLSLIME_CTRL_PULL_POLICY=missing"                            >> docker/.env
     image: ${DLSLIME_CTRL_IMAGE:-dlslime-ctrl:local}
     pull_policy: ${DLSLIME_CTRL_PULL_POLICY:-build}
