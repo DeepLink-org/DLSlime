@@ -2,7 +2,7 @@
 #
 # Triggers:
 #   - Push to main / master            -> publish `:edge` (and the commit SHA)
-#   - Push of a tag like v0.1.21        -> publish `:0.1.21`, `:0.1`, `:latest`
+#   - Push of a tag like v0.1.22        -> publish `:0.1.22`, `:0.1`, `:latest`
 #   - Manual workflow_dispatch         -> custom tag via input
 #
 # No external secrets needed — uses the built-in GITHUB_TOKEN for auth.
