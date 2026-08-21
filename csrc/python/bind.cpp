@@ -291,6 +291,8 @@ PYBIND11_MODULE(_slime_c, m)
         .value("TMA", dlslime::KernelImpl::TMA)
         .export_values();
 
+    m.attr("ALLTOALL_DST_ROW_INDICES_VERSION") = 1;
+
     py::class_<dlslime::AllToAllBuffer>(m, "AllToAllBuffer")
         .def(py::init<int32_t, int32_t, int32_t, int64_t>(),
              py::arg("rank"),
@@ -309,7 +311,8 @@ PYBIND11_MODULE(_slime_c, m)
              py::arg("impl") = dlslime::KernelImpl::Basic,
              py::arg("is_transpose") = true,
              py::arg("mask") = py::none(),
-             py::arg("offsets") = py::none());
+             py::arg("offsets") = py::none(),
+             py::arg("dst_row_indices") = py::none());
 #endif
 
 #ifdef BUILD_INTER_OPS

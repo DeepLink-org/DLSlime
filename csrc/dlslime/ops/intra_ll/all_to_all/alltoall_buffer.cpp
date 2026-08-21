@@ -28,8 +28,9 @@ void intranode_alltoall(torch::Tensor                x,
                         int                          world_size,
                         int*                         device_semaphore_ptr,
                         bool                         is_transpose,
-                        c10::optional<torch::Tensor> mask    = c10::nullopt,
-                        c10::optional<torch::Tensor> offsets = c10::nullopt);
+                        c10::optional<torch::Tensor> mask            = c10::nullopt,
+                        c10::optional<torch::Tensor> offsets         = c10::nullopt,
+                        c10::optional<torch::Tensor> dst_row_indices = c10::nullopt);
 
 AllToAllBuffer::AllToAllBuffer(
     int32_t rank, int32_t world_size, int32_t max_batch_size, int64_t buffer_size_bytes):
@@ -159,11 +160,12 @@ torch::Tensor AllToAllBuffer::all_to_all(
     KernelImpl                  impl,
     bool                        is_transpose,
     c10::optional<torch::Tensor> mask,
-    c10::optional<torch::Tensor> offsets)
+    c10::optional<torch::Tensor> offsets,
+    c10::optional<torch::Tensor> dst_row_indices)
 {
     switch (impl) {
         case KernelImpl::Basic:
-            return dispatch_basic(x, is_transpose, mask, offsets);
+            return dispatch_basic(x, is_transpose, mask, offsets, dst_row_indices);
         case KernelImpl::TMA:
             TORCH_CHECK(false, "KernelImpl::TMA is not enabled in this DLSlime build");
         default:
@@ -174,7 +176,8 @@ torch::Tensor AllToAllBuffer::all_to_all(
 torch::Tensor AllToAllBuffer::dispatch_basic(torch::Tensor                x,
                                              bool                         is_transpose,
                                              c10::optional<torch::Tensor> mask,
-                                             c10::optional<torch::Tensor> offsets)
+                                             c10::optional<torch::Tensor> offsets,
+                                             c10::optional<torch::Tensor> dst_row_indices)
 {
     CHECK_CUDA(x);
     CHECK_CONTIGUOUS(x);
@@ -184,8 +187,43 @@ torch::Tensor AllToAllBuffer::dispatch_basic(torch::Tensor                x,
     int  total_rows = shape[0];
     int  msg_size   = shape[1];
 
-    const bool use_offsets = offsets.has_value();
-    int        batch_size  = 0;
+    const bool use_offsets         = offsets.has_value();
+    const bool use_dst_row_indices = dst_row_indices.has_value();
+    int        batch_size          = 0;
+
+    TORCH_CHECK(!(use_dst_row_indices && use_offsets),
+                "dst_row_indices cannot be combined with offsets");
+    TORCH_CHECK(!(use_dst_row_indices && mask.has_value()),
+                "dst_row_indices cannot be combined with mask");
+
+    if (use_dst_row_indices) {
+        auto indices = dst_row_indices.value();
+        CHECK_CUDA(indices);
+        CHECK_CONTIGUOUS(indices);
+        TORCH_CHECK(indices.device() == x.device(), "dst_row_indices must be on the same device as x");
+        TORCH_CHECK(indices.scalar_type() == torch::kInt32, "dst_row_indices must be int32");
+        TORCH_CHECK(indices.dim() == 2,
+                    "dst_row_indices shape must be [world_size, max_batch_size]");
+        TORCH_CHECK(indices.size(0) == world_size_ && indices.size(1) == max_batch_size_,
+                    "dst_row_indices shape must be [world_size, max_batch_size], got [",
+                    indices.size(0),
+                    ", ",
+                    indices.size(1),
+                    "] expected [",
+                    world_size_,
+                    ", ",
+                    max_batch_size_,
+                    "]");
+        TORCH_CHECK(!is_transpose,
+                    "AllToAllBuffer dst_row_indices only support non-transpose all-to-all");
+        TORCH_CHECK(total_rows <= max_batch_size_,
+                    "dst_row_indices input rows (",
+                    total_rows,
+                    ") must be <= max_batch_size (",
+                    max_batch_size_,
+                    ")");
+        batch_size = total_rows;
+    }
 
     if (use_offsets) {
         auto offsets_tensor = offsets.value();
@@ -247,7 +285,7 @@ torch::Tensor AllToAllBuffer::dispatch_basic(torch::Tensor                x,
         }
     }
     else {
-        if (use_offsets) {
+        if (use_offsets || use_dst_row_indices) {
             TORCH_CHECK(total_rows <= max_batch_size_,
                         "Offsets input rows (",
                         total_rows,
@@ -300,7 +338,8 @@ torch::Tensor AllToAllBuffer::dispatch_basic(torch::Tensor                x,
         device_semaphore_,
         is_transpose,
         mask,
-        offsets);
+        offsets,
+        dst_row_indices);
 
     auto options = torch::TensorOptions().dtype(x.dtype()).device(x.device());
     return torch::from_blob(local_buffer_, {world_size_, max_batch_size_, msg_size}, options);

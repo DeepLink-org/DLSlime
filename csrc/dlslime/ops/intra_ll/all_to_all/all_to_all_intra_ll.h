@@ -29,7 +29,8 @@ void intranode_alltoall(torch::Tensor                x,
                         int                          world_size,
                         int*                         device_semaphore_ptr,
                         bool                         is_transpose,
-                        c10::optional<torch::Tensor> mask    = c10::nullopt,
-                        c10::optional<torch::Tensor> offsets = c10::nullopt);
+                        c10::optional<torch::Tensor> mask            = c10::nullopt,
+                        c10::optional<torch::Tensor> offsets         = c10::nullopt,
+                        c10::optional<torch::Tensor> dst_row_indices = c10::nullopt);
 
 }  // namespace dlslime

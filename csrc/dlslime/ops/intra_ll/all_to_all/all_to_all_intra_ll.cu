@@ -104,7 +104,7 @@ __global__ __launch_bounds__(1024, 1) void all_to_all_intra_ll_kernel(int8_t*  x
     }
 }
 
-template <int kNumWarps>
+template <int kNumWarps, bool kUseDstRowIndices>
 __global__ void __launch_bounds__(kNumWarps * 32, 1)
 intranode_alltoall_kernel(const void* x,
                           void**      buffer_ptr,
@@ -118,8 +118,9 @@ intranode_alltoall_kernel(const void* x,
                           int         itemsize,
                           int*        local_semaphore,
                           bool        is_transpose,
-                          const int*  mask    = nullptr,
-                          const int*  offsets = nullptr)
+                          const int*  mask            = nullptr,
+                          const int*  offsets         = nullptr,
+                          const int*  dst_row_indices = nullptr)
 {
     const int tid     = threadIdx.x;
     const int bid     = blockIdx.x;
@@ -139,27 +140,44 @@ intranode_alltoall_kernel(const void* x,
     const uint32_t bytes_per_token = num_heads * hidden_dim * itemsize;
     const int      ints_per_token  = bytes_per_token / sizeof(int4);
 
-    const bool  use_offsets            = offsets != nullptr;
-    const bool  use_target_major_input = is_transpose || (!use_offsets && mask == nullptr);
+    const bool  use_offsets = offsets != nullptr;
+    const bool  use_target_major_input =
+        !kUseDstRowIndices && (is_transpose || (!use_offsets && mask == nullptr));
     const int4* src_base               = reinterpret_cast<const int4*>(x);
     if (use_target_major_input) {
         src_base += static_cast<uint64_t>(dst_rank) * batch_size * ints_per_token;
     }
 
-    int8_t* dst_buffer_byte_base = reinterpret_cast<int8_t*>(buffer_ptr[dst_rank]);
-    if (use_offsets) {
-        dst_buffer_byte_base += static_cast<uint64_t>(offsets[local_rank]) * bytes_per_token;
+    int4* dst_base = nullptr;
+    if constexpr (!kUseDstRowIndices) {
+        int8_t* dst_buffer_byte_base = reinterpret_cast<int8_t*>(buffer_ptr[dst_rank]);
+        if (use_offsets) {
+            dst_buffer_byte_base += static_cast<uint64_t>(offsets[local_rank]) * bytes_per_token;
+        }
+        else {
+            dst_buffer_byte_base += static_cast<uint64_t>(local_rank) * batch_size * bytes_per_token;
+        }
+        dst_base = reinterpret_cast<int4*>(dst_buffer_byte_base);
     }
-    else {
-        dst_buffer_byte_base += static_cast<uint64_t>(local_rank) * batch_size * bytes_per_token;
-    }
-    int4* dst_base = reinterpret_cast<int4*>(dst_buffer_byte_base);
 
     if (start_token_idx < batch_size) {
         for (int token_i = start_token_idx; token_i < end_token_idx; ++token_i) {
-            const int mask_stride = use_offsets ? max_batch_size : batch_size;
-            if (mask != nullptr && __ldg(&mask[dst_rank * mask_stride + token_i]) == 0) {
-                continue;
+            int4* token_dst_base = nullptr;
+            if constexpr (kUseDstRowIndices) {
+                const int dst_row = __ldg(&dst_row_indices[dst_rank * max_batch_size + token_i]);
+                if (dst_row < 0 || dst_row >= world_size * max_batch_size) {
+                    continue;
+                }
+                auto* dst_buffer_byte_base = reinterpret_cast<int8_t*>(buffer_ptr[dst_rank]);
+                dst_buffer_byte_base += static_cast<uint64_t>(dst_row) * bytes_per_token;
+                token_dst_base = reinterpret_cast<int4*>(dst_buffer_byte_base);
+            }
+            else {
+                const int mask_stride = use_offsets ? max_batch_size : batch_size;
+                if (mask != nullptr && __ldg(&mask[dst_rank * mask_stride + token_i]) == 0) {
+                    continue;
+                }
+                token_dst_base = dst_base + token_i * ints_per_token;
             }
 
             int token_offset  = token_i * ints_per_token;
@@ -173,7 +191,7 @@ intranode_alltoall_kernel(const void* x,
 
             if (my_warp_len > 0) {
                 const int4* warp_src = src_base + token_offset + my_warp_offset;
-                int4*       warp_dst = dst_base + token_offset + my_warp_offset;
+                int4*       warp_dst = token_dst_base + my_warp_offset;
                 UNROLLED_WARP_COPY(
                     4, lane_id, my_warp_len, warp_dst, warp_src, deep_ep::ld_nc_global, deep_ep::st_na_global);
             }
@@ -214,7 +232,8 @@ void intranode_alltoall(torch::Tensor                x,
                         int*                         device_semaphore_ptr,
                         bool                         is_transpose,
                         c10::optional<torch::Tensor> mask,
-                        c10::optional<torch::Tensor> offsets)
+                        c10::optional<torch::Tensor> offsets,
+                        c10::optional<torch::Tensor> dst_row_indices)
 {
     constexpr int num_warps = 16;
 
@@ -222,13 +241,13 @@ void intranode_alltoall(torch::Tensor                x,
     TORCH_CHECK(x.is_contiguous(), "x must be contiguous");
     TORCH_CHECK(!(offsets.has_value() && is_transpose),
                 "hao_basic offsets only support non-transpose all-to-all");
+    TORCH_CHECK(!(dst_row_indices.has_value() && is_transpose),
+                "hao_basic dst_row_indices only support non-transpose all-to-all");
 
     size_t row_bytes = n_heads * hidden_dim * x.element_size();
     TORCH_CHECK(row_bytes % 16 == 0, "Data size per token must be divisible by 16 bytes");
 
     cudaStream_t stream = at::cuda::getCurrentCUDAStream();
-    auto         kernel = intranode_alltoall_kernel<num_warps>;
-
     int blocks_per_rank = 16;
     if (blocks_per_rank > batch_size) {
         blocks_per_rank = std::max(1, batch_size);
@@ -245,23 +264,48 @@ void intranode_alltoall(torch::Tensor                x,
     if (offsets.has_value()) {
         offsets_ptr = offsets.value().data_ptr<int>();
     }
+    const int* dst_row_indices_ptr = nullptr;
+    if (dst_row_indices.has_value()) {
+        dst_row_indices_ptr = dst_row_indices.value().data_ptr<int>();
+    }
 
     cudaMemsetAsync(device_semaphore_ptr, 0, world_size * sizeof(int), stream);
-    kernel<<<grid_size, block_dim, 0, stream>>>(
-        x.data_ptr(),
-        buffer_ptr,
-        signal_ptr,
-        rank,
-        world_size,
-        batch_size,
-        max_batch_size,
-        n_heads,
-        hidden_dim,
-        x.element_size(),
-        device_semaphore_ptr,
-        is_transpose,
-        mask_ptr,
-        offsets_ptr);
+    if (dst_row_indices_ptr != nullptr) {
+        intranode_alltoall_kernel<num_warps, true><<<grid_size, block_dim, 0, stream>>>(
+            x.data_ptr(),
+            buffer_ptr,
+            signal_ptr,
+            rank,
+            world_size,
+            batch_size,
+            max_batch_size,
+            n_heads,
+            hidden_dim,
+            x.element_size(),
+            device_semaphore_ptr,
+            is_transpose,
+            nullptr,
+            nullptr,
+            dst_row_indices_ptr);
+    }
+    else {
+        intranode_alltoall_kernel<num_warps, false><<<grid_size, block_dim, 0, stream>>>(
+            x.data_ptr(),
+            buffer_ptr,
+            signal_ptr,
+            rank,
+            world_size,
+            batch_size,
+            max_batch_size,
+            n_heads,
+            hidden_dim,
+            x.element_size(),
+            device_semaphore_ptr,
+            is_transpose,
+            mask_ptr,
+            offsets_ptr,
+            nullptr);
+    }
 
     cudaError_t err = cudaGetLastError();
     if (err != cudaSuccess) {
