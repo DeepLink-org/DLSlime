@@ -9,6 +9,7 @@ struct SendContext;
 struct RecvContext;
 struct ReadWriteContext;
 struct ImmRecvContext;
+struct ImmRecvOpState;
 
 class RDMAFuture {
 public:
@@ -54,14 +55,14 @@ private:
 
 class ImmRecvFuture: public RDMAFuture {
 public:
-    explicit ImmRecvFuture(ImmRecvContext* ctx);
+    explicit ImmRecvFuture(std::shared_ptr<ImmRecvOpState> op_state);
 
     int32_t wait() const override;
 
     int32_t immData() const;
 
 private:
-    ImmRecvContext* ctx_;
+    std::shared_ptr<ImmRecvOpState> op_state_;
 };
 
 }  // namespace dlslime

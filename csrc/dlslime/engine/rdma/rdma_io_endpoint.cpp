@@ -8,6 +8,7 @@
 #include <emmintrin.h>
 #include <memory>
 #include <new>
+#include <optional>
 #include <stdexcept>
 
 #include "dlslime/engine/assignment.h"
@@ -34,14 +35,97 @@ void RDMAIOEndpoint::dummyReset(ImmRecvContext* ctx)
         ctx->assigns_[qpi].batch_[0].target_offset = 0;
         ctx->assigns_[qpi].batch_[0].source_offset = 0;
 
-        ctx->assigns_[qpi].callback_ = [ctx, qpi](int32_t status, int32_t imm) {
-            ctx->signal->set_comm_done(qpi);
-            ctx->assigns_[qpi].imm_data_ = imm;
+        ctx->assigns_[qpi].callback_ = [this, ctx, qpi](int32_t status, int32_t imm) {
+            if (status != RDMAAssign::SUCCESS) {
+                int32_t expected = RDMAAssign::SUCCESS;
+                ctx->completion_status.compare_exchange_strong(
+                    expected, status, std::memory_order_release, std::memory_order_relaxed);
+            }
+            else if (qpi == 0) {
+                ctx->imm_data.store(imm, std::memory_order_release);
+            }
+
+            uint32_t old_mask = ctx->finished_qp_mask.fetch_or(1u << qpi, std::memory_order_acq_rel);
+            if ((old_mask | (1u << qpi)) == ctx->expected_mask) {
+                enqueueImmRecvCompletion(ctx);
+            }
         };
 
         ctx->assigns_[qpi].is_inline_ = false;
 
         ctx->assigns_[qpi].imm_data_ = 0;
+    }
+}
+
+void RDMAIOEndpoint::postImmRecvSlot(ImmRecvContext* ctx)
+{
+    ctx->expected_mask = (1u << num_qp_) - 1;
+    ctx->finished_qp_mask.store(0, std::memory_order_release);
+    ctx->completion_status.store(RDMAAssign::SUCCESS, std::memory_order_release);
+    ctx->imm_data.store(0, std::memory_order_release);
+
+    dummyReset(ctx);
+    for (size_t qpi = 0; qpi < num_qp_; ++qpi) {
+        data_channel_->post_recv_batch(qpi, &(ctx->assigns_[qpi]));
+    }
+    ctx->state_ = IOContextState::POSTED;
+}
+
+void RDMAIOEndpoint::postImmRecvWindow()
+{
+    for (int i = 0; i < SLIME_MAX_IO_FIFO_DEPTH; ++i) {
+        ImmRecvContext* ctx = &imm_recv_ctx_pool_[i];
+        ctx->slot_id        = i;
+        postImmRecvSlot(ctx);
+    }
+}
+
+void RDMAIOEndpoint::pushRefill(ImmRecvContext* ctx)
+{
+    ImmRecvContext* old_head = refill_head_.load(std::memory_order_relaxed);
+    do {
+        ctx->next_refill_.store(old_head, std::memory_order_relaxed);
+    } while (!refill_head_.compare_exchange_weak(
+        old_head, ctx, std::memory_order_release, std::memory_order_relaxed));
+}
+
+ImmRecvContext* RDMAIOEndpoint::popAllRefill()
+{
+    return refill_head_.exchange(nullptr, std::memory_order_acquire);
+}
+
+void RDMAIOEndpoint::completeImmRecvOp(
+    const std::shared_ptr<ImmRecvOpState>& op_state, const ImmRecvEvent& event)
+{
+    op_state->completion_status.store(event.status, std::memory_order_release);
+    op_state->imm_data.store(event.imm_data, std::memory_order_release);
+    for (size_t qpi = 0; qpi < num_qp_; ++qpi) {
+        op_state->signal->set_comm_done(qpi);
+    }
+}
+
+void RDMAIOEndpoint::enqueueImmRecvCompletion(ImmRecvContext* ctx)
+{
+    ImmRecvEvent event{
+        ctx->completion_status.load(std::memory_order_acquire),
+        ctx->imm_data.load(std::memory_order_acquire),
+    };
+
+    std::shared_ptr<ImmRecvOpState> op_state;
+    {
+        std::lock_guard<SpinLock> guard(imm_recv_match_lock_);
+        if (!pending_imm_recv_ops_.empty()) {
+            op_state = std::move(pending_imm_recv_ops_.front());
+            pending_imm_recv_ops_.pop_front();
+        }
+        else {
+            completed_imm_recv_events_.push_back(event);
+        }
+    }
+
+    pushRefill(ctx);
+    if (op_state) {
+        completeImmRecvOp(op_state, event);
     }
 }
 
@@ -194,7 +278,6 @@ RDMAIOEndpoint::RDMAIOEndpoint(std::shared_ptr<RDMAContext> ctx, size_t num_qp):
 
     for (size_t i = 0; i < SLIME_MAX_IO_FIFO_DEPTH; ++i) {
         read_write_future_pool_.push_back(std::make_shared<ReadWriteFuture>(&(read_write_ctx_pool_[i])));
-        imm_recv_future_pool_.push_back(std::make_shared<ImmRecvFuture>(&(imm_recv_ctx_pool_[i])));
     }
 
     void* dummy_mem = nullptr;
@@ -232,6 +315,7 @@ void RDMAIOEndpoint::connect(const json& remote_endpoint_info)
         ctx_->registerOrAccessRemoteMemoryRegion(item.value()["mr_key"], item.value());
     }
     data_channel_->connect(remote_endpoint_info["data_channel_info"]);
+    postImmRecvWindow();
 }
 
 json RDMAIOEndpoint::endpointInfo() const
@@ -264,19 +348,30 @@ RDMAIOEndpoint::writeWithImm(const std::vector<assign_tuple_t>& assign, int32_t 
 
 std::shared_ptr<ImmRecvFuture> RDMAIOEndpoint::immRecv(void* stream)
 {
-    uint64_t        slot = recv_slot_id_.fetch_add(1, std::memory_order_relaxed) % SLIME_MAX_IO_FIFO_DEPTH;
-    ImmRecvContext* ctx  = &imm_recv_ctx_pool_[slot];
+    recv_slot_id_.fetch_add(1, std::memory_order_relaxed);
 
-    ctx->slot_id       = slot;
-    ctx->expected_mask = (1 << num_qp_) - 1;
-    ctx->signal->reset_all();
-    ctx->signal->bind_stream(stream);
+    auto op_state           = std::make_shared<ImmRecvOpState>();
+    op_state->signal        = dlslime::device::createSignal(false);
+    op_state->expected_mask = (1u << num_qp_) - 1;
+    op_state->signal->reset_all();
+    op_state->signal->bind_stream(stream);
 
-    dummyReset(ctx);
+    std::optional<ImmRecvEvent> ready_event;
+    {
+        std::lock_guard<SpinLock> guard(imm_recv_match_lock_);
+        if (!completed_imm_recv_events_.empty()) {
+            ready_event = completed_imm_recv_events_.front();
+            completed_imm_recv_events_.pop_front();
+        }
+        else {
+            pending_imm_recv_ops_.push_back(op_state);
+        }
+    }
 
-    while (jring_enqueue_burst(imm_recv_buffer_ring_, (void**)&ctx, 1, nullptr) == 0)
-        _mm_pause();
-    return imm_recv_future_pool_[slot];
+    if (ready_event) {
+        completeImmRecvOp(op_state, *ready_event);
+    }
+    return std::make_shared<ImmRecvFuture>(op_state);
 }
 
 // ============================================================
@@ -329,17 +424,14 @@ int32_t RDMAIOEndpoint::readWriteProcess()
 int32_t RDMAIOEndpoint::immRecvProcess()
 {
     int32_t work_done = 0;
-    int     n_recv    = jring_dequeue_burst(imm_recv_buffer_ring_, burst_buf_, IO_BURST_SIZE, nullptr);
 
-    if (n_recv > 0) {
-        work_done += n_recv;
-        for (int i = 0; i < n_recv; ++i) {
-            auto* ctx = (ImmRecvContext*)burst_buf_[i];
-            for (size_t qpi = 0; qpi < num_qp_; ++qpi) {
-                data_channel_->post_recv_batch(qpi, &(ctx->assigns_[qpi]));
-            }
-            ctx->state_ = IOContextState::POSTED;
-        }
+    ImmRecvContext* batch = popAllRefill();
+    while (batch) {
+        ImmRecvContext* next = batch->next_refill_.load(std::memory_order_relaxed);
+        batch->next_refill_.store(nullptr, std::memory_order_relaxed);
+        postImmRecvSlot(batch);
+        batch = next;
+        work_done++;
     }
     return work_done;
 }
